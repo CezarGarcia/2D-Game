@@ -27,8 +27,16 @@ public class CollisionChecker {
         switch (entity.direction) {
             case "up":
                 entityTopRow = (entityTopWorldY - entity.speed) / gp.tileSize;
-                tileNum1 = gp.tileM.mapTileNum[entityLeftCol][entityTopRow];
-                tileNum2 = gp.tileM.mapTileNum[entityRightCol][entityTopRow];
+                if (entityLeftCol >= 0 && entityLeftCol < gp.maxWorldCol && entityTopRow >= 0 && entityTopRow < gp.maxWorldRow) {
+                    tileNum1 = gp.tileM.mapTileNum[entityLeftCol][entityTopRow];
+                } else {
+                    tileNum1 = 0;
+                }
+                if (entityRightCol >= 0 && entityRightCol < gp.maxWorldCol && entityTopRow >= 0 && entityTopRow < gp.maxWorldRow) {
+                    tileNum2 = gp.tileM.mapTileNum[entityRightCol][entityTopRow];
+                } else {
+                    tileNum2 = 0;
+                }
                 if(gp.tileM.tile[tileNum1].collision == true || gp.tileM.tile[tileNum2].collision == true) {
                     entity.collisionOn = true;
                 }
