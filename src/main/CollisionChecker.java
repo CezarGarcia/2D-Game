@@ -3,60 +3,71 @@ package main;
 import entity.Entity;
 
 public class CollisionChecker {
-
-    GamePanel gp;
+    private final GamePanel gp;
 
     public CollisionChecker(GamePanel gp) {
         this.gp = gp;
     }
 
     public void checkTile(Entity entity) {
+        // 1. Reset
+        entity.collisionOn = false;
 
-        int entityLeftWorldX = entity.worldX + entity.solidArea.x;
-        int entityRightWorldX = entity.worldX + entity.solidArea.x + entity.solidArea.width;
-        int entityTopWorldY = entity.worldY + entity.solidArea.y;
-        int entityBottomWorldY = entity.worldY + entity.solidArea.y + entity.solidArea.height;
+        // 2. Área sólida
+        Rectangle sa = entity.solidArea;
+        int leftWorld     = entity.worldX + sa.x;
+        int rightWorld    = entity.worldX + sa.x + sa.width;
+        int topWorld      = entity.worldY + sa.y;
+        int bottomWorld   = entity.worldY + sa.y + sa.height;
+        int tileSize      = gp.tileSize;
+        int speed         = entity.speed;
 
-        int entityLeftCol = entityLeftWorldX/ gp.tileSize;
-        int entityRightCol = entityRightWorldX/ gp.tileSize;
-        int entityTopRow = entityTopWorldY/ gp.tileSize;
-        int entityBottomRow = entityBottomWorldY/ gp.tileSize;
-
-        int tileNum1, tileNum2;
-
+        // 3. Calcula linha/coluna alvo
+        int targetCol1, targetCol2, targetRow1, targetRow2;
         switch (entity.direction) {
             case "up":
-                entityTopRow = (entityTopWorldY - entity.speed) / gp.tileSize;
-                tileNum1 = gp.tileM.mapTileNum[entityLeftCol][entityTopRow];
-                tileNum2 = gp.tileM.mapTileNum[entityRightCol][entityTopRow];
-                if(gp.tileM.tile[tileNum1].collision == true || gp.tileM.tile[tileNum2].collision == true) {
-                    entity.collisionOn = true;
-                }
+                targetRow1 = targetRow2 = (topWorld - speed) / tileSize;
+                targetCol1 = leftWorld   / tileSize;
+                targetCol2 = rightWorld  / tileSize;
                 break;
             case "down":
-                entityBottomRow = (entityBottomWorldY + entity.speed) / gp.tileSize;
-                tileNum1 = gp.tileM.mapTileNum[entityLeftCol][entityBottomRow];
-                tileNum2 = gp.tileM.mapTileNum[entityRightCol][entityBottomRow];
-                if(gp.tileM.tile[tileNum1].collision == true || gp.tileM.tile[tileNum2].collision == true) {
-                    entity.collisionOn = true;
-                }
+                targetRow1 = targetRow2 = (bottomWorld + speed) / tileSize;
+                targetCol1 = leftWorld    / tileSize;
+                targetCol2 = rightWorld   / tileSize;
                 break;
             case "left":
-                entityLeftCol = (entityLeftWorldX - entity.speed) / gp.tileSize;
-                tileNum1 = gp.tileM.mapTileNum[entityLeftCol][entityTopRow];
-                tileNum2 = gp.tileM.mapTileNum[entityLeftCol][entityBottomRow];
-                if(gp.tileM.tile[tileNum1].collision == true || gp.tileM.tile[tileNum2].collision == true) {
-                    entity.collisionOn = true;
-                }
+                targetCol1 = targetCol2 = (leftWorld - speed) / tileSize;
+                targetRow1 = topWorld     / tileSize;
+                targetRow2 = bottomWorld  / tileSize;
                 break;
             case "right":
-                entityRightCol = (entityRightWorldX + entity.speed) / gp.tileSize;
-                tileNum1 = gp.tileM.mapTileNum[entityRightCol][entityTopRow];
-                tileNum2 = gp.tileM.mapTileNum[entityRightCol][entityBottomRow];
-                if(gp.tileM.tile[tileNum1].collision == true || gp.tileM.tile[tileNum2].collision == true) {
-                    entity.collisionOn = true;
-                }
+                targetCol1 = targetCol2 = (rightWorld + speed) / tileSize;
+                targetRow1 = topWorld      / tileSize;
+                targetRow2 = bottomWorld   / tileSize;
                 break;
+            default:
+                return;  // direção inválida
         }
+
+        // 4. Limita índices (opcional, mas recomendado)
+        targetCol1 = clamp(targetCol1, 0, gp.maxWorldCol - 1);
+        targetCol2 = clamp(targetCol2, 0, gp.maxWorldCol - 1);
+        targetRow1 = clamp(targetRow1, 0, gp.maxWorldRow - 1);
+        targetRow2 = clamp(targetRow2, 0, gp.maxWorldRow - 1);
+
+        // 5. Busca tiles e marca colisão
+        Tile[] tiles = gp.tileM.tile;
+        int[][] map   = gp.tileM.mapTileNum;
+        boolean c1 = tiles[ map[targetCol1][targetRow1] ].collision;
+        boolean c2 = tiles[ map[targetCol2][targetRow2] ].collision;
+        if (c1 || c2) {
+            entity.collisionOn = true;
+        }
+    }
+
+    private int clamp(int v, int min, int max) {
+        if (v < min) return min;
+        if (v > max) return max;
+        return v;
     }
 }
