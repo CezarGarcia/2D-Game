@@ -116,6 +116,22 @@ public class GamePanel extends JPanel implements Runnable {
                 keyH.rightPressed = false;
             }
         });
+
+        // NOVA FUNCIONALIDADE: CTRL key para correr
+        inputMap.put(KeyStroke.getKeyStroke("control CONTROL"), "ctrlPressed");
+        actionMap.put("ctrlPressed", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                keyH.ctrlPressed = true;
+            }
+        });
+        inputMap.put(KeyStroke.getKeyStroke("released CONTROL"), "ctrlReleased");
+        actionMap.put("ctrlReleased", new AbstractAction() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                keyH.ctrlPressed = false;
+            }
+        });
     }
 
     public void startGameThread() {

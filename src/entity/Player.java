@@ -84,24 +84,29 @@ public class Player extends Entity{
 
             //IF COLLISION = FALSE, PLAYER CAN MOVE
             if(collisionOn == false){
+                // NOVA FUNCIONALIDADE: Calcula a velocidade baseada no CTRL
+                int currentSpeed = keyH.ctrlPressed ? speed * 2 : speed;
+
                 switch (direction) {
                     case "up":
-                        worldY -= speed;
+                        worldY -= currentSpeed;
                         break;
                     case "down":
-                        worldY += speed;
+                        worldY += currentSpeed;
                         break;
                     case "left":
-                        worldX -= speed;
+                        worldX -= currentSpeed;
                         break;
                     case "right":
-                        worldX += speed;
+                        worldX += currentSpeed;
                         break;
                 }
             }
 
+            // NOVA FUNCIONALIDADE: Animação mais rápida quando correndo
             spriteCounter++;
-            if(spriteCounter > 12){
+            int animationSpeed = keyH.ctrlPressed ? 6 : 12; // Mais rápido quando correndo
+            if(spriteCounter > animationSpeed){
                 if(spriteNum == 1) {
                     spriteNum = 2;
                 }
@@ -110,10 +115,9 @@ public class Player extends Entity{
                 }
                 spriteCounter = 0;
             }
-
         }
-
     }
+
     public void draw(Graphics2D g2){
 
         BufferedImage image = null;
