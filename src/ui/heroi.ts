@@ -8,9 +8,9 @@ import {
   ATTRS, FREE_RESPEC_LEVEL, INVENTORY_SIZE, MATERIAL_LABEL, allocAttr, dismantleItem, dismantleYield, equip, findItem,
   offhandWarning, resetAttrs, respecCost, sellItem, slotsFor, toggleLock, unequip, type Profile,
 } from '../meta/profile';
-import { damageReduction, deriveStats, totalAttrs } from '../meta/stats';
+import { damageReduction, deriveStats, powerOf, totalAttrs } from '../meta/stats';
 import { confirmStep, type Ctx, type InvSort } from './ctx';
-import { br, btn, h, num, pct } from './dom';
+import { br, btn, h, icon, num, pct } from './dom';
 import { fullName, itemCard, itemTile, rarColor } from './itens';
 
 const GROUPS: { key: SlotGroup | 'todos'; label: string }[] = [
@@ -138,8 +138,19 @@ function markLine(mark: Mark, text: string): HTMLElement {
   return h('li', `cmp-${mark}`, h('span', { class: 'mark', title: MARK_LABEL[mark] || null }, MARK_TEXT[mark]), h('span', null, text), mark !== 'none' && h('span', 'sr', ` (${MARK_LABEL[mark]})`));
 }
 
+/** Poder do herói se o item fosse equipado neste espaço. Usa uma cópia do perfil e as mesmas regras do jogo. */
+function powerLine(p: Profile, item: Item, slot: Slot): HTMLElement {
+  const copy = JSON.parse(JSON.stringify(p)) as Profile;
+  equip(copy, item.id, slot);
+  const now = powerOf(deriveStats(p)), then = powerOf(deriveStats(copy)), diff = then - now;
+  return h('p', `cmp-base cmp-${diff > 0 ? 'up' : diff < 0 ? 'down' : 'same'}`,
+    h('span', 'mark', diff > 0 ? '▲' : diff < 0 ? '▼' : '='),
+    h('b', 'num', diff === 0 ? 'Poder igual' : `${diff > 0 ? '+' : '−'}${num(Math.abs(diff))} de Poder`),
+    h('span', 'muted num', ` (${num(now)} → ${num(then)})`));
+}
+
 /** Compara o item escolhido com o que está equipado no mesmo espaço. */
-function comparison(item: Item, other: Item, slot: Slot): HTMLElement {
+function comparison(p: Profile, item: Item, other: Item, slot: Slot): HTMLElement {
   const kind = ITEM_TYPES[item.type].base, same = kind === ITEM_TYPES[other.type].base && kind !== 'nenhum';
   const diff = Math.round((baseValue(item) - baseValue(other)) * 10) / 10;
   const mine = item.affixes.map((a) => {
@@ -153,6 +164,7 @@ function comparison(item: Item, other: Item, slot: Slot): HTMLElement {
   const effect = (it: Item) => (it.unique ? h('li', 'cmp-effect', h('span', 'mark', '◆'), h('span', null, UNIQUES[it.unique].effect)) : null);
   return h('div', 'compare',
     h('h3', null, `Comparado com ${slotName(slot)}: `, h('span', { style: `color:${rarColor(other)}` }, fullName(other))),
+    powerLine(p, item, slot),
     same
       ? h('p', `cmp-base cmp-${diff > 0 ? 'up' : diff < 0 ? 'down' : 'same'}`,
         h('span', 'mark', diff > 0 ? '▲' : diff < 0 ? '▼' : '='),
@@ -181,24 +193,23 @@ function itemPanel(c: Ctx, item: Item, slot: Slot | null): HTMLElement {
   const mismatch = needs && p.equipped.arma?.type !== needs ? `Atenção: ${ITEM_TYPES[item.type].label.toLowerCase()} só funciona com ${ITEM_TYPES[needs].label.toLowerCase()} equipado.` : null;
 
   const actions: (HTMLElement | false | null)[] = [];
+  const y = dismantleYield(item);
   if (inBag) {
-    for (const sl of options) {
-      actions.push(btn(options.length > 1 ? `Equipar no ${slotName(sl)}` : 'Equipar', () => {
-        if (equip(p, item.id, sl)) { c.st.note = `${fullName(item)} equipado.`; c.st.armed = null; c.commit(); }
-      }, { kind: 'primary', fk: `equipar-${sl}` }));
-    }
-    actions.push(btn(c.st.armed === 'vender' ? `Confirmar venda: +${num(sellValue(item))} de ouro` : `Vender · +${num(sellValue(item))} de ouro`, () => {
+    actions.push(h('div', 'act-row', options.map((sl) => btn(options.length > 1 ? `Equipar no ${sl === 'anel1' ? '1º' : '2º'} anel` : 'Equipar', () => {
+      if (equip(p, item.id, sl)) { c.st.note = `${fullName(item)} equipado.`; c.st.armed = null; c.commit(); }
+    }, { kind: 'primary', fk: `equipar-${sl}` }))));
+    actions.push(btn(c.st.armed === 'vender' ? ['Confirmar venda ', icon('misc', 'ouro', 18), `+${num(sellValue(item))}`] : ['Vender ', icon('misc', 'ouro', 18), `+${num(sellValue(item))}`], () => {
       if (careful && !confirmStep(c, 'vender')) return;
       const v = sellItem(p, item.id);
       if (v > 0) { c.st.note = `Vendeu ${fullName(item)} por ${num(v)} de ouro.`; selectNeighbour(); }
       c.st.armed = null; c.commit();
-    }, { disabled: !!item.locked, kind: c.st.armed === 'vender' ? 'danger' : undefined, fk: 'vender' }));
-    actions.push(btn(c.st.armed === 'desmontar' ? `Confirmar: desmontar por ${yieldText(item)}` : `Desmontar · ${yieldText(item)}`, () => {
+    }, { disabled: !!item.locked, kind: c.st.armed === 'vender' ? 'danger' : undefined, fk: 'vender', cls: 'with-ico', label: `${c.st.armed === 'vender' ? 'Confirmar venda' : 'Vender'} por ${num(sellValue(item))} de ouro`, title: `Vender por ${num(sellValue(item))} de ouro` }));
+    actions.push(btn([c.st.armed === 'desmontar' ? 'Confirmar desmonte ' : 'Desmontar ', y.mata > 0 && [icon('misc', 'material', 18), `+${num(y.mata)}`], y.po > 0 && [icon('misc', 'po', 18), `+${num(y.po)}`], y.lagrima > 0 && [icon('misc', 'lagrima', 18), `+${num(y.lagrima)}`]], () => {
       if (careful && !confirmStep(c, 'desmontar')) return;
       const text = yieldText(item);
       if (dismantleItem(p, item.id)) { c.st.note = `Desmontou ${fullName(item)}: ${text}.`; selectNeighbour(); }
       c.st.armed = null; c.commit();
-    }, { disabled: !!item.locked, kind: c.st.armed === 'desmontar' ? 'danger' : undefined, fk: 'desmontar' }));
+    }, { disabled: !!item.locked, kind: c.st.armed === 'desmontar' ? 'danger' : undefined, fk: 'desmontar', cls: 'with-ico', label: `${c.st.armed === 'desmontar' ? 'Confirmar desmonte' : 'Desmontar'}: rende ${yieldText(item)}`, title: `Desmontar: rende ${yieldText(item)}` }));
   } else {
     const full = p.inventory.length >= INVENTORY_SIZE;
     actions.push(btn('Desequipar', () => {
@@ -219,7 +230,7 @@ function itemPanel(c: Ctx, item: Item, slot: Slot | null): HTMLElement {
       mismatch && h('p', 'warn-text small', mismatch),
       inBag && options.map((sl) => {
         const other = p.equipped[sl];
-        return other ? comparison(item, other, sl) : h('p', 'cmp-empty', h('span', 'mark', '▲'), ` ${slotName(sl)} está vazio: equipar só soma.`);
+        return other ? comparison(p, item, other, sl) : h('div', 'compare', h('h3', null, `${slotName(sl)} está vazio: equipar só soma.`), powerLine(p, item, sl));
       }),
       item.locked && inBag && h('p', 'muted small', 'Item travado: destrave para vender ou desmontar.'),
     ),

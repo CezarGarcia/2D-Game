@@ -90,7 +90,7 @@ export class StageScene extends Phaser.Scene {
     this.teleG = this.add.graphics().setDepth(1);
     this.fxG = this.add.graphics().setDepth(8000);
     this.hudG = this.add.graphics().setDepth(10000);
-    this.altar = this.add.image((ARENA.x0 + ARENA.x1) / 2, (ARENA.y0 + ARENA.y1) / 2 - 40, 'altar').setOrigin(0.5, 0.9).setScale(INV).setVisible(false);
+    this.altar = this.add.image((ARENA.x0 + ARENA.x1) / 2, (ARENA.y0 + ARENA.y1) / 2 - 40, 'altar').setOrigin(0.5, 0.925).setScale(INV).setVisible(false);
     this.altar.setDepth(this.altar.y);
     this.heroSheet = this.world.stats.weapon === 'arco' ? SHEETS.hero_arco : SHEETS.hero;
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(INV * 0.95).setDepth(2);
@@ -757,7 +757,7 @@ export class StageScene extends Phaser.Scene {
     bar(24, VIEW.h - 46, 200, 16, p.mana / s.maxMana, 0x3fa7e0);
     this.txtHp.setText(`${Math.ceil(p.hp)} / ${s.maxHp}`);
     this.txtMana.setText(`${Math.floor(p.mana)} / ${s.maxMana}`);
-    this.txtPotion.setText(`× ${p.potions}`);
+    this.txtPotion.setText(String(p.potions));
     /* bênçãos ativas */
     w.blessings.forEach((_, i) => g.fillStyle(0x9be7c0, 1).fillCircle(34 + i * 18, VIEW.h - 96, 6));
 

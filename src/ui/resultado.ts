@@ -25,6 +25,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
   const unique = stage.named ? UNIQUES[stage.named.unique] : null;
   const need = xpNeeded(p.level), free = talentFree(p);
   const nextOpen = !!next && isUnlocked(p, next);
+  const info = stageInfo(p, stage);
 
   const extras: HTMLElement[] = [];
   if (r.won) extras.push(h('li', r.bestTime ? 'hot' : null, h('b', null, r.bestTime ? 'Novo melhor tempo: ' : 'Melhor tempo: '), h('span', 'num', rec.bestTime != null ? clock(rec.bestTime) : 'sem registro'), !r.bestTime && h('span', 'muted', ' (não foi batido desta vez)')));
@@ -77,10 +78,16 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
             r.items.filter((it) => it !== r.named).map((it) => itemRow(it)),
             r.items.length === 0 && h('p', 'muted', r.won ? 'Nenhum item coube na mochila.' : 'Nenhum item: é preciso vencer a fase para abrir o baú.'),
             r.won && unique && !r.named && h('p', { class: 'pity', style: `--rar:${RARITIES[unique.rarity].color}` },
-              h('b', null, unique.name), ` não caiu desta vez. A chance era de ${num(r.namedChance, 1)}%; como não caiu, sobe 0,5 ponto e na próxima vitória será de `, h('b', 'num', `${num(stageInfo(p, stage).namedChance, 1)}%`), '.'),
+              h('b', null, unique.name), ` não caiu desta vez. A chance era de ${num(r.namedChance, 1)}%; como não caiu, sobe 0,5 ponto e na próxima vitória será de `, h('b', 'num', `${num(info.namedChance, 1)}%`), '.'),
             r.soldOverflow.length > 0 && h('div', 'overflow',
               h('p', 'warn-text small', `Mochila cheia: ${plural(r.soldOverflow.length, 'item foi vendido', 'itens foram vendidos')} na hora (o ouro já está somado).`),
               r.soldOverflow.map((o) => itemRow(o.item, `+${num(o.gold)} de ouro`)))),
+          !r.won && card('Antes de tentar de novo', 'tips',
+            h('div', 'chips', h('span', 'chip', `Seu Poder ${num(info.power)} × recomendado ${num(info.recommended)}`), h('span', `chip tag tag-${info.tag}`, info.tagText)),
+            h('ul', 'tips',
+              h('li', null, 'Use os pontos de atributo e de talento que estiverem sobrando.'),
+              h('li', null, 'Troque itens pelos melhores da mochila e aprimore a arma no ferreiro.'),
+              h('li', null, 'Fases anteriores com etiqueta verde ou amarela ainda rendem XP, ouro e resina.'))),
         ),
       ),
     ),

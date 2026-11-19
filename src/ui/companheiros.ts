@@ -42,7 +42,9 @@ export function renderCompanheiros(c: Ctx): HTMLElement {
                 h('div', null, h('dt', null, 'Passivo'), h('dd', null, def.passive)),
                 h('div', null, h('dt', null, `Habilidade · ${def.activeName}`), h('dd', null, def.active, h('span', 'muted num', ` Recarga de ${num(def.cooldown, 1)} s.`))),
                 h('div', null, h('dt', null, 'Em combate'), h('dd', 'num', `${num(def.hp)} de vida · ${num(def.damage)} de dano por golpe`))),
-              h('div', 'actions', btn(active ? 'Vai com você' : 'Levar', take(id), { kind: 'primary', disabled: active, fk: `levar-${id}` })),
+              h('div', 'actions', active
+                ? h('span', 'ok-text', 'Vai com você na próxima fase.')
+                : btn('Levar', take(id), { kind: 'primary', fk: `levar-${id}` })),
             ]
             : [
               h('p', 'comp-where', h('span', 'k', 'Como conseguir'), def.where),

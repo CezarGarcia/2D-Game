@@ -34,7 +34,7 @@ export function renderFeiticos(c: Ctx): HTMLElement {
             h('div', null, h('dt', null, 'Recarga'), h('dd', 'num', `${num(sp.cooldown, 1)} s`))),
           has
             ? h('div', { class: 'spell-keys', role: 'group', 'aria-label': `Tecla de ${sp.name}` },
-              h('span', 'k', 'Pôr na tecla'),
+              h('span', 'k', 'Tecla'),
               KEYS.map((key, i) => btn(key, put(i, id), { small: true, pressed: at === i, fk: `sp-${id}-${key}`, cls: 'key', label: `${sp.name} na tecla ${key}${at === i ? ' (em uso)' : ''}` })))
             : h('p', 'spell-lock', `Aprende no nível ${sp.unlock}`));
       })),

@@ -34,12 +34,12 @@ export const SHEETS = {
   tronco: { key: 'tronco', cellW: 204, cellH: 214, ox: 102, oy: 200, scale: 2.1, anims: { raise: 7 } },
   cuspidor: { key: 'cuspidor', cellW: 152, cellH: 142, ox: 60, oy: 128, scale: 1.9, anims: { open: 5 } },
   urutau: { key: 'urutau', cellW: 190, cellH: 150, ox: 95, oy: 128, scale: 1.6, anims: { perch: 3, fly: 8 } },
-  cogumelo: { key: 'cogumelo', cellW: 120, cellH: 110, ox: 60, oy: 96, scale: 1.7, anims: { walk: 6, swell: 5 } },
+  cogumelo: { key: 'cogumelo', cellW: 124, cellH: 124, ox: 62, oy: 108, scale: 1.7, anims: { walk: 6, swell: 5 } },
   caipora: { key: 'caipora', cellW: 200, cellH: 190, ox: 82, oy: 170, scale: 1.9, anims: { idle: 4, run: 8, raise: 2 } },
   curupira: { key: 'curupira', cellW: 190, cellH: 240, ox: 86, oy: 218, scale: 1.75, anims: { idle: 8, cast: 3, fake: 8 } },
   curupira_m: { key: 'curupira_m', cellW: 220, cellH: 250, ox: 92, oy: 230, scale: 1.9, anims: { idle: 4, run: 8 } },
   capivara: { key: 'capivara', cellW: 110, cellH: 84, ox: 46, oy: 72, scale: 1.45, anims: { idle: 4, walk: 8 } },
-  onca: { key: 'onca', cellW: 130, cellH: 90, ox: 56, oy: 76, scale: 1.45, anims: { idle: 4, walk: 8, pounce: 3 } },
+  onca: { key: 'onca', cellW: 136, cellH: 90, ox: 62, oy: 76, scale: 1.45, anims: { idle: 4, walk: 8, pounce: 3 } },
 } satisfies Record<string, Sheet>;
 
 function canvas(w: number, h: number): [HTMLCanvasElement, Ctx] {
@@ -110,7 +110,7 @@ export function bakeAll(scene: Phaser.Scene): void {
   bakeSheet(scene, SHEETS.caipora, [
     ...cycle(SHEETS.caipora.anims.idle, 'idle', (c, k) => drawCaipora(c, k * Math.PI, {})),
     ...cycle(SHEETS.caipora.anims.run, 'run', (c, k) => drawCaipora(c, 0, { walk: k * TAU })),
-    ...ramp(SHEETS.caipora.anims.raise, 'raise', (c, k) => drawCaipora(c, 0, { raise: 0.5 + k * 0.5 })),
+    ...ramp(SHEETS.caipora.anims.raise, 'raise', (c, k) => drawCaipora(c, 0, { raise: 0.85 + k * 0.15 })),
   ]);
   bakeSheet(scene, SHEETS.curupira, [
     ...cycle(SHEETS.curupira.anims.idle, 'idle', (c, k) => drawCurupira(c, k * 1.4, {})),
@@ -128,7 +128,7 @@ export function bakeAll(scene: Phaser.Scene): void {
   ]);
   bakeSheet(scene, SHEETS.capivara, [
     ...cycle(SHEETS.capivara.anims.idle, 'idle', (c, k) => drawCapi(c, k * 2.417, {})),
-    ...cycle(SHEETS.capivara.anims.walk, 'walk', (c, k) => drawCapi(c, 0, { walk: k * TAU / 1.4 * 1.4 })),
+    ...cycle(SHEETS.capivara.anims.walk, 'walk', (c, k) => drawCapi(c, 0, { walk: (k * TAU) / 1.4 })),
   ]);
   bakeSheet(scene, SHEETS.onca, [
     ...cycle(SHEETS.onca.anims.idle, 'idle', (c, k) => drawOnca(c, k * 2.4, {})),
@@ -163,7 +163,7 @@ export function bakeAll(scene: Phaser.Scene): void {
     g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.6, 'rgba(255,255,255,.7)'); g.addColorStop(1, 'rgba(255,255,255,0)');
     c.fillStyle = g; c.fillRect(0, 0, 32, 32);
   });
-  simple(scene, 'altar', 140, 130, (c) => { c.translate(70, 118); c.scale(1.8, 1.8); drawAltar(c, 0, {}); });
+  simple(scene, 'altar', 150, 160, (c) => { c.translate(75, 148); c.scale(1.8, 1.8); drawAltar(c, 0, {}); });
   simple(scene, 'cage', 110, 110, (c) => { c.translate(55, 100); c.scale(1.8, 1.8); drawCage(c, 0, { open: 0 }); });
   for (const k of ICON_KEYS) simple(scene, 'ic_' + k, 48, 48, (c) => drawMiscIcon(c, k, 48));
 

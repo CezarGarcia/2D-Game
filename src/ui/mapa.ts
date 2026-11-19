@@ -57,7 +57,7 @@ function node(c: Ctx, info: StageInfo, selected: boolean): SVGElement {
     shape,
     s('circle', { class: 'focus-ring', r: r + 7 }),
     s('text', { class: 'n', y: st.final === 'chefao' ? 9 : 8 }, st.number),
-    st.final !== 'normal' && s('text', { class: 'kind', y: -r - 8 }, st.final === 'chefao' ? 'CHEFÃO' : 'ELITE'),
+    st.final !== 'normal' && s('text', { class: 'kind', y: -r - (selected ? 15 : 9) }, st.final === 'chefao' ? 'CHEFÃO' : 'ELITE'),
     info.unlocked && s('circle', { class: `pip tag-${info.tag}`, cx: r * 0.74, cy: -r * 0.74, r: 6.5 }),
     st.named && s('rect', { class: 'gem', x: -r * 0.74 - 5.5, y: -r * 0.74 - 5.5, width: 11, height: 11, transform: `rotate(45 ${-r * 0.74} ${-r * 0.74})`, fill: RARITIES[UNIQUES[st.named.unique].rarity].color }),
     !info.unlocked && s('g', { class: 'lock', transform: `translate(${r * 0.5} ${r * 0.42})` },
@@ -109,9 +109,6 @@ function detail(c: Ctx, info: StageInfo): HTMLElement {
       h('ul', 'goals', goals.map((g, i) => h('li', rec.stars[i] ? 'done' : null, star(rec.stars[i], 18), h('span', null, g)))),
       h('p', 'line', h('span', 'muted', 'Melhor tempo: '), h('b', 'num', rec.bestTime != null ? clock(rec.bestTime) : 'ainda sem vitória')),
 
-      h('h3', null, 'Inimigos'),
-      h('div', 'chips', st.kinds.map((k) => h('span', 'chip', ENEMY_NAMES[k]))),
-
       h('h3', null, 'Livro de drops'),
       unique && st.named
         ? h('div', { class: 'drop', style: `--rar:${RARITIES[unique.rarity].color}` },
@@ -137,6 +134,8 @@ function detail(c: Ctx, info: StageInfo): HTMLElement {
         h('h3', null, 'Companheiro a resgatar'),
         h('p', 'line', h('b', null, rescue.name), ' · ', p.companions[st.rescue] ? h('span', 'ok-text', 'já está com você') : h('span', null, rescue.where)),
       ],
+      h('h3', null, 'Inimigos'),
+      h('div', 'chips', st.kinds.map((k) => h('span', 'chip', ENEMY_NAMES[k]))),
     ),
     h('div', 'panel-foot',
       !info.unlocked && prev && h('p', 'warn-text', `Bloqueada. Vença a fase ${prev.id} · ${prev.name} para liberar.`),

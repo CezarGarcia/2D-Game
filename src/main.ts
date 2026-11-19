@@ -91,9 +91,12 @@ const ui = mountUi(document.getElementById('ui')!, {
 session.onStageEnd = (outcome) => {
   const rewards = applyOutcome(session.profile!, outcome);
   saveProfile(session.profile!);
-  game.scene.stop('stage');
-  game.scene.start('camp');
-  ui.showResults(outcome.stageId, rewards);
+  // troca de cena só depois do passo atual do Phaser, para não destruir objetos no meio da atualização
+  game.events.once(Phaser.Core.Events.POST_STEP, () => {
+    game.scene.stop('stage');
+    game.scene.start('camp');
+    ui.showResults(outcome.stageId, rewards);
+  });
 };
 
 ui.showCamp('mapa');
