@@ -119,7 +119,8 @@ export function baseValue(item: Item): number {
 
 export function baseLabel(item: Item): string {
   const t = ITEM_TYPES[item.type];
-  return t.base === 'dano' ? `${baseValue(item)} de dano` : t.base === 'defesa' ? `${baseValue(item)} de defesa` : '';
+  const v = String(baseValue(item)).replace('.', ',');
+  return t.base === 'dano' ? `${v} de dano` : t.base === 'defesa' ? `${v} de defesa` : '';
 }
 
 export function affixText(a: Affix): string {

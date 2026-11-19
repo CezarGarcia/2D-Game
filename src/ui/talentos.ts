@@ -118,8 +118,8 @@ function nodePanel(c: Ctx, node: TalentNode): HTMLElement {
       ],
     reason && h('p', rank >= node.max ? 'ok-text small' : 'warn-text small', reason),
     h('div', 'actions',
-      btn('+1 ponto', () => { if (addTalent(p, node.id)) c.commit(); }, { kind: 'primary', disabled: !can, fk: 'mais-ponto' }),
-      btn('−1 ponto', () => { if (removeTalent(p, node.id)) c.commit(); }, { disabled: !canRemove, fk: 'menos-ponto' })),
+      btn('+1 ponto', () => { if (addTalent(c.p, node.id)) c.commit(); }, { kind: 'primary', disabled: !can, fk: 'mais-ponto' }),
+      btn('−1 ponto', () => { if (removeTalent(c.p, node.id)) c.commit(); }, { disabled: !canRemove, fk: 'menos-ponto' })),
     !canRemove && h('p', 'muted small', rank === 0 ? 'Não há ponto aqui para tirar.' : 'Não dá para tirar: outros talentos com ponto ficariam soltos, sem caminho até uma raiz.'),
   );
 }
@@ -146,7 +146,7 @@ export function renderTalentos(c: Ctx): HTMLElement {
       h('div', 'panel-foot',
         btn(c.st.armed === 'talentos' ? 'Confirmar: devolver todos os pontos' : 'Redistribuir tudo', () => {
           if (!confirmStep(c, 'talentos')) return;
-          resetTalents(p);
+          resetTalents(c.p);
           c.commit();
         }, { kind: c.st.armed === 'talentos' ? 'danger' : undefined, disabled: spent === 0 || p.gold < cost, fk: 'respec-talentos' }),
         h('span', 'muted small', spent === 0 ? 'Nenhum ponto usado ainda.' : p.gold < cost ? `Falta ouro: ${respecLabel(p)}.` : `Devolve os ${num(spent)} pontos: ${respecLabel(p)}.`)),

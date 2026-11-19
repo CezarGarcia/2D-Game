@@ -8,7 +8,7 @@ const KEYS = ['Q', 'E', 'R'];
 
 export function renderFeiticos(c: Ctx): HTMLElement {
   const p = c.p, known = knownSpells(p);
-  const put = (index: number, spell: SpellId | null) => () => { if (setLoadout(p, index, spell)) c.commit(); };
+  const put = (index: number, spell: SpellId | null) => () => { if (setLoadout(c.p, index, spell)) c.commit(); };
 
   return h('div', 'tab-feiticos',
     h('section', { class: 'panel loadout', 'aria-label': 'Feitiços em uso' },

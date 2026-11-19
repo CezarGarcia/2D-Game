@@ -28,8 +28,6 @@ export interface TileOpts {
   disabled?: boolean;
   /** Seta verde: melhor que o equipado. */
   better?: boolean;
-  /** Marca de item em uso. */
-  worn?: boolean;
   size?: number;
   title?: string;
 }
@@ -41,7 +39,6 @@ export function itemTile(item: Item, o: TileOpts = {}): HTMLElement {
     item.plus > 0 && h('span', 'tile-plus', `+${item.plus}`),
     item.locked && h('span', { class: 'tile-lock', title: 'Travado' }, lockIcon(11)),
     o.better && h('span', { class: 'tile-up', title: 'Melhor que o equipado' }, '▲'),
-    o.worn && h('span', 'tile-worn', 'em uso'),
   ];
   const label = `${fullName(item)}, ${RARITIES[item.rarity].label}, ${ITEM_TYPES[item.type].label}${item.locked ? ', travado' : ''}`;
   const attrs = {

@@ -134,11 +134,13 @@ function detail(c: Ctx, info: StageInfo): HTMLElement {
         h('h3', null, 'Companheiro a resgatar'),
         h('p', 'line', h('b', null, rescue.name), ' · ', p.companions[st.rescue] ? h('span', 'ok-text', 'já está com você') : h('span', null, rescue.where)),
       ],
+
       h('h3', null, 'Inimigos'),
       h('div', 'chips', st.kinds.map((k) => h('span', 'chip', ENEMY_NAMES[k]))),
     ),
     h('div', 'panel-foot',
       !info.unlocked && prev && h('p', 'warn-text', `Bloqueada. Vença a fase ${prev.id} · ${prev.name} para liberar.`),
+      info.unlocked && info.tag === 'vermelha' && h('p', 'bad small', 'Acima do seu poder. Vale evoluir o herói antes de entrar.'),
       btn('Entrar na fase', () => c.host.startStage(st.id), { kind: 'primary', disabled: !info.unlocked, cls: 'big', fk: 'entrar' }),
     ),
   );

@@ -93,7 +93,7 @@ function equipColumn(c: Ctx): HTMLElement {
 function attrPanel(c: Ctx): HTMLElement {
   const p = c.p, total = totalAttrs(p), st = deriveStats(p), cost = respecCost(p);
   const spent = ATTRS.reduce((n, a) => n + p.attrs[a.key], 0);
-  const add = (key: typeof ATTRS[number]['key'], n: number) => () => { if (allocAttr(p, key, n)) { c.st.armed = null; c.commit(); } };
+  const add = (key: typeof ATTRS[number]['key'], n: number) => () => { if (allocAttr(c.p, key, n)) { c.st.armed = null; c.commit(); } };
   const derived: [string, string, string?][] = [
     ['Vida', num(st.maxHp)],
     ['Mana', num(st.maxMana)],
@@ -119,7 +119,7 @@ function attrPanel(c: Ctx): HTMLElement {
       h('div', 'respec',
         btn(c.st.armed === 'attrs' ? 'Confirmar: devolver todos os pontos' : 'Redistribuir', () => {
           if (!confirmStep(c, 'attrs')) return;
-          c.st.note = resetAttrs(p) ? null : 'Falta ouro para redistribuir.';
+          c.st.note = resetAttrs(c.p) ? null : 'Falta ouro para redistribuir.';
           c.commit();
         }, { small: true, kind: c.st.armed === 'attrs' ? 'danger' : undefined, disabled: spent === 0 || p.gold < cost, fk: 'respec-attrs' }),
         h('span', 'muted small', spent === 0 ? 'Nenhum ponto distribuído ainda.' : `Devolve os ${num(spent)} pontos distribuídos: ${respecLabel(p)}.`)),
@@ -196,29 +196,29 @@ function itemPanel(c: Ctx, item: Item, slot: Slot | null): HTMLElement {
   const y = dismantleYield(item);
   if (inBag) {
     actions.push(h('div', 'act-row', options.map((sl) => btn(options.length > 1 ? `Equipar no ${sl === 'anel1' ? '1º' : '2º'} anel` : 'Equipar', () => {
-      if (equip(p, item.id, sl)) { c.st.note = `${fullName(item)} equipado.`; c.st.armed = null; c.commit(); }
+      if (equip(c.p, item.id, sl)) { c.st.note = `${fullName(item)} equipado.`; c.st.armed = null; c.commit(); }
     }, { kind: 'primary', fk: `equipar-${sl}` }))));
     actions.push(btn(c.st.armed === 'vender' ? ['Confirmar venda ', icon('misc', 'ouro', 18), `+${num(sellValue(item))}`] : ['Vender ', icon('misc', 'ouro', 18), `+${num(sellValue(item))}`], () => {
       if (careful && !confirmStep(c, 'vender')) return;
-      const v = sellItem(p, item.id);
+      const v = sellItem(c.p, item.id);
       if (v > 0) { c.st.note = `Vendeu ${fullName(item)} por ${num(v)} de ouro.`; selectNeighbour(); }
       c.st.armed = null; c.commit();
     }, { disabled: !!item.locked, kind: c.st.armed === 'vender' ? 'danger' : undefined, fk: 'vender', cls: 'with-ico', label: `${c.st.armed === 'vender' ? 'Confirmar venda' : 'Vender'} por ${num(sellValue(item))} de ouro`, title: `Vender por ${num(sellValue(item))} de ouro` }));
     actions.push(btn([c.st.armed === 'desmontar' ? 'Confirmar desmonte ' : 'Desmontar ', y.mata > 0 && [icon('misc', 'material', 18), `+${num(y.mata)}`], y.po > 0 && [icon('misc', 'po', 18), `+${num(y.po)}`], y.lagrima > 0 && [icon('misc', 'lagrima', 18), `+${num(y.lagrima)}`]], () => {
       if (careful && !confirmStep(c, 'desmontar')) return;
       const text = yieldText(item);
-      if (dismantleItem(p, item.id)) { c.st.note = `Desmontou ${fullName(item)}: ${text}.`; selectNeighbour(); }
+      if (dismantleItem(c.p, item.id)) { c.st.note = `Desmontou ${fullName(item)}: ${text}.`; selectNeighbour(); }
       c.st.armed = null; c.commit();
     }, { disabled: !!item.locked, kind: c.st.armed === 'desmontar' ? 'danger' : undefined, fk: 'desmontar', cls: 'with-ico', label: `${c.st.armed === 'desmontar' ? 'Confirmar desmonte' : 'Desmontar'}: rende ${yieldText(item)}`, title: `Desmontar: rende ${yieldText(item)}` }));
   } else {
     const full = p.inventory.length >= INVENTORY_SIZE;
     actions.push(btn('Desequipar', () => {
-      if (unequip(p, slot)) { c.st.note = `${fullName(item)} voltou para a mochila.`; c.commit(); }
+      if (unequip(c.p, slot)) { c.st.note = `${fullName(item)} voltou para a mochila.`; c.commit(); }
     }, { disabled: slot === 'arma' || full, fk: 'desequipar' }));
     if (slot === 'arma') actions.push(h('p', 'muted small', 'A arma não pode ficar vazia: equipe outra por cima.'));
     else if (full) actions.push(h('p', 'warn-text small', 'A mochila está cheia.'));
   }
-  actions.push(btn(item.locked ? 'Destravar' : 'Travar', () => { toggleLock(p, item.id); c.st.armed = null; c.commit(); },
+  actions.push(btn(item.locked ? 'Destravar' : 'Travar', () => { toggleLock(c.p, item.id); c.st.armed = null; c.commit(); },
     { fk: 'travar', title: 'Item travado não pode ser vendido, desmontado nem consumido em fusão' }));
 
   return h('section', { class: 'panel col-mid item-detail', 'aria-label': 'Detalhe do item' },

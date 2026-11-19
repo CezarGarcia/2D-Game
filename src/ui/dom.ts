@@ -95,11 +95,6 @@ export function star(on: boolean, size = 18, extra = ''): SVGElement {
     s('path', { d: STAR_PATH }));
 }
 
-export function stars(list: boolean[], size = 18, fresh: boolean[] = []): HTMLElement {
-  const n = list.filter(Boolean).length;
-  return h('span', { class: 'stars', role: 'img', 'aria-label': `${n} de ${list.length} estrelas` }, list.map((on, i) => star(on, size, fresh[i] ? 'fresh' : '')));
-}
-
 /* ---------- formatação ---------- */
 
 export function num(n: number, digits = 0): string {

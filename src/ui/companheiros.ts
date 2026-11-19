@@ -1,5 +1,6 @@
 /** Aba Companheiros: quem já está com você, quem falta resgatar, e quem vai para a luta. */
 import { drawCapi } from '../art/characters';
+import { drawOnca } from '../art/characters2';
 import { COMPANIONS, COMPANION_ORDER, type CompanionId } from '../data/content';
 import { setCompanion } from '../meta/profile';
 import type { Ctx } from './ctx';
@@ -14,6 +15,7 @@ function picture(c: Ctx, id: CompanionId, owned: boolean): HTMLElement {
     g.fillStyle = 'rgba(8,14,8,.45)';
     g.beginPath(); g.ellipse(W / 2, H - 22, 62, 9, 0, 0, Math.PI * 2); g.fill();
     if (id === 'capivara') { g.save(); g.translate(W / 2 - 10, H - 22); g.scale(2.4, 2.4); drawCapi(g, owned ? t : 0, {}); g.restore(); return; }
+    if (id === 'onca') { g.save(); g.translate(W / 2 - 6, H - 22); g.scale(2.2, 2.2); drawOnca(g, owned ? t : 0, {}); g.restore(); return; }
     /* ainda sem desenho próprio: uma pegada */
     g.fillStyle = owned ? '#E0A848' : '#51604d';
     const cx = W / 2, cy = H / 2 + 4;
@@ -25,7 +27,7 @@ function picture(c: Ctx, id: CompanionId, owned: boolean): HTMLElement {
 
 export function renderCompanheiros(c: Ctx): HTMLElement {
   const p = c.p;
-  const take = (id: CompanionId | null) => () => { if (setCompanion(p, id)) c.commit(); };
+  const take = (id: CompanionId | null) => () => { if (setCompanion(c.p, id)) c.commit(); };
   return h('div', 'tab-companheiros',
     h('header', 'comp-head',
       h('div', null, h('h1', 'title', 'Companheiros'), h('p', 'muted', 'Um companheiro vai com você para a fase: dá um bônus passivo e tem uma habilidade própria.')),

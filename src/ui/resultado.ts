@@ -29,7 +29,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
 
   const extras: HTMLElement[] = [];
   if (r.won) extras.push(h('li', r.bestTime ? 'hot' : null, h('b', null, r.bestTime ? 'Novo melhor tempo: ' : 'Melhor tempo: '), h('span', 'num', rec.bestTime != null ? clock(rec.bestTime) : 'sem registro'), !r.bestTime && h('span', 'muted', ' (não foi batido desta vez)')));
-  if (r.rescued) extras.push(h('li', 'hot', h('b', null, `${COMPANIONS[r.rescued].name} resgatada: `), `agora ela luta ao seu lado. ${COMPANIONS[r.rescued].passive}.`));
+  if (r.rescued) extras.push(h('li', 'hot', h('b', null, `Novo companheiro: ${COMPANIONS[r.rescued].name}. `), `Luta ao seu lado a partir de agora. Passivo: ${COMPANIONS[r.rescued].passive}.`));
   for (const sp of r.spells) extras.push(h('li', 'hot', icon('misc', sp, 22), h('b', null, `Feitiço novo: ${SPELLS[sp].name}. `), SPELLS[sp].desc));
   if (r.talentPoints > 0) extras.push(h('li', 'hot', h('b', null, `+${plural(r.talentPoints, 'ponto de talento', 'pontos de talento')} `), 'por vencer o chefão pela primeira vez.'));
   if (r.starChest) extras.push(h('li', 'hot', h('b', null, `Baú de ${r.starChest.stars} estrelas aberto: `),

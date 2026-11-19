@@ -48,15 +48,18 @@ function picker(c: Ctx): HTMLElement {
   );
 }
 
-function result(c: Ctx): HTMLElement | null {
+interface Work { body: HTMLElement; foot: HTMLElement }
+
+function result(c: Ctx): HTMLElement {
   const r = c.st.forgeResult;
   return r ? h('div', { class: `result ${r.ok ? 'ok' : 'fail'}`, role: 'status' }, h('strong', null, r.title), h('span', null, r.text)) : h('div', { class: 'result-slot', role: 'status' });
 }
 
-function upgradePanel(c: Ctx, item: Item): HTMLElement {
+function upgradePanel(c: Ctx, item: Item): Work {
   const p = c.p, info = upgradeInfo(p, item), max = RARITIES[item.rarity].maxPlus, atMax = item.plus >= max;
   const after = baseLabel({ ...item, plus: item.plus + 1 }), hasBase = baseValue(item) > 0;
-  return h('div', 'forge-body',
+  const body = h('div', 'forge-body',
+    result(c),
     itemCard(item, true),
     h('div', 'steps',
       h('div', 'step', h('span', 'k', 'Agora'), h('b', 'num big', `+${item.plus}`), hasBase && h('span', 'num', br(baseLabel(item)))),
@@ -64,23 +67,25 @@ function upgradePanel(c: Ctx, item: Item): HTMLElement {
       atMax
         ? h('div', 'step', h('span', 'k', 'Teto da raridade'), h('b', 'num big', `+${max}`), h('span', 'muted small', 'Funda para subir a raridade'))
         : h('div', 'step next', h('span', 'k', 'Depois'), h('b', 'num big', `+${item.plus + 1}`), hasBase && h('span', 'num', br(after))),
-      h('div', 'step chance', h('span', 'k', 'Chance'), h('b', 'num big', pct(info.chance)),
+      !atMax && h('div', 'step chance', h('span', 'k', 'Chance'), h('b', 'num big', pct(info.chance)),
         h('span', 'muted small', (item.pity ?? 0) > 0 ? `inclui +${num(item.pity ?? 0)} pontos de falhas anteriores` : `teto de ${RARITIES[item.rarity].label}: +${max}`))),
-    h('div', 'costs', cost('ouro', 'Ouro', info.gold, p.gold), cost('material', MATERIAL_LABEL.mata, info.mata, p.materials.mata)),
+    !atMax && h('div', 'costs', cost('ouro', 'Ouro', info.gold, p.gold), cost('material', MATERIAL_LABEL.mata, info.mata, p.materials.mata)),
+  );
+  const foot = h('div', 'panel-foot forge-foot',
     !info.possible && h('p', 'warn-text', info.reason),
-    result(c),
     h('div', 'actions',
       btn(atMax ? 'No teto' : `Aprimorar para +${item.plus + 1}`, () => {
-        const r = upgradeItem(p, item.id);
+        const r = upgradeItem(c.p, item.id), now = findItem(c.p, item.id)?.item ?? item;
         c.st.forgeResult = !r.done ? { ok: false, title: 'Não deu para aprimorar.', text: r.reason ?? '' }
-          : r.success ? { ok: true, title: `Deu certo: ${item.name} agora é +${item.plus}.`, text: baseLabel(item) ? `Valor base: ${br(baseLabel(item))}.` : 'O aprimoramento ficou gravado no item.' }
+          : r.success ? { ok: true, title: `Deu certo: ${now.name} agora é +${now.plus}.`, text: baseLabel(now) ? `Valor base: ${br(baseLabel(now))}.` : 'O aprimoramento ficou gravado no item.' }
             : { ok: false, title: 'A forja falhou.', text: 'O item não foi destruído nem perdeu nada. O custo foi gasto e a próxima chance subiu 5 pontos.' };
         c.commit();
       }, { kind: 'primary', disabled: !info.possible, fk: 'aprimorar', cls: 'big' })),
   );
+  return { body, foot };
 }
 
-function fusePanel(c: Ctx, item: Item): HTMLElement {
+function fusePanel(c: Ctx, item: Item): Work {
   const p = c.p;
   c.st.forgeFodder = c.st.forgeFodder.filter((id) => p.inventory.some((i) => i.id === id));
   const fodder = c.st.forgeFodder, info = fuseInfo(p, item.id, fodder);
@@ -92,7 +97,8 @@ function fusePanel(c: Ctx, item: Item): HTMLElement {
     c.st.forgeFodder = fodder.includes(id) ? fodder.filter((x) => x !== id) : fodder.length < 2 ? [...fodder, id] : [fodder[1], id];
     c.st.forgeResult = null; c.redraw();
   };
-  return h('div', 'forge-body',
+  const body = h('div', 'forge-body',
+    result(c),
     itemCard(item, true),
     canBeMain && [
       h('h3', null, `Itens para consumir: ${fodder.length} de 2 escolhidos`),
@@ -112,20 +118,22 @@ function fusePanel(c: Ctx, item: Item): HTMLElement {
     canBeMain && h('div', 'costs',
       cost('ouro', 'Ouro', info.gold, p.gold),
       info.lagrima > 0 && cost('lagrima', MATERIAL_LABEL.lagrima, info.lagrima, p.materials.lagrima)),
+  );
+  const foot = h('div', 'panel-foot forge-foot',
     !info.possible && h('p', 'warn-text', info.reason),
-    result(c),
     h('div', 'actions',
       btn('Fundir', () => {
-        const before = item.affixes.length, lost = p.inventory.find((i) => i.id === fodder[0]);
+        const before = item.affixes.length, lost = c.p.inventory.find((i) => i.id === fodder[0]);
         const lostName = lost ? fullName(lost) : '';
-        const r = fuseItems(p, item.id, fodder);
+        const r = fuseItems(c.p, item.id, fodder), now = findItem(c.p, item.id)?.item ?? item;
         c.st.forgeResult = !r.done ? { ok: false, title: 'Não deu para fundir.', text: r.reason ?? '' }
-          : r.success ? { ok: true, title: `Fusão feita: ${item.name} agora é ${RARITIES[item.rarity].label}.`, text: item.affixes.length > before ? `Bônus novo: ${affixText(item.affixes[item.affixes.length - 1])}.` : '' }
+          : r.success ? { ok: true, title: `Fusão feita: ${now.name} agora é ${RARITIES[now.rarity].label}.`, text: now.affixes.length > before ? `Bônus novo: ${affixText(now.affixes[now.affixes.length - 1])}.` : '' }
             : { ok: false, title: 'A fusão falhou.', text: `Você perdeu só um item consumido (${lostName}). O principal e o outro ficaram com você.` };
         c.st.forgeFodder = [];
         c.commit();
       }, { kind: 'primary', disabled: !info.possible, fk: 'fundir', cls: 'big' })),
   );
+  return { body, foot };
 }
 
 export function renderFerreiro(c: Ctx, unlocked: boolean): HTMLElement {
@@ -141,6 +149,7 @@ export function renderFerreiro(c: Ctx, unlocked: boolean): HTMLElement {
   const found = c.st.forgeSel != null ? findItem(c.p, c.st.forgeSel) : null;
   if (!found) c.st.forgeSel = null;
   const mode = c.st.forgeMode;
+  const work = found ? (mode === 'aprimorar' ? upgradePanel(c, found.item) : fusePanel(c, found.item)) : null;
   return h('div', 'tab-ferreiro',
     picker(c),
     h('section', { class: 'panel forge-work', 'aria-label': mode === 'aprimorar' ? 'Aprimorar' : 'Fundir' },
@@ -148,11 +157,12 @@ export function renderFerreiro(c: Ctx, unlocked: boolean): HTMLElement {
         h('header', 'panel-head',
           h('h2', 'title', mode === 'aprimorar' ? 'Aprimorar' : 'Fundir'),
           found && btn('Fechar', () => c.redraw(closeFerreiro(c) || undefined), { small: true, kind: 'quiet', fk: 'fechar-forja', title: 'Esc' })),
-        found
-          ? (mode === 'aprimorar' ? upgradePanel(c, found.item) : fusePanel(c, found.item))
+        work
+          ? work.body
           : h('div', 'empty-hint',
             h('p', null, mode === 'aprimorar' ? 'Escolha ao lado o item que você quer aprimorar.' : 'Escolha ao lado o item principal: é ele que sobe de raridade.'),
-            h('p', 'muted', 'O custo e a chance aparecem aqui antes de você confirmar.')))),
+            h('p', 'muted', 'O custo e a chance aparecem aqui antes de você confirmar.'))),
+      work && work.foot),
   );
 }
 
