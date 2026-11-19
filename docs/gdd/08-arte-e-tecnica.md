@@ -33,13 +33,25 @@ Referência cultural: gibão e chapéu de couro do sertão, xilogravura de corde
 - Progresso salvo no navegador até existir conta.
 - Servidor (contas, drops, rankings, mercado): decidido quando chegar a etapa 4.
 
-O código Java atual não é reaproveitado. Fica no histórico do repositório.
+- A arte é desenhada por código (Canvas 2D) e convertida em folhas de sprites na abertura do jogo (`src/art/bake.ts`). Durante a partida o Phaser só troca quadros.
+
+O código Java antigo não é reaproveitado. Está em `legacy/java`.
+
+### Organização do código
+
+| Pasta | Conteúdo |
+|---|---|
+| `src/data` | Números do jogo: `balance.ts` (combate do protótipo) e `progression.ts` (fórmulas do documento 01) |
+| `src/sim` | Regras do combate, sem Phaser e sem navegador. É o que os testes exercitam |
+| `src/art` | Desenho dos personagens e do cenário, e a conversão em texturas |
+| `src/game` | Cena do Phaser: comandos, sprites, efeitos, HUD e som |
+| `tests` | Testes das regras (`npm test`) |
 
 ## Ordem de construção
 
 | Etapa | Entrega | Critério para seguir |
 |---|---|---|
-| 1 · Sensação | Uma sala: herói com movimento, ataque, esquiva e um feitiço; três Assombros e um elite | Controlar o herói é gostoso |
+| 1 · Sensação (**feita, em avaliação**) | Uma sala com três ondas: herói com movimento, sequência de três golpes, esquiva com esquiva perfeita e Dardo de Espinho; Saúva-Cinza, Queixada Sombria, Cuspidor e o elite Tronco-Oco | Controlar o herói é gostoso |
 | 2 · Fatia vertical | Capítulo 1 completo: 12 fases, Curupira, 2 armas, 5 feitiços de Natureza, 2 companheiros, loot, inventário, ferreiro (aprimorar e fundir), atributos, árvore Bravura | Alguém de fora joga 1 hora sem pedir ajuda |
 | 3 · Campanha | Capítulos 2 a 8, todas as armas, elementos, talentos, conjuntos, únicos, Torre | Créditos alcançáveis, curva de dificuldade ajustada |
 | 4 · Online | Contas, save na nuvem, servidor decidindo drops, rankings | Rankings confiáveis |

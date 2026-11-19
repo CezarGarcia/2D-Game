@@ -118,3 +118,12 @@ Raridade dos itens do baú, por capítulo (dificuldade normal):
 - 40 espaços no começo; mais espaços por ouro e pela loja.
 - Travar item favorito, comparar com o equipado, desmontar em lote por raridade.
 - 3 conjuntos salvos de equipamento, feitiços e talentos, para trocar entre farm e chefão.
+
+## A expandir
+
+Anotado para uma rodada própria de design, depois do protótipo: deixar itens, aprimoramento e encantamento mais extensos. Pontos a desenvolver:
+
+- Mais degraus e marcos no aprimoramento (por exemplo, efeitos extras em +5, +10 e +15).
+- Encantamentos como sistema próprio, com tipos e níveis, além do sorteio de bônus.
+- Evolução de nível do item com etapas e requisitos por capítulo.
+- Mais famílias de bônus e de itens únicos por capítulo.

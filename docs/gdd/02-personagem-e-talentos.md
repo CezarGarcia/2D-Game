@@ -32,6 +32,22 @@ A fórmula de defesa tem retorno decrescente: empilhar só defesa nunca chega à
 
 ## Talentos
 
+### Formato decidido: uma teia só, a partir do centro
+
+Em vez de três árvores separadas, os talentos formam **uma única teia radial**, no formato mais comum do gênero:
+
+- **Centro:** seis raízes, uma por atributo (Força, Agilidade, Inteligência, Vitalidade, Espírito, Sorte). O primeiro ponto vai numa raiz.
+- **Caminhos para fora:** de cada raiz saem ramos com nós comuns e nós-chave. Um nó só pode receber ponto se estiver ligado a um nó que já tem ponto.
+- **Anel de ligação:** nós grandes num anel conectam setores vizinhos. Quem começou em Força pode atravessar para Vitalidade ou Agilidade sem voltar ao centro.
+- **Pontas:** os Dons ficam nas extremidades dos ramos.
+- A regra de "pontos gastos por fileira" deixa de existir; a distância até o centro faz esse papel.
+
+Os nós listados abaixo são o conteúdo inicial e serão redistribuídos na teia: Bravura ocupa os setores de Força, Vitalidade e Agilidade; Mandinga, os de Inteligência e Espírito; Companheiro, o de Sorte. A teia nasce com esses 39 nós e cresce com mais nós por setor.
+
+Entra na etapa 2 da construção (Capítulo 1), começando pelos setores de Força, Vitalidade e Agilidade.
+
+### Pontos e regras gerais
+
 - **1 ponto por nível** a partir do nível 2 (59 pontos no nível 60).
 - **+8** dos chefões de capítulo e **+8** de conquistas (baús de 36 estrelas). Total possível: **75**.
 - Três árvores. Completar uma custa **37 pontos**; as três custariam 111. Dá para fechar duas, ou espalhar.
