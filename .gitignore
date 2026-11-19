@@ -8,3 +8,6 @@ dist/
 
 # projeto Java antigo
 legacy/java/out/
+
+# páginas temporárias de pré-visualização
+preview-*.html
