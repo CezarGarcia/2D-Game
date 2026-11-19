@@ -48,4 +48,4 @@ O código Java atual não é reaproveitado. Fica no histórico do repositório.
 
 ## Referência de arte
 
-`docs/arte/referencia-capitulo-1.html` guarda o código de desenho aprovado como ponto de partida: herói, capivara, Saúva-Cinza, Queixada Sombria, Tronco-Oco, Cuspidor, Curupira e a cena da Mata. Abra no navegador para ver. As funções de desenho desse arquivo são a base das do jogo.
+`docs/arte/referencia-capitulo-1.html` guarda o código de desenho da proposta atual, ainda em revisão: herói, capivara, Saúva-Cinza, Queixada Sombria, Tronco-Oco, Cuspidor, Curupira e a cena da Mata. Abra no navegador para ver. As funções de desenho desse arquivo são a base das do jogo.
