@@ -52,7 +52,7 @@ O código Java antigo não é reaproveitado. Está em `legacy/java`.
 | Etapa | Entrega | Critério para seguir |
 |---|---|---|
 | 1 · Sensação (**feita, em avaliação**) | Uma sala com três ondas: herói com movimento, sequência de três golpes, esquiva com esquiva perfeita e Dardo de Espinho; Saúva-Cinza, Queixada Sombria, Cuspidor e o elite Tronco-Oco | Controlar o herói é gostoso |
-| 2 · Fatia vertical | Capítulo 1 completo: 12 fases, Curupira, 2 armas, 5 feitiços de Natureza, 2 companheiros, loot, inventário, ferreiro (aprimorar e fundir), atributos, árvore Bravura | Alguém de fora joga 1 hora sem pedir ajuda |
+| 2 · Fatia vertical (**feita, em avaliação**) | Capítulo 1 completo: 12 fases, Caipora e Curupira, facão com escudo e arco, 5 feitiços de Natureza, capivara e onça, loot, inventário, ferreiro (aprimorar e fundir), atributos e a teia de talentos | Alguém de fora joga 1 hora sem pedir ajuda |
 | 3 · Campanha | Capítulos 2 a 8, todas as armas, elementos, talentos, conjuntos, únicos, Torre | Créditos alcançáveis, curva de dificuldade ajustada |
 | 4 · Online | Contas, save na nuvem, servidor decidindo drops, rankings | Rankings confiáveis |
 | 5 · Mercado | Compra e venda com ouro | Economia estável |
@@ -61,3 +61,16 @@ O código Java antigo não é reaproveitado. Está em `legacy/java`.
 ## Referência de arte
 
 `docs/arte/referencia-capitulo-1.html` guarda o código de desenho da proposta atual, ainda em revisão: herói, capivara, Saúva-Cinza, Queixada Sombria, Tronco-Oco, Cuspidor, Curupira e a cena da Mata. Abra no navegador para ver. As funções de desenho desse arquivo são a base das do jogo.
+
+## Etapa 2: o que entrou e o que ficou diferente do documento
+
+Entrou: as 12 fases do Capítulo 1 com salas em sequência, altar de bênçãos, elites com modificadores, a Caipora (fase 11) e o Curupira em três fases com barra de postura; duas armas; cinco feitiços; dois companheiros; itens com raridade e bônus; inventário; ferreiro com aprimorar e fundir; atributos; teia de talentos; estrelas; livro de drops com azar limitado; redução de XP e ouro em fase fácil; save no navegador.
+
+Decisões tomadas para a fatia vertical, a revisar:
+
+- **Ordem de abertura.** O ferreiro abre na fase 1-2 e os feitiços de Natureza são aprendidos por nível (1, 3, 4, 6 e 7), para o Capítulo 1 já exercitar os sistemas. No jogo completo, parte disso deve vir só depois do Curupira.
+- **Queda.** Cair uma vez recomeça a sala atual com metade da vida; cair de novo encerra a fase. A segunda estrela pede terminar sem cair.
+- **Onça.** É resgatada ao vencer a fase 1-9 sem cair, no lugar da sala secreta.
+- **Golpe próprio da arma** fica no botão direito do mouse (defender ou carregar o tiro). Feitiços em Q, E e R.
+
+Ainda fora: Supremo (invocar o Encantado), níveis de feitiço com tomos, encantar e reforjar no ferreiro, gemas, conjuntos, salas secretas, formas dos companheiros, equipamento mudando a aparência do herói além da arma, controle por toque, Torre e missões diárias.

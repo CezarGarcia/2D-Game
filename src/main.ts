@@ -1,9 +1,16 @@
 import Phaser from 'phaser';
-import { bakeAll } from './art/bake';
+import { BAKE, SHEETS, bakeAll } from './art/bake';
 import { VIEW } from './data/balance';
-import { RoomScene } from './game/RoomScene';
+import { StageScene } from './game/StageScene';
+import { session } from './game/session';
+import { loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
+import { applyOutcome } from './meta/rewards';
+import { mountUi } from './ui/app';
 
-/** Espera a fonte do jogo e gera as texturas antes de abrir a sala. */
+let ready = false;
+let pendingStage: string | null = null;
+
+/** Espera a fonte do jogo e gera as texturas antes de abrir o acampamento. */
 class BootScene extends Phaser.Scene {
   constructor() { super('boot'); }
 
@@ -19,13 +26,40 @@ class BootScene extends Phaser.Scene {
       // um quadro de respiro para o texto de carregamento aparecer antes do trabalho pesado
       this.time.delayedCall(30, () => {
         bakeAll(this);
-        this.scene.start('room');
+        ready = true;
+        if (pendingStage) { const id = pendingStage; pendingStage = null; this.scene.start('stage', { stageId: id }); }
+        else this.scene.start('camp');
       });
     });
   }
 }
 
-new Phaser.Game({
+/** Fundo do acampamento: a clareira com o herói parado, por trás dos menus. */
+class CampScene extends Phaser.Scene {
+  constructor() { super('camp'); }
+
+  create(): void {
+    const inv = 1 / BAKE, p = session.profile;
+    this.add.image(0, 0, 'bg0').setOrigin(0).setScale(inv);
+    const sheet = p?.equipped.arma?.type === 'arco' ? SHEETS.hero_arco : SHEETS.hero;
+    const x = VIEW.w * 0.5, y = VIEW.h * 0.62;
+    this.add.image(x + 4, y + 2, 'shadow').setScale(inv * 0.95);
+    const hero = this.add.sprite(x, y, sheet.key, 'idle0').setOrigin(sheet.ox / sheet.cellW, sheet.oy / sheet.cellH).setScale(inv);
+    this.time.addEvent({ delay: 218, loop: true, callback: () => hero.setFrame('idle' + (Math.floor(this.time.now / 218) % sheet.anims.idle)) });
+    if (p?.companion) {
+      const s = SHEETS[p.companion];
+      this.add.image(x - 66, y + 20, 'shadow').setScale(inv * 0.8);
+      const pet = this.add.sprite(x - 70, y + 18, s.key, 'idle0').setOrigin(s.ox / s.cellW, s.oy / s.cellH).setScale(inv);
+      this.time.addEvent({ delay: 330, loop: true, callback: () => pet.setFrame('idle' + (Math.floor(this.time.now / 330) % s.anims.idle)) });
+    }
+    this.add.image(0, 0, 'canopy').setOrigin(0).setScale(inv);
+    this.add.image(0, 0, 'rays').setOrigin(0).setScale(inv).setBlendMode(Phaser.BlendModes.ADD);
+  }
+}
+
+session.profile = loadProfile();
+
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: VIEW.w,
@@ -33,5 +67,36 @@ new Phaser.Game({
   backgroundColor: '#0a0f0a',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   render: { antialias: true },
-  scene: [BootScene, RoomScene],
+  scene: [BootScene, CampScene, StageScene],
 });
+
+const ui = mountUi(document.getElementById('ui')!, {
+  getProfile: () => session.profile!,
+  save: () => { saveProfile(session.profile!); },
+  startStage: (stageId) => {
+    ui.hide();
+    if (!ready) { pendingStage = stageId; return; }
+    game.scene.stop('camp');
+    game.scene.stop('stage');
+    game.scene.start('stage', { stageId });
+  },
+  resetGame: () => {
+    wipeSave();
+    session.profile = newProfile();
+    saveProfile(session.profile);
+    ui.showCamp('mapa');
+  },
+});
+
+session.onStageEnd = (outcome) => {
+  const rewards = applyOutcome(session.profile!, outcome);
+  saveProfile(session.profile!);
+  game.scene.stop('stage');
+  game.scene.start('camp');
+  ui.showResults(outcome.stageId, rewards);
+};
+
+ui.showCamp('mapa');
+
+// acesso para depuração e testes automatizados
+(window as unknown as { __app?: unknown }).__app = { game, ui, session };
