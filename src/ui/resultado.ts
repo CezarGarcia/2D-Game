@@ -83,7 +83,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     ...r.soldOverflow.map((so, i) => h('div', { class: 'loot sold', style: `animation-delay:${900 + (r.items.length + i) * 130}ms` },
       itemTile(so.item, { size: 68, onClick: () => undefined, tipSpec: () => itemTip(c.p, so.item, { where: 'outro', noSell: true, extra: [{ icon: 'vender', text: 'Mochila cheia: vendido', value: `+${num(so.gold)}`, tone: 'warn' }] }) }),
       h('span', 'loot-sold', ui('ouro', 26)))),
-    ...r.gems.map((g, i) => tip(h('div', { class: 'loot gem', style: `animation-delay:${gemAt + i * 110}ms`, tabindex: 0 }, gemTile(g, 54)), () => gemSpec(c, g))),
+    ...r.gems.map((g, i) => tip(h('div', { class: 'loot gem', style: `animation-delay:${gemAt + i * 110}ms;--gc:${ELEMENTS[g.el].color}`, tabindex: 0 }, gemTile(g, 50)), () => gemSpec(c, g))),
   ];
 
   /* ---------- novidades ---------- */
@@ -185,7 +185,11 @@ function renderFinal(c: Ctx, r: StageRewards): HTMLElement {
   const W = 1240, H = 290, slot = W / PARADE.length;
   const { cv } = hdCanvas(W, H, 'final-cv');
   const born = performance.now() / 1000;
+  let shown = -1;
   const draw = (g: CanvasRenderingContext2D, t: number) => {
+    /* oito figuras grandes: 30 quadros por segundo bastam e poupam a máquina */
+    if (t - shown < 1 / 30) return;
+    shown = t;
     g.clearRect(0, 0, W, H);
     const age = c.still ? 99 : t - born;
     PARADE.forEach((f, i) => {
@@ -202,7 +206,7 @@ function renderFinal(c: Ctx, r: StageRewards): HTMLElement {
     });
   };
   c.animate(cv, draw);
-  const hits = PARADE.map((f, i) => tip(h('span', { class: 'final-hit', style: `left:${20 + i * slot}px;width:${slot}px`, tabindex: 0, 'aria-label': f.name }),
+  const hits = PARADE.map((f, i) => tip(h('span', { class: 'final-hit', style: `left:${i * slot}px;width:${slot}px`, tabindex: 0, 'aria-label': f.name }),
     { title: f.name, color: f.el ? ELEMENTS[f.el].color : '#f2c14e', icon: f.el ? ui(f.el, 36) : ui('heroi', 36), sub: f.el ? ELEMENTS[f.el].name : undefined, subColor: f.el ? ELEMENTS[f.el].color : undefined }));
   const done = (to: Tab | null) => { finaleDone.add(r); if (to) c.go(to); else c.redraw('res-principal'); };
   return h('div', `final${c.still ? ' still' : ''}`,

@@ -16,7 +16,7 @@ const PASSIVE_ICON: Record<CompanionId, string> = {
   vagalume: 'mana', preguica: 'pocao', sucuri: 'cipo', graxaim: 'ouro', coruja: 'magia', jacarezinho: 'elite', tuiuiu: 'recarga', mico: 'sorte',
 };
 
-const PW = 122, PH = 104;
+const PW = 122, PH = 116;
 
 function portrait(c: Ctx, id: CompanionId, owned: boolean): HTMLCanvasElement {
   const { cv } = hdCanvas(PW, PH, 'comp-cv');
@@ -46,13 +46,11 @@ export function renderCompanheiros(c: Ctx): HTMLElement {
       'aria-label': `${def.name}${own ? (active ? ', vai com você' : '') : `, ainda não resgatado: ${def.where}`}`, 'aria-pressed': own ? String(active) : null, 'data-fk': `comp-${id}`,
       onclick: own ? () => { if (setCompanion(c.p, active ? null : id)) c.commit(`comp-${id}`); } : null,
     },
-    h('span', 'comp-pic', portrait(c, id, own), h('span', 'comp-el', ui(def.element, 22)), def.fly && own && h('span', 'comp-fly', ui('agilidade', 18))),
+    h('span', 'comp-pic', portrait(c, id, own), h('span', 'comp-el', ui(def.element, 22)),
+      own && h('span', 'comp-skill', keycap('F'), stat('recarga', `${num(def.cooldown)}s`, { size: 18 }))),
     h('span', 'comp-name', own ? def.name : '???'),
     own
-      ? [
-        h('span', 'comp-row', ui(PASSIVE_ICON[id], 22), h('span', null, def.passive)),
-        h('span', 'comp-skill', keycap('F'), stat('recarga', `${num(def.cooldown)} s`, { size: 20 })),
-      ]
+      ? h('span', 'comp-row', ui(PASSIVE_ICON[id], 24), h('span', null, def.passive))
       : h('span', 'comp-where', ui('gaiola', 22), h('span', null, def.where)),
     active && h('span', 'comp-flag', ui('check', 18)),
     own && fresh.has(id) && h('span', 'new-tag', 'Novo'));
@@ -87,5 +85,5 @@ export function renderCompanheiros(c: Ctx): HTMLElement {
   return h('div', 'companheiros',
     backdrop('companheiros', MAIN_W, MAIN_H, (g) => paintHeroBackdrop(g, MAIN_W, MAIN_H)),
     h('div', { class: 'comp-filter', role: 'group', 'aria-label': `Filtrar por elemento. ${owned} de ${COMPANION_ORDER.length} resgatados` }, chip(null), ELEMENT_ORDER.map((el) => chip(el))),
-    h('div', `comp-list${list.length <= 8 ? ' one-row' : ''}`, cards));
+    h('div', { class: `comp-list${list.length <= 8 ? ' one-row' : ''}`, style: `--cols:${Math.min(8, Math.max(1, list.length))}` }, cards));
 }

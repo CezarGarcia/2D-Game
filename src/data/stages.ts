@@ -59,7 +59,7 @@ export const CHAPTERS: ChapterDef[] = [
   { id: 5, name: 'Selva Profunda', encantado: 'Mapinguari', element: 'terra', available: true, terrain: 'Escuro: você só enxerga perto de si. Muitos inimigos blindados.', story: 'Onde a selva é tão fechada que o sol não entra, pegadas enormes quebram as árvores. O Mapinguari esqueceu que guardava a floresta.' },
   { id: 6, name: 'Pampa de lua cheia', encantado: 'Lobisomem', element: 'sombra', available: true, terrain: 'A lua enche durante cada sala e deixa os monstros mais fortes.', story: 'No pampa, toda noite é de lua cheia. Um homem que virava lobo para proteger o gado agora só sabe uivar.' },
   { id: 7, name: 'Pantanal da Cuca', encantado: 'Cuca', element: 'encanto', available: true, terrain: 'Ilusões: alguns monstros são falsos e somem com um golpe.', story: 'O pantanal virou um caldeirão. A Cuca, que sabia todos os feitiços, mistura tudo sem lembrar para quê.' },
-  { id: 8, name: 'Terra Sem Nome', encantado: 'O Esquecimento', element: null, available: true, terrain: 'Seus feitiços vão sendo apagados enquanto você luta.', story: 'Depois do último rio existe um lugar que ninguém lembra. Foi dali que o cinza veio. Os seis Encantados vão com você.' },
+  { id: 8, name: 'Terra Sem Nome', encantado: 'O Esquecimento', element: null, available: true, terrain: 'Seus feitiços vão sendo apagados enquanto você luta.', story: 'Depois do último rio existe um lugar que ninguém lembra. Foi dali que o cinza veio. Os sete Encantados vão com você.' },
 ];
 
 export interface StageDef {

@@ -146,7 +146,7 @@ function renderGemas(c: Ctx, bg: HTMLElement): HTMLElement {
     }));
   const line = h('div', 'gem-line', g
     ? h('span', { style: `color:${ELEMENTS[g.el].color}` }, gemText(main!))
-    : main ? [ui('seta', 26, 'flip'), h('span', null, 'Escolha uma gema')] : [ui('seta', 26), h('span', null, 'Escolha um item')]);
+    : main ? [h('span', null, 'Escolha uma gema'), ui('seta', 26)] : [ui('seta', 26, 'down'), h('span', null, 'Escolha um item')]);
 
   /* ---------- bolsa de gemas ---------- */
   const cells = bag.map(({ gem, count }) => {
@@ -169,7 +169,7 @@ function renderGemas(c: Ctx, bg: HTMLElement): HTMLElement {
     };
     return h('div', { class: `gem-cell${main ? ' can' : ''}`, style: `--gc:${color}` },
       tip(h('button', { type: 'button', class: 'gem-pick', 'data-fk': `gema-${key}`, 'aria-label': `${gemLabel(gem)}, ${count}`, onclick: put },
-        gemTile(gem, 56), h('b', 'gem-count', `×${count}`)),
+        gemTile(gem, 56), h('b', 'gem-count', `x${count}`)),
       () => ({
         title: gemName(gem), color, tag: `Nv ${gem.lvl}`, icon: gemTile(gem, 36),
         rows: [
@@ -186,7 +186,7 @@ function renderGemas(c: Ctx, bg: HTMLElement): HTMLElement {
       () => ({
         title: 'Fundir 3 gemas', color, icon: gemTile({ el: gem.el, lvl: gem.lvl + 1 }, 36),
         rows: [
-          { node: gemTile(gem, 20), text: `3 × ${gemName(gem)}` },
+          { node: gemTile(gem, 20), text: `3 x ${gemName(gem)}` },
           { icon: 'seta', text: `${gemName({ el: gem.el, lvl: gem.lvl + 1 })} · Nv ${gem.lvl + 1}`, tone: 'ok' },
           { icon: 'ouro', text: 'Custo', value: num(fuseCost), tone: c.p.gold < fuseCost ? 'bad' : undefined },
         ],

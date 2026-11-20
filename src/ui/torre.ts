@@ -15,7 +15,7 @@ import { tip, type TipRow, type TipSpec } from './tip';
 
 const MICO_FLOOR = 50;
 /* centro da torre no fundo pintado e a faixa vertical por onde os medalhões sobem */
-const TX = 598, TOP = 40, BOTTOM = 628;
+const TX = 598, TOP = 66, BOTTOM = 630;
 
 interface Run { start: number; end: number }
 
@@ -31,6 +31,12 @@ function bossName(start: number): string {
 function chapterOf(floor: number) { return CHAPTERS.find((ch) => ch.id === towerChapter(floor)) ?? CHAPTERS[0]; }
 function chapterIcon(floor: number): string { return chapterOf(floor).element ?? 'credito'; }
 function chapterColor(floor: number): string { const el = chapterOf(floor).element; return el ? ELEMENTS[el].color : '#e9e1f2'; }
+/** Primeiro andar de cada capítulo que aparece na subida (uma subida pode passar por dois). */
+function runChapters(run: Run): number[] {
+  const out: number[] = [];
+  for (let f = run.start; f <= run.end; f++) if (!out.some((g) => towerChapter(g) === towerChapter(f))) out.push(f);
+  return out;
+}
 
 /** Semana atual: fora dela o recorde semanal ainda não começou. */
 function week(p: Profile): { best: number; time: number } {
@@ -38,18 +44,18 @@ function week(p: Profile): { best: number; time: number } {
 }
 
 function runTip(p: Profile, run: Run, state: 'done' | 'now' | 'locked'): TipSpec {
-  const ch = chapterOf(run.start), color = chapterColor(run.start), mico = run.start <= MICO_FLOOR && run.end >= MICO_FLOOR;
+  const mico = run.start <= MICO_FLOOR && run.end >= MICO_FLOOR;
   const rows: TipRow[] = [
     { icon: 'xp', text: 'Nível dos monstros', value: `${towerLevel(run.start)}–${towerLevel(run.end)}` },
-    { icon: chapterIcon(run.start), text: `Monstros: ${ch.name}`, color },
+    ...runChapters(run).map((f): TipRow => ({ icon: chapterIcon(f), text: `Monstros: ${chapterOf(f).name}`, value: f === run.start ? null : `${f}º+`, color: chapterColor(f) })),
     { icon: 'caveira', text: `Chefe no ${run.end}º: ${bossName(run.start)}`, tone: 'bad' },
     { icon: 'altar', text: 'Altar depois do 5º andar', tone: 'dim' },
     { head: 'Recompensas' },
     { icon: 'ouro', text: 'Ouro a cada andar' },
     { icon: 'xp', text: 'Experiência a cada andar' },
-    { icon: 'tomo', text: 'Tomo a cada 5 andares', value: '×2' },
-    { icon: 'gema', text: `Gemas no ${run.end}º andar`, value: '×2' },
-    { icon: 'item', text: `Item no ${run.end}º andar`, value: '×1' },
+    { icon: 'tomo', text: 'Tomo a cada 5 andares', value: 'x2' },
+    { icon: 'gema', text: `Gemas no ${run.end}º andar`, value: 'x2' },
+    { icon: 'item', text: `Item no ${run.end}º andar`, value: 'x1' },
     mico && { icon: 'gaiola', text: `Resgate: ${COMPANIONS.mico.name}`, tone: p.companions.mico ? 'dim' : 'gold' },
     'sep',
     state === 'done' ? { icon: 'check', text: 'Vencidos', tone: 'ok' }
@@ -96,7 +102,8 @@ export function renderTorre(c: Ctx): HTMLElement {
       class: `tmedal ${state}${run.end === TOWER_FLOORS ? ' top' : ''}`, tabindex: 0, style: `left:${x}px;top:${y}px;--ec:${chapterColor(run.start)};--prog:${inRun / FLOORS_PER_RUN}`,
       'aria-label': `Andares ${run.start} a ${run.end}${state === 'done' ? ', vencidos' : state === 'now' ? ', próxima subida' : ', trancados'}`,
     },
-    h('span', 'tm-face', state === 'locked' ? ui('cadeado', 24) : h('b', null, run.end)),
+    h('span', 'tm-face', h('b', null, run.end)),
+    state === 'locked' && h('span', 'tm-lock', ui('cadeado', 18)),
     state !== 'locked' && h('span', 'tm-el', ui(chapterIcon(run.start), 20)),
     run.end === TOWER_FLOORS && h('span', 'tm-badge crown', ui('coroa', 26)),
     micoPic),
@@ -125,12 +132,12 @@ export function renderTorre(c: Ctx): HTMLElement {
     tip(h('div', { class: 'tc-head', tabindex: 0 }, h('b', null, `${cur.start}–${cur.end}`)), () => runTip(c.p, cur, 'now')),
     h('div', 'tc-row',
       tip(stat('xp', `Nv ${towerLevel(cur.start)}–${towerLevel(cur.end)}`, { size: 26 }), { title: 'Nível dos monstros', icon: ui('xp', 36), rows: [{ icon: 'poder', text: 'Sobe um pouco a cada andar.', tone: 'dim' }] }),
-      tip(h('span', { class: 'stat', tabindex: 0, style: `color:${chapterColor(cur.start)}` }, ui(chapterIcon(cur.start), 26), h('b', null, chapterOf(cur.start).id)),
-        { title: `Monstros: ${chapterOf(cur.start).name}`, color: chapterColor(cur.start), icon: ui(chapterIcon(cur.start), 36), rows: [{ icon: 'mapa', text: chapterOf(cur.start).terrain }] }),
+      tip(h('span', { class: 'stat', tabindex: 0 }, runChapters(cur).map((f) => ui(chapterIcon(f), 26))),
+        { title: 'Monstros', icon: ui(chapterIcon(cur.start), 36), rows: runChapters(cur).flatMap((f): TipRow[] => [{ icon: chapterIcon(f), text: chapterOf(f).name, value: f === cur.start ? null : `${f}º+`, color: chapterColor(f) }, { icon: 'mapa', text: chapterOf(f).terrain, tone: 'dim' }]) }),
       tip(h('span', { class: 'stat', tabindex: 0 }, ui('caveira', 26), h('b', null, cur.end)), { title: `Chefe: ${bossName(cur.start)}`, color: '#ff7b6b', icon: ui('caveira', 36), rows: [{ text: `No ${cur.end}º andar.`, tone: 'dim' }] })),
     h('div', 'tc-rewards',
       reward('ouro', null, 'Ouro a cada andar'), reward('xp', null, 'Experiência a cada andar'),
-      reward('tomo', '×2', 'Tomo a cada 5 andares'), reward('gema', '×2', `Gemas no ${cur.end}º andar`), reward('item', '×1', `Item no ${cur.end}º andar`),
+      reward('tomo', 'x2', 'Tomo a cada 5 andares'), reward('gema', 'x2', `Gemas no ${cur.end}º andar`), reward('item', 'x1', `Item no ${cur.end}º andar`),
       cur.start <= MICO_FLOOR && cur.end >= MICO_FLOOR && !p.companions.mico && reward('gaiola', null, `Resgate do ${COMPANIONS.mico.name} no andar ${MICO_FLOOR}`)),
     tip(h('button', { type: 'button', class: 'btn primary big climb', 'data-fk': 'subir', onclick: go }, ui('torre', 40), 'Subir'), {
       title: `Subir: andares ${cur.start}–${cur.end}`, color: '#f2c14e',
