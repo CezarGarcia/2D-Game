@@ -5,7 +5,7 @@
  */
 import { MAX_POTIONS, MAX_SPELL_LEVEL, SPELLS, SPELL_ORDER, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import {
-  AFFIXES, ITEM_TYPES, MAX_RARITY, RARITIES, makeItem, rollAffix, sellValue, type Item, type ItemType, type Slot, SLOTS,
+  AFFIXES, GEM_MAX, ITEM_TYPES, MAX_RARITY, RARITIES, canHoldGem, gemKey, makeItem, rollAffix, sellValue, type Gem, type Item, type ItemType, type Slot, SLOTS,
 } from '../data/items';
 import { MAX_LEVEL_CAMPAIGN, xpNeeded } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
@@ -67,11 +67,25 @@ export interface Profile {
   companion: CompanionId | null;
   potions: number;
   stages: Record<string, StageRecord>;
-  /** Baús de estrelas do capítulo já abertos (0 a 3). */
+  /** Baús de estrelas já abertos. */
   starChests: number;
   curupiraFreed: boolean;
+  /** Gemas guardadas, por `elemento:nível`. */
+  gems: Record<string, number>;
+  tower: TowerRecord;
+  /** Já viu o final (venceu o Esquecimento). */
+  credits: boolean;
   nextItemId: number;
   seed: number;
+}
+
+export interface TowerRecord {
+  /** Andar mais alto já vencido. */
+  best: number;
+  /** Próximo andar de partida (sempre 1 + múltiplo de 10). */
+  checkpoint: number;
+  /** Semana (ano-semana) e o melhor andar dela, para o ranking semanal. */
+  week: string; weekBest: number; weekTime: number;
 }
 
 const SAVE_KEY = 'encantados.save.v1';
@@ -87,6 +101,7 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     spellLevels: {}, supremos: [], supremo: null,
     companions: {}, companion: null, potions: MAX_POTIONS,
     stages: {}, starChests: 0, curupiraFreed: false,
+    gems: {}, tower: { best: 0, checkpoint: 1, week: '', weekBest: 0, weekTime: 0 }, credits: false,
     nextItemId: 1, seed,
   };
   const start: [ItemType, string][] = [['facao', 'Facão de Mato'], ['gibao', 'Gibão de Couro'], ['chapeu', 'Chapéu de Couro']];
@@ -112,7 +127,7 @@ export function loadProfile(): Profile {
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
 export function migrate(saved: Profile): Profile {
   const base = newProfile(saved.seed);
-  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials } };
+  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials }, tower: { ...base.tower, ...(saved.tower ?? {}) }, gems: { ...(saved.gems ?? {}) } };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];
   if (!p.supremo && p.supremos.length) p.supremo = p.supremos[0];
@@ -487,4 +502,59 @@ export function setSupremo(p: Profile, el: ElementId | null): boolean {
 
 export function refillPotions(p: Profile): void {
   p.potions = maxPotions(p);
+}
+
+/* ---------- gemas ---------- */
+
+export function gemCount(p: Profile, g: Gem): number { return p.gems[gemKey(g)] ?? 0; }
+export function addGem(p: Profile, g: Gem, n = 1): void { const k = gemKey(g); p.gems[k] = (p.gems[k] ?? 0) + n; if (p.gems[k] <= 0) delete p.gems[k]; }
+/** Gemas guardadas, das mais fortes para as mais fracas. */
+export function gemList(p: Profile): { gem: Gem; count: number }[] {
+  return Object.entries(p.gems).filter(([, n]) => n > 0).map(([k, count]) => { const [el, lvl] = k.split(':'); return { gem: { el: el as ElementId, lvl: Number(lvl) }, count }; })
+    .sort((a, b) => b.gem.lvl - a.gem.lvl || a.gem.el.localeCompare(b.gem.el));
+}
+export const GEM_SOCKET_COST = (lvl: number) => 30 * lvl;
+export const GEM_REMOVE_COST = (lvl: number) => 60 * lvl;
+export const GEM_FUSE_COST = (lvl: number) => 80 * lvl * lvl;
+
+/** Encaixa uma gema guardada no item. A que estava no item volta para a bolsa. */
+export function socketGem(p: Profile, itemId: number, g: Gem): { done: boolean; reason?: string } {
+  const f = findItem(p, itemId);
+  if (!f) return { done: false, reason: 'Item não encontrado.' };
+  if (!canHoldGem(f.item)) return { done: false, reason: 'Anéis, amuletos e aljavas não têm encaixe.' };
+  if (gemCount(p, g) < 1) return { done: false, reason: 'Você não tem essa gema.' };
+  const cost = GEM_SOCKET_COST(g.lvl) + (f.item.gem ? GEM_REMOVE_COST(f.item.gem.lvl) : 0);
+  if (p.gold < cost) return { done: false, reason: 'Falta ouro.' };
+  p.gold -= cost;
+  if (f.item.gem) addGem(p, f.item.gem);
+  addGem(p, g, -1);
+  f.item.gem = { ...g };
+  return { done: true };
+}
+/** Tira a gema do item (custa ouro, a gema não se perde). */
+export function unsocketGem(p: Profile, itemId: number): { done: boolean; reason?: string } {
+  const f = findItem(p, itemId);
+  if (!f || !f.item.gem) return { done: false, reason: 'Sem gema.' };
+  const cost = GEM_REMOVE_COST(f.item.gem.lvl);
+  if (p.gold < cost) return { done: false, reason: 'Falta ouro.' };
+  p.gold -= cost; addGem(p, f.item.gem); delete f.item.gem;
+  return { done: true };
+}
+/** Funde 3 gemas iguais numa do nível seguinte. */
+export function fuseGems(p: Profile, g: Gem): { done: boolean; reason?: string } {
+  if (g.lvl >= GEM_MAX) return { done: false, reason: 'Já está no nível máximo.' };
+  if (gemCount(p, g) < 3) return { done: false, reason: 'Precisa de 3 gemas iguais.' };
+  const cost = GEM_FUSE_COST(g.lvl);
+  if (p.gold < cost) return { done: false, reason: 'Falta ouro.' };
+  p.gold -= cost; addGem(p, g, -3); addGem(p, { el: g.el, lvl: g.lvl + 1 });
+  return { done: true };
+}
+
+/** Semana atual no formato ano-semana, para o ranking semanal da Torre. */
+export function weekKey(d = new Date()): string {
+  const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const day = t.getUTCDay() || 7;
+  t.setUTCDate(t.getUTCDate() + 4 - day);
+  const y = t.getUTCFullYear(), w = Math.ceil(((t.getTime() - Date.UTC(y, 0, 1)) / 86400000 + 1) / 7);
+  return `${y}-${String(w).padStart(2, '0')}`;
 }

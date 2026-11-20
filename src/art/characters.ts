@@ -25,6 +25,108 @@ function ik(ax,ay,bx,by,l1,l2,dir){var dx=bx-ax,dy=by-ay,d=Math.max(.01,Math.min
 function seg2(c,ax,ay,bx,by,l1,l2,dir,r1,r2,c1,c2,o){var k=ik(ax,ay,bx,by,l1,l2,dir);cel(c,function(c){cap(c,ax,ay,k[0],k[1],r1)},c1,o);cel(c,function(c){cap(c,k[0],k[1],bx,by,r2)},c2,o);return k}
 var EYE='#ffe0f0',EYEG='#ff3d8a';
 
+/* ---------------- armas novas do herói (borduna, peixeiras, zagaia, cajado) ---------------- */
+function ez(x){x=x<0?0:x>1?1:x;return x*x*(3-2*x)}
+/* quadros-chave [s, v1, v2…]: interpola suave entre o anterior e o seguinte */
+function keys(K,s){if(s<=K[0][0])return K[0].slice(1);for(var i=1;i<K.length;i++)if(s<=K[i][0]){var A=K[i-1],B=K[i],u=ez((s-A[0])/(B[0]-A[0]));return B.slice(1).map(function(v,j){return A[j+1]+(v-A[j+1])*u})}return K[K.length-1].slice(1)}
+/* rastro do golpe: faixa em arco em volta de (x,y), entre os ângulos a0 e a1 (0 = para cima, como o facão) */
+function smear(c,x,y,a0,a1,r0,r1){if(Math.abs(a1-a0)<.3)return;var p0=a0-Math.PI/2,p1=a1-Math.PI/2,cw=a1>a0;
+  c.beginPath();c.arc(x,y,r1,p0,p1,!cw);c.arc(x,y,r0,p1,p0,cw);c.closePath();c.fillStyle='rgba(255,246,222,.34)';c.fill();
+  c.beginPath();c.arc(x,y,r1-1,p0+(p1-p0)*.25,p1,!cw);c.strokeStyle='rgba(255,252,240,.8)';c.lineWidth=1.3;c.lineCap='round';c.stroke()}
+function hand(c,x,y){cel(c,function(c){el(c,x,y,3.6,3.6)},'#c88a5a',{k:.9,lw:1.8})}
+/* pena: da base (x,y) na direção ang */
+function feather(c,x,y,ang,L,col,tip){c.save();c.translate(x,y);c.rotate(ang);
+  cel(c,function(c){c.moveTo(0,0);c.quadraticCurveTo(L*.4,-L*.24,L,0);c.quadraticCurveTo(L*.4,L*.24,0,0);c.closePath()},col,{k:.6,lw:1.3,inn:function(c){if(tip){c.fillStyle=tip;c.fillRect(L*.66,-L,L,L*2)}ln(c,[.5,0,L*.9,0],'rgba(40,10,10,.5)',.6)}});
+  c.restore()}
+/* borduna: empunhadura em (x,y), cabeça para o lado do ângulo a */
+function borduna(c,x,y,a,t,sg){c.save();c.translate(x,y);c.rotate(a);
+  cel(c,function(c){c.moveTo(-2.1,7);c.lineTo(-2.5,-13);c.quadraticCurveTo(-5.9,-21,-5.5,-30);c.quadraticCurveTo(-4.9,-38.5,0,-39.5);c.quadraticCurveTo(4.9,-38.5,5.5,-30);c.quadraticCurveTo(5.9,-21,2.5,-13);c.lineTo(2.1,7);c.closePath()},'#4a2a1c',{k:1.4,lw:2,sh:'rgba(16,4,8,.45)',hi:'rgba(255,214,170,.2)',inn:function(c){
+    ln(c,[-3.4,-16.4,3.4,-16.4],'#c0392a',1.8);
+    ln(c,[-3.6,-20,3.4,-22.6,-3.8,-25.4,3.6,-28.2,-3.6,-31,3.2,-33.8],'#a87448',1.1);
+    ln(c,[-2.6,-36.2,2.6,-36.2],'#c0392a',1.3);
+    for(var i=0;i<4;i++)ln(c,[-2.4,4.6-i*2.7,2.4,2.4-i*2.7],'#d9b77a',1)}});
+  cel(c,function(c){el(c,0,7.6,3,2.4)},'#2e1a10',{k:.6,lw:1.6});
+  c.restore();
+  /* penas presas no pomo, sempre caindo para baixo */
+  var px=x-Math.sin(a)*7.6,py=y+Math.cos(a)*7.6,sw=Math.sin(t*3.2)*.12+(sg?.25:0);
+  ln(c,[px,py,px+.6,py+2.4],'#3a2014',1.2);
+  feather(c,px+.6,py+2.4,1.2+sw,13,'#e8452c','#2a1a40');feather(c,px+.6,py+2.4,1.85+sw,12,'#ffd23f','#3f7fd0');feather(c,px+.6,py+2.4,1.5+sw,14,'#3f7fd0','#ffd23f')}
+/* peixeira: cabo em (x,y), ponta para o lado do ângulo a */
+function peixeira(c,x,y,a){c.save();c.translate(x,y);c.rotate(a);
+  cel(c,function(c){c.moveTo(-1.7,-2.6);c.lineTo(-1.8,-20);c.quadraticCurveTo(-1.4,-24.5,1.2,-28);c.quadraticCurveTo(2.7,-21,2.3,-15);c.lineTo(2.1,-2.6);c.closePath()},'#e8e6df',{k:.9,lw:1.6,sh:'rgba(50,60,90,.42)',inn:function(c){ln(c,[-.2,-4,-.4,-21],'rgba(110,120,145,.75)',.8)}});
+  cel(c,function(c){poly(c,[-2.7,-3.4,2.9,-3.4,2.9,-.6,-2.7,-.6])},'#d6b25a',{k:0,lw:1.3});
+  cel(c,function(c){cap(c,0,.6,0,8,2.1)},'#7a4a26',{k:.7,lw:1.5,inn:function(c){ln(c,[-2.2,4.2,2.2,4.2],'#3a2014',.8)}});
+  dot(c,0,2.4,.6,'#f2c14e');dot(c,0,6.2,.6,'#f2c14e');
+  c.restore()}
+/* zagaia: mão da frente em (x,y), ponta na direção th (radianos, 0 = para a direita) */
+function zagaia(c,x,y,th,t,mv){c.save();c.translate(x,y);c.rotate(th);
+  cel(c,function(c){cap(c,-31,0,43,0,1.55)},'#a0703e',{k:.6,lw:1.7,inn:function(c){ln(c,[-29,-.7,41,-.7],'rgba(255,224,170,.45)',.6)}});
+  cel(c,function(c){cap(c,-32,0,-29,0,2)},'#3a2014',{k:0,lw:1.4});
+  cel(c,function(c){poly(c,[40.6,-2.1,46,-1.8,46,1.8,40.6,2.1])},'#5f5a52',{k:.4,lw:1.4,inn:function(c){ln(c,[42.6,-2,42.6,2],'#2a2620',.8)}});
+  cel(c,function(c){c.moveTo(45.5,-1.7);c.quadraticCurveTo(50,-4.8,59.5,0);c.quadraticCurveTo(50,4.8,45.5,1.7);c.closePath()},'#cfccc3',{k:.9,lw:1.7,sh:'rgba(50,60,90,.45)',inn:function(c){ln(c,[46.5,.2,57.5,.1],'rgba(80,90,110,.6)',.8);ln(c,[48,-1.6,53,-1.5],'rgba(255,255,255,.7)',.7)}});
+  c.restore();
+  /* fita vermelha atada abaixo da ponta: as pontas voam para trás e caem */
+  var co=Math.cos(th),si=Math.sin(th),tx=x+co*39,ty=y+si*39,f=Math.sin(t*6),g=mv?.35:1;
+  [[11,5.5*g,f*2],[8.5,8*g,-f*1.6]].forEach(function(q){var ex=tx-co*q[0]+q[2]*.3,ey=ty-si*q[0]+q[1]+q[2],mx=tx-co*q[0]*.5-si*2*q[2]*.3,my=ty-si*q[0]*.5+q[1]*.3-co*q[2];
+    c.beginPath();c.moveTo(tx,ty);c.quadraticCurveTo(mx,my,ex,ey);c.lineCap='round';c.strokeStyle='#22100a';c.lineWidth=3.6;c.stroke();c.strokeStyle='#cf3b28';c.lineWidth=1.9;c.stroke()});
+  cel(c,function(c){el(c,tx,ty,2,2)},'#e04a32',{k:.4,lw:1.3})}
+/* cajado: mão em (x,y), alto do cajado para o lado do ângulo a; g = brilho da pedra (0 a 1) */
+function cajado(c,x,y,a,t,g){c.save();c.translate(x,y);c.rotate(a);
+  function shaft(c){c.moveTo(.6,40);c.quadraticCurveTo(2.2,26,.2,14);c.quadraticCurveTo(-1.6,2,.4,-12);c.quadraticCurveTo(2,-26,-.6,-38);c.quadraticCurveTo(-1.6,-44,0,-49)}
+  c.beginPath();shaft(c);c.lineCap='round';c.lineJoin='round';c.strokeStyle=OUT;c.lineWidth=6;c.stroke();c.strokeStyle='#7e4e2a';c.lineWidth=3.8;c.stroke();
+  c.save();c.translate(-.8,0);c.beginPath();shaft(c);c.strokeStyle='rgba(255,214,160,.4)';c.lineWidth=.8;c.stroke();c.restore();
+  [[1.4,26],[-.8,4],[1.2,-22]].forEach(function(q){dot(c,q[0]+.9,q[1],1,'#5a3218')});
+  /* garra de madeira segurando a pedra */
+  [[-1,'M'],[1,'M']].forEach(function(q){var d=q[0];c.beginPath();c.moveTo(0,-48);c.quadraticCurveTo(d*8,-53,d*5.4,-63.5);c.strokeStyle=OUT;c.lineWidth=4.6;c.stroke();c.strokeStyle='#7e4e2a';c.lineWidth=2.5;c.stroke()});
+  /* pedra */
+  var sx=0,sy=-57.5;
+  if(g>0){var R=8+g*5,gr=c.createRadialGradient(sx,sy,1,sx,sy,R);gr.addColorStop(0,'rgba(255,246,190,'+Math.min(1,.35+g*.6)+')');gr.addColorStop(1,'rgba(255,236,150,0)');c.fillStyle=gr;c.beginPath();c.arc(sx,sy,R,0,TAU);c.fill()}
+  cel(c,function(c){poly(c,[sx,sy-6.6,sx+5,sy-1.6,sx+3.6,sy+4.4,sx-3.6,sy+4.4,sx-5,sy-1.6])},g>.5?'#fffbe6':'#f6e7a0',{k:.9,lw:1.6,sh:'rgba(150,110,20,.35)',hi:'rgba(255,255,255,.55)',inn:function(c){ln(c,[sx-5,sy-1.6,sx,sy+.4,sx+5,sy-1.6],'rgba(170,130,40,.45)',.8);ln(c,[sx,sy+.4,sx,sy+4.4],'rgba(170,130,40,.45)',.8)}});
+  if(g>.55){c.save();c.globalAlpha=Math.min(1,(g-.55)/.35);for(var i=0;i<8;i++){var an=i*.785+.2,r0=7.4,r1=i%2?9.6:11.6;ln(c,[sx+Math.cos(an)*r0,sy+Math.sin(an)*r0,sx+Math.cos(an)*r1,sy+Math.sin(an)*r1],'#fff6c8',1.3)}c.restore()}
+  /* amarração */
+  ln(c,[-2.6,-45.4,2.6,-46.8],'#d9b77a',1.2);ln(c,[-2.6,-43.4,2.6,-44.8],'#d9b77a',1.2);
+  c.restore();
+  /* cabaça e penas penduradas na amarração (sempre caem para baixo) */
+  var hx=x+Math.sin(a)*46+Math.cos(a)*2.8,hy=y-Math.cos(a)*46+Math.sin(a)*2.8,sw=Math.sin(t*2.6)*.6;
+  feather(c,hx,hy,2.15+sw*.1,11,'#e8452c','#2a1a40');feather(c,hx,hy,.95+sw*.1,10,'#3f8fc0','#ffd23f');
+  ln(c,[hx,hy,hx-1.4+sw,hy+3.6],'#3a2014',1.1);
+  var gx=hx-1.4+sw,gy=hy+3.6;
+  cel(c,function(c){el(c,gx,gy+1.8,2.3,2.4);el(c,gx+.2,gy+7.4,4.4,4.6)},'#c9963f',{k:.9,lw:1.6,inn:function(c){ln(c,[gx-4.2,gy+7,gx+4.6,gy+7],'#6b3a1e',1.1);ln(c,[gx-3.4,gy+9,gx+3.8,gy+9],'#6b3a1e',.8,[1,1.2]);dot(c,gx-1.6,gy+5.6,.8,'#fff0c0')}});
+  cel(c,function(c){el(c,gx,gy-.2,1.1,.8)},'#5a3218',{k:0,lw:1.1})}
+
+/* poses: devolve a mão de trás (bx,by), o que vai atrás do corpo e o que vai na frente */
+function heroArms(W,t,sw,b){var sg=sw!=null,s=sg?sw:0,id=Math.sin(t*2.4),R={};
+  function near(c,x,y){seg2(c,-8,-47+b,x,y,9,9,1,3.9,3.4,'#96562b','#c88a5a',{k:1.3,lw:2});hand(c,x,y)}
+  if(W==='borduna'){
+    var K=[[0,-.8,-3,-52],[1/6,-1.25,-8,-58],[2/6,-1.45,-10,-60],[3/6,.35,9,-53],[4/6,2,16,-37],[5/6,2.15,17,-35],[1,1.9,15,-38]];
+    var v=sg?keys(K,s):[.62+id*.04,10,-35],pa=sg?keys(K,s-.14)[0]:v[0],a=v[0],x=v[1],y=v[2]+b,fx=x+Math.sin(a)*6,fy=y-Math.cos(a)*6,bh=a<-.5;
+    R.bx=fx;R.by=fy;
+    R.back=function(c){if(bh){borduna(c,x,y,a,t,sg)}hand(c,fx,fy)};
+    R.front=function(c){if(!bh){if(sg)smear(c,x,y,pa,a,25,40);borduna(c,x,y,a,t,sg)}near(c,x,y)};
+  }else if(W==='peixeiras'){
+    var KN=[[0,-1.2,-4,-50],[1/6,1.1,14,-42],[2/6,2.4,15,-33],[3/6,2.5,13,-32],[4/6,2.45,11,-33],[5/6,2.4,10,-34],[1,2.1,10,-35]];
+    var KF=[[0,1.6,15,-40],[1/6,2.3,13,-36],[2/6,2.8,12,-33],[3/6,1.3,20,-41],[4/6,-.2,23,-48],[5/6,-.4,22,-49],[1,.3,19,-44]];
+    var n=sg?keys(KN,s):[.75+id*.04,9,-33],f=sg?keys(KF,s):[1.25+id*.04,17,-38],pn=sg?keys(KN,s-.12)[0]:n[0],pf=sg?keys(KF,s-.12)[0]:f[0];
+    R.bx=f[1];R.by=f[2]+b;
+    R.back=function(c){if(sg)smear(c,f[1],f[2]+b,pf,f[0],15,27);peixeira(c,f[1],f[2]+b,f[0]);hand(c,f[1],f[2]+b)};
+    R.front=function(c){if(sg)smear(c,n[1],n[2]+b,pn,n[0],15,27);peixeira(c,n[1],n[2]+b,n[0]);near(c,n[1],n[2]+b)};
+  }else if(W==='zagaia'){
+    var KZ=[[0,-.5,13,-47],[1/6,-.08,10,-45],[2/6,-.05,8,-45],[3/6,.02,21,-44],[4/6,.04,25,-44],[5/6,.04,25,-44],[1,0,21,-44]];
+    var z=sg?keys(KZ,s):[-1.05+id*.03,14,-50],th=z[0],X=z[1],Y=z[2]+b,nx=X-Math.cos(th)*13,ny=Y-Math.sin(th)*13,thr=sg&&s>.4&&s<.75;
+    R.bx=X;R.by=Y;
+    R.back=function(c){hand(c,X,Y)};
+    R.front=function(c){
+      if(thr)[[-3.5,30],[0,38],[3.5,30]].forEach(function(q){ln(c,[X+18,Y+q[0]-2,X+18+q[1],Y+q[0]-2],'rgba(255,248,226,.6)',1.2)});
+      zagaia(c,X,Y,th,t,thr);near(c,nx,ny)};
+  }else{
+    var KC=[[0,.16,12,-40,0],[1/6,.12,16,-47,.08],[2/6,.6,13,-46,.3],[3/6,1.12,12,-45,.75],[4/6,1.18,12,-45,1],[5/6,1.18,12,-45,1],[1,1.12,12,-44,.85]];
+    var k=sg?keys(KC,s):[.22+id*.03,13,-37,.22+.12*Math.sin(t*3.1)],ca=k[0],cx=k[1],cy=k[2]+b;
+    R.bx=sg&&s>.3?20:18;R.by=(sg&&s>.3?-44:-39)+b;
+    R.back=function(c){hand(c,R.bx,R.by)};
+    R.front=function(c){cajado(c,cx,cy,ca,t,k[3]);near(c,cx,cy)};
+  }
+  return R}
+
 /* ---------------- herói ---------------- */
 function drawHero(c,t,o){o=o||{};var mv=o.walk!=null,w=o.walk||0,st=mv?Math.sin(w):0,co=mv?Math.cos(w):0,b=(mv?Math.abs(co)*1.3:0)+Math.sin(t*2.4)*.7,sw=o.swing,i;
   var SK='#c88a5a',LE='#96562b',LE2='#7a4424',PA='#b9945e',RED='#cf3b28',GOLD='#f2c14e',DK='#3a2014',HAIR='#2b1710';
@@ -32,6 +134,9 @@ function drawHero(c,t,o){o=o||{};var mv=o.walk!=null,w=o.walk||0,st=mv?Math.sin(
   /* arco: o.swing passa a ser puxar (até 0,5), segurar e soltar a corda */
   var bow=o.weapon==='arco',bsg=bow&&sw!=null,pl=0,tw=0,br=.1+Math.sin(t*2.4)*.03;
   if(bsg){hx2=21.5;hy2=-44.5+b;br=-.05;pl=sw<.5?(1-Math.cos(sw*TAU))/2:sw<.58?1:0;tw=sw<.58?0:Math.sin((sw-.58)*55)*Math.exp(-(sw-.58)*9)*1.6}
+  /* armas novas: borduna, peixeiras, zagaia e cajado (sem escudo) */
+  var NW=o.weapon==='borduna'||o.weapon==='peixeiras'||o.weapon==='zagaia'||o.weapon==='cajado'?heroArms(o.weapon,t,sw,b):null;
+  if(NW){hx2=NW.bx;hy2=NW.by}
   /* manta enrolada nas costas */
   cel(c,function(c){cap(c,-13,-49+b,-13,-33+b,5.2)},'#3f7f8c',{k:1.6,lw:2,inn:function(c){[-47,-42,-37,-32].forEach(function(y){ln(c,[-19,y+b,-7,y+b],'#f0d9a0',1.3)})}});
   /* pontas do lenço */
@@ -45,6 +150,7 @@ function drawHero(c,t,o){o=o||{};var mv=o.walk!=null,w=o.walk||0,st=mv?Math.sin(
     c.restore()}
   /* braço de trás */
   seg2(c,9,-47+b,hx2,hy2,8,8,1,3.6,3.2,LE2,SK,{k:1.2,lw:2});
+  if(NW)NW.back(c);
   /* pernas */
   function leg(hx,f,dark){var kn=ik(hx,-25+b,f[0],f[1]-4,11.5,11.5,-1);
     cel(c,function(c){cap(c,hx,-25+b,kn[0],kn[1],4.5)},dark?'#9a7a4c':PA,{k:1.4,lw:2});
@@ -80,6 +186,7 @@ function drawHero(c,t,o){o=o||{};var mv=o.walk!=null,w=o.walk||0,st=mv?Math.sin(
   [[-9,ty-5.6],[13,ty-5.6]].forEach(function(q){dot(c,q[0],q[1],2.2,GOLD);c.strokeStyle=OUT;c.lineWidth=.8;c.beginPath();c.arc(q[0],q[1],2.2,0,TAU);c.stroke();dot(c,q[0]-.6,q[1]-.6,.7,'#fff3c4')});
   [[-15,ty-1.9],[-3.7,ty-7.8],[7.7,ty-7.8],[19,ty-1.9]].forEach(function(q){dot(c,q[0],q[1],1,GOLD)});
   c.beginPath();c.moveTo(-7,hy-8);c.quadraticCurveTo(-3,hy+13,4.5,hy+12.4);c.strokeStyle=DK;c.lineWidth=1;c.stroke();
+  if(NW){NW.front(c);return}
   if(bow){
     /* arco na mão que vai à frente; a outra puxa a corda */
     var tx=-4-pl*2.2,tyy=17-pl*1.6,sx=tx-pl*12.5+tw,nhx=7,nhy=-32.5+b;

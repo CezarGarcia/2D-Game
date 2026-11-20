@@ -38,7 +38,7 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     let target: Enemy | null = null, best = Infinity;
     for (const e of w.enemies) { if (e.hidden || e.fake || e.state === 'spawn') continue; const d = Math.hypot(e.x - p.x, e.y - p.y) - (e.kind === 'caramujo' ? 200 : 0); if (d < best) { best = d; target = e; } }
     if (!target) {
-      const hid = w.enemies.find((e) => e.hidden && e.kind !== 'boto' && e.kind !== 'iara');
+      const hid = w.enemies.find((e) => e.hidden && !['boto', 'iara', 'pisadeira', 'corposeco', 'saci'].includes(e.kind));
       return hid ? { ...idleAt(w), mx: Math.sign(hid.x - p.x), my: Math.sign(hid.y - p.y) } : { ...idleAt(w), mx: Math.sin(w.time * 3), my: Math.cos(w.time * 3) };
     }
     /* perigo: marcas prestes a estourar em cima do herói, que o jogador percebeu a tempo */
@@ -52,7 +52,7 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     for (const pr of w.projectiles) check(`p${pr.id}`, pr.tele);
     for (const h of w.hazards) check(`h${h.id}`, h.tele);
     for (const e of w.enemies) if ((e.state === 'charge' || e.state === 'dash' || e.state === 'leap') && Math.hypot(e.x - p.x, e.y - p.y) < 150 && aware(w, `c${e.id}${e.state}${e.count}${e.step}`)) danger = true;
-    for (const pr of w.projectiles) if ((pr.kind === 'ethorn' || pr.kind === 'sting' || pr.kind === 'stampede') && Math.hypot(pr.x - p.x, pr.y - p.y) < 90 && aware(w, `s${pr.id}`)) danger = true;
+    for (const pr of w.projectiles) if ((pr.kind === 'ethorn' || pr.kind === 'sting' || pr.kind === 'stampede' || pr.kind === 'eproj' || pr.kind === 'spin') && Math.hypot(pr.x - p.x, pr.y - p.y) < 90 && aware(w, `s${pr.id}`)) danger = true;
 
     const dx = target.x - p.x, dy = target.y - p.y, d = Math.hypot(dx, dy) || 1;
     const bow = w.stats.weapon === 'arco', want = bow ? 300 : target.radius + 70, close = d < want;
@@ -62,14 +62,14 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     /* parede d'água: corre para a passagem */
     const wall = w.projectiles.find((pr) => pr.kind === 'wall' && !pr.hit.includes(-1) && aware(w, `w${pr.id}`));
     if (wall && Math.abs(p.y - wall.sx) > wall.sy - 26) { mx = 0; my = Math.sign(wall.sx - p.y); if (Math.abs(wall.x - p.x) < 70) danger = true; }
-    const zone = w.zones.find((z) => (z.kind === 'whirl' || z.kind === 'cloud') && Math.hypot(p.x - z.x, p.y - z.y) < z.r + 30);
+    const zone = w.zones.find((z) => (z.kind === 'whirl' || z.kind === 'cloud' || (z.hostile && (z.kind === 'fire' || z.kind === 'curse' || z.kind === 'void'))) && Math.hypot(p.x - z.x, p.y - z.y) < z.r + 30);
     if (zone && !av) { const ax = p.x - zone.x, ay = p.y - zone.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; }
     const singer = w.enemies.find((e) => e.state === 'sing');
     if (singer) { const ax = p.x - singer.x, ay = p.y - singer.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; }
     return {
       mx, my, aimX: target.x, aimY: target.y,
       attackPressed: false, attackHeld: bow ? d < 600 : close, altHeld: false, dodgePressed: danger,
-      spell: [!close || bow, d < 400, d < 400], petPressed: true, potionPressed: p.hp < w.stats.maxHp * 0.4, supremoPressed: w.enemies.length >= 3 || !!w.enemies.find((e) => e.kind === 'boto' || e.kind === 'iara' || e.kind === 'curupira' || e.kind === 'caipora'),
+      spell: [!close || bow, d < 400, d < 400], petPressed: true, potionPressed: p.hp < w.stats.maxHp * 0.4, supremoPressed: w.enemies.length >= 3 || w.enemies.some((e) => e.elite),
     };
   };
 }

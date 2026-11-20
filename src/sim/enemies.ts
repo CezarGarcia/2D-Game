@@ -3,6 +3,10 @@ import { ENEMY, MOD, PLAYER } from '../data/balance';
 import { SPELL_NUM } from '../data/content';
 import { updateCurupira } from './boss';
 import { CH2_START, updateChapter2 } from './enemies2';
+import { archetypeStart, updateArchetype } from './archetypes';
+import { updateBoss } from './bosses';
+import { tickStatuses, wander } from './status';
+import { isBossKind, isMonster } from '../data/balance';
 import { clampArena, damageEnemy, emit, hurtPet, hurtPlayer, max0, rand, rayExit, setState, spawnEnemy, spellScale, strike, targetOf } from './core';
 import type { Enemy, World } from './types';
 
@@ -48,29 +52,37 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       if (e.hp <= 0) return;
     }
   }
+  if (tickStatuses(w, e, dt)) return;
   if (e.mods.includes('regenerador') && e.hp > 0 && e.sinceHit > MOD.regenerador.after && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * MOD.regenerador.perSecond * dt);
 
   if (e.state === 'spawn') {
     if (e.stateT >= ENEMY.spawnTime) {
       if (e.kind === 'urutau') { e.hidden = true; setState(e, 'perched'); }
       else if (e.kind === 'arraia') { e.hidden = true; setState(e, 'buried'); }
+      else if (isMonster(e.kind)) setState(e, archetypeStart(e));
+      else if (isBossKind(e.kind)) setState(e, 'idle');
       else if (CH2_START[e.kind]) setState(e, CH2_START[e.kind]!);
       else setState(e, e.kind === 'cuspidor' || e.kind === 'curupira' ? 'idle' : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : 'chase');
     }
     return;
   }
   if (e.kind === 'curupira') { updateCurupira(w, e, dt); return; }
+  if (isBossKind(e.kind)) { if (e.sleepT > 0) return; updateBoss(w, e, dt); return; }
+  if (e.sleepT > 0) { e.tele = null; return; }
   if (w.current && !e.hidden && e.kind !== 'cuspidor' && e.kind !== 'jacare' && e.kind !== 'caramujo' && e.kind !== 'boto' && e.kind !== 'iara') e.x += w.current * 0.6 * dt;
 
   /* atordoado (aparada) ou preso (Cipó-Laço): não age */
   if (e.stunT > 0 || e.rootT > 0) {
     e.stunT = max0(e.stunT - dt); e.rootT = max0(e.rootT - dt);
     e.tele = null;
-    if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'spit' || e.state === 'sting' || e.state === 'tail' || e.state === 'hop') setState(e, CH2_START[e.kind] && e.kind !== 'arraia' ? CH2_START[e.kind]! : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : e.kind === 'cuspidor' ? 'idle' : e.kind === 'urutau' ? 'hover' : 'chase');
+    if (isMonster(e.kind)) { if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'cast' || e.state === 'dash' || e.state === 'charge') setState(e, e.state === 'dash' || e.state === 'aim' && !e.tele ? 'recover' : e.hidden ? 'buried' : (archetypeStart(e) === 'buried' ? 'recover' : archetypeStart(e))); }
+    else if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'spit' || e.state === 'sting' || e.state === 'tail' || e.state === 'hop') setState(e, CH2_START[e.kind] && e.kind !== 'arraia' ? CH2_START[e.kind]! : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : e.kind === 'cuspidor' ? 'idle' : e.kind === 'urutau' ? 'hover' : 'chase');
     clampArena(w, e, e.radius);
     return;
   }
 
+  if (wander(w, e, dt, 110 * e.speedMult)) { clampArena(w, e, e.radius); return; }
+  if (isMonster(e.kind)) { updateArchetype(w, e, dt); return; }
   const T = targetOf(w, e);
   const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
   const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1), wm = e.windupMult;

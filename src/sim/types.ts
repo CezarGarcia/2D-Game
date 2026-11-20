@@ -61,6 +61,25 @@ export interface Player {
   inPuddle: boolean;
   /** Dano da Correnteza enquanto o herói desliza (0 = esquiva comum). */
   surf: number;
+  /** Tipo do deslize em andamento: esquiva, Correnteza ou Pé-de-Vento. */
+  surfKind: 'dodge' | 'correnteza' | 'pedevento';
+  /** Próximo golpe de arma é crítico (peixeiras depois da esquiva perfeita, Passo nas Sombras). */
+  critNext: boolean;
+  /** Pele de Pedra, forma de lobo (Supremo da Sombra), chamas em órbita. */
+  stoneT: number; wolfT: number; orbT: number; orbHit: Record<number, number>; orbPower: number;
+  /** Último elemento usado num feitiço (o cajado dispara com ele). */
+  lastElement: ElementId;
+  /** Efeitos de estado no herói, vindos dos monstros. */
+  burnT: number; burnTick: number; poisonT: number; poisonTick: number; curseT: number; crackT: number; confuseT: number; wetT: number; sleepT: number;
+  /** Feitiços apagados (segundos; Infinity até o fim da sala) e o roubado pelo Saci. */
+  erased: [number, number, number];
+  stolen: number;
+  /** Sonho da Cuca: os botões dos feitiços trocam de lugar. */
+  dreamT: number; spellMap: [number, number, number];
+  /** Agarrado (Corpo-Seco, Capelobo): não age. */
+  heldT: number;
+  /** Golpes desde o último tremor (conjunto do Seringueiro) e tempo de luta (conjunto da Lua). */
+  hitCount: number; fightT: number; frenzyT: number;
 }
 
 export type EnemyState =
@@ -85,6 +104,19 @@ export interface Enemy {
   wetT: number; markT: number; bubbleT: number;
   /** Protegido por um Caramujo-Concha próximo (recalculado a cada passo). */
   guarded: boolean;
+  /** Efeitos de elemento e de controle (segundos). */
+  chargeT: number; burnT: number; burnTick: number; crackT: number; curseT: number; curseBonus: number; confuseT: number;
+  sleepT: number; charmT: number; blindT: number; frogT: number; fearT: number; silenceT: number;
+  /** Virou pedra (reação Estátua): o próximo golpe causa o dobro. */
+  stone: boolean;
+  /** Fogo-fátuo da reação: ao cair, a maldição pula para o vizinho. */
+  wisp: boolean;
+  /** Ilusão do Pantanal: some com um golpe e não conta para limpar a sala. */
+  illusion: boolean;
+  /** Golpes recebidos (o Saci devolve o feitiço depois de alguns). */
+  hits: number;
+  /** Memória de curto prazo dos chefes (valores por nome). */
+  mem: Record<string, number>;
   walk: number; moving: boolean;
   /** Tempo restante atacando o companheiro em vez do herói. */
   aggroPet: number;
@@ -97,7 +129,9 @@ export interface Enemy {
   ax: number; ay: number;
 }
 
-export type ProjectileKind = 'thorn' | 'arrow' | 'cipo' | 'seed' | 'ethorn' | 'stampede' | 'jet' | 'bubble' | 'sting' | 'glob' | 'wall';
+export type ProjectileKind = 'thorn' | 'arrow' | 'cipo' | 'seed' | 'ethorn' | 'stampede' | 'jet' | 'bubble' | 'sting' | 'glob' | 'wall'
+  /** Projéteis de feitiço genéricos (o feitiço em `spell`) e disparos de monstros e chefes (`tex`). */
+  | 'spell' | 'staff' | 'eproj' | 'elob' | 'spin';
 
 export interface Projectile {
   id: number; kind: ProjectileKind;
@@ -107,12 +141,22 @@ export interface Projectile {
   sx: number; sy: number; tx: number; ty: number; t: number; dur: number;
   tele: Telegraph | null;
   owner: number;
+  /** Feitiço que criou (spell), elemento (staff, eproj), textura para desenhar. */
+  spell?: SpellId;
+  element?: ElementId | null;
+  tex?: string;
+  /** Saltos restantes (Faísca). */
+  jumps?: number;
 }
 
 /** Golpe com atraso marcado no chão que não pertence a um inimigo vivo. */
 export interface Hazard {
   id: number;
-  kind: 'blast' | 'roots' | 'lane' | 'burst' | 'jet' | 'dive';
+  kind: 'blast' | 'roots' | 'lane' | 'burst' | 'jet' | 'dive' | 'bolt' | 'fire' | 'shadow' | 'quake' | 'sleep' | 'spell';
+  /** Elemento aplicado ao herói (golpes de inimigo) ou aos inimigos (golpes do herói, kind 'spell'). */
+  element?: ElementId | null;
+  /** Efeito extra quando estoura. */
+  extra?: { stun?: number; sleep?: number; erase?: boolean; spell?: SpellId };
   tele: Telegraph;
   damage: number;
   slow: number;
@@ -121,7 +165,12 @@ export interface Hazard {
 /** Efeito que fica no chão por um tempo. */
 export interface Zone {
   id: number;
-  kind: 'sementes' | 'broto' | 'cloud' | 'chuva' | 'puddle' | 'whirl' | 'pop';
+  kind: 'sementes' | 'broto' | 'cloud' | 'chuva' | 'puddle' | 'whirl' | 'pop'
+    | 'fire' | 'curse' | 'void' | 'redemoinho' | 'coivara' | 'vapor' | 'dust' | 'trovao' | 'explosao' | 'borbulhante' | 'tornado' | 'firelane';
+  /** Linha (Coivara): ponto final. */
+  x2?: number; y2?: number;
+  /** Quem criou: o herói (fere inimigos) ou um inimigo (fere o herói). */
+  hostile?: boolean;
   x: number; y: number; r: number; t: number; dur: number; tick: number; power: number;
 }
 
@@ -137,13 +186,28 @@ export interface Companion {
   sx: number; sy: number;
 }
 
+/** Aliados temporários: lobos da Matilha, cópia do Espelho, Estaca, Nuvem Carregada. */
+export interface Ally {
+  id: number; kind: 'wolf' | 'decoy' | 'turret' | 'cloud';
+  x: number; y: number; hp: number; maxHp: number; t: number; dur: number; cd: number;
+  facing: 1 | -1; target: number; walk: number; moving: boolean; power: number;
+}
+
+/** Redemoinho de poeira do Sertão: anda pela sala e arremessa quem pega. */
+export interface Devil { id: number; x: number; y: number; vx: number; vy: number; r: number; t: number; dur: number }
+/** Touceira de capim (Cerrado): pega fogo, queima por um tempo e espalha. */
+export interface Grass { x: number; y: number; r: number; burnT: number; burnt: boolean }
+/** Bloco da Muralha. */
+export interface WallBlock { x: number; y: number; r: number; t: number }
+
 export type SimEventType =
   | 'swing' | 'hit' | 'kill' | 'hurt' | 'death' | 'revive' | 'dodge' | 'perfect' | 'parry' | 'block' | 'cast' | 'shoot' | 'spawn' | 'wave'
   | 'roomClear' | 'roomStart' | 'altar' | 'blessing' | 'win' | 'lose'
   | 'bite' | 'charge' | 'crash' | 'spit' | 'splat' | 'slam' | 'telegraph' | 'reveal' | 'explode' | 'hazard'
   | 'sementes' | 'cipo' | 'heal' | 'potion' | 'pet' | 'petHurt' | 'petDown' | 'taunt'
   | 'phase' | 'vanish' | 'appear' | 'footprints' | 'whistle' | 'cloneBurst' | 'downed' | 'call' | 'jabuti' | 'shrink' | 'enrage' | 'stack'
-  | 'supremo' | 'brotar' | 'nova' | 'shield' | 'mark' | 'bubble' | 'splash' | 'dive' | 'sing' | 'wave' | 'onda' | 'correnteza' | 'pop' | 'freecast';
+  | 'supremo' | 'brotar' | 'nova' | 'shield' | 'mark' | 'bubble' | 'splash' | 'dive' | 'sing' | 'wave' | 'onda' | 'correnteza' | 'pop' | 'freecast'
+  | 'reaction' | 'spark' | 'status' | 'zap' | 'blink' | 'erase' | 'restore' | 'steal' | 'dream' | 'help' | 'grab' | 'ignite' | 'moon' | 'transform' | 'petAct' | 'heavy' | 'thrust' | 'devil' | 'roar' | 'miss';
 
 export interface SimEvent {
   type: SimEventType;
@@ -197,4 +261,18 @@ export interface World {
   supremo: ElementId | null;
   /** O chão está alagado (fase final da Iara): todos ficam Molhados e o herói anda mais devagar. */
   flooded: boolean;
+  allies: Ally[];
+  devils: Devil[];
+  grass: Grass[];
+  walls: WallBlock[];
+  /** Lua da sala (Pampa), de 0 a 1. */
+  moon: number;
+  /** Tempo até o próximo feitiço apagado (Terra Sem Nome). */
+  eraseT: number;
+  /** Rastro da cabeça do Boitatá: o corpo segue por ele. */
+  trail: { x: number; y: number }[];
+  /** Itens afanados pelo graxaim nesta fase. */
+  steals: number;
+  /** Nível dos monstros da sala atual (a Torre muda a cada andar). */
+  level: number;
 }

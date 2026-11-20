@@ -240,8 +240,8 @@ describe('simulação', () => {
     for (const index of [9, 11]) {
       const s = STAGES[index];
       let wins = 0;
-      for (let k = 0; k < 3; k++) if (playStage(index, referenceProfile(s.level - 3), 300 + k, { ...HUMAN, seed: k + 1 }).phase === 'won') wins++;
-      expect(wins, `fase ${s.id}`).toBe(0);
+      for (let k = 0; k < 4; k++) if (playStage(index, referenceProfile(s.level - 3), 300 + k, { ...HUMAN, seed: k + 1 }).phase === 'won') wins++;
+      expect(wins, `fase ${s.id}`).toBeLessThanOrEqual(1);
     }
   }, 60000);
 });

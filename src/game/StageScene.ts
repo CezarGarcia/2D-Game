@@ -4,7 +4,7 @@
  */
 import Phaser from 'phaser';
 import { BAKE, SHEETS, type Sheet } from '../art/bake';
-import { ARENA, ENEMY, PLAYER, TICK, VIEW } from '../data/balance';
+import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase } from '../data/balance';
 import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, SUPREMOS, blessingCounts, type BlessingId } from '../data/content';
 import { ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { deriveStats } from '../meta/stats';
@@ -642,7 +642,7 @@ export class StageScene extends Phaser.Scene {
       }
       const spr = v.spr;
       if (v.sheet !== po.sheet.key) { spr.setTexture(po.sheet.key, po.frame).setOrigin(po.sheet.ox / po.sheet.cellW, po.sheet.oy / po.sheet.cellH); v.sheet = po.sheet.key; }
-      const base = ENEMY[e.kind].radius, big = e.radius / base;
+      const base = enemyBase(e.kind).radius, big = e.radius / base;
       const spawn = e.state === 'spawn' ? e.stateT / ENEMY.spawnTime : 1, grow = 0.6 + 0.4 * spawn;
       spr.setFrame(po.frame).setPosition(e.x + po.ox, e.y + po.oy - po.lift).setDepth(e.y)
         .setScale(INV * po.sx * e.facing * grow * big, INV * po.sy * grow * big).setAlpha(po.alpha * spawn).setRotation(po.rot * e.facing);

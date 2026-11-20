@@ -10,6 +10,8 @@ import type { HeroStats } from '../meta/stats';
 import { clampArena, emit, healPlayer, max0, rand, spawnEnemy, wet } from './core';
 import { separate, updateEnemy } from './enemies';
 import { makePet, updateHazards, updatePet, updatePlayer, updateProjectiles, updateZones } from './player';
+import { updateAllies } from './spells';
+import { startTerrain, updateTerrain } from './terrain';
 import type { Input, Player, StageConfig, World } from './types';
 
 export * from './types';
@@ -28,6 +30,9 @@ function newPlayer(stats: HeroStats): Player {
     stacks: 0, stackT: 0, jabutiUsed: false,
     potions: stats.potions, potionCd: 0,
     shield: stats.firstHitShield, novaT: 0, supremo: 0, inPuddle: false, surf: 0,
+    surfKind: 'dodge', critNext: false, stoneT: 0, wolfT: 0, orbT: 0, orbHit: {}, orbPower: 0, lastElement: 'natureza',
+    burnT: 0, burnTick: 0, poisonT: 0, poisonTick: 0, curseT: 0, crackT: 0, confuseT: 0, wetT: 0, sleepT: 0,
+    erased: [0, 0, 0], stolen: -1, dreamT: 0, spellMap: [0, 1, 2], heldT: 0, hitCount: 0, fightT: 0, frenzyT: 0,
   };
 }
 
@@ -44,6 +49,7 @@ export function createWorld(cfg: StageConfig): World {
     kills: 0, perfects: 0, hitsTaken: 0, roomsCleared: 0, bossTime: 0,
     spells: cfg.stats.loadout.slice(0, 3),
     puddles: [], current: 0, supremo: cfg.stats.supremo, flooded: false,
+    allies: [], devils: [], grass: [], walls: [], moon: 0, eraseT: 0, trail: [], steals: 0, level: cfg.level,
   };
   w.pet = makePet(w);
   startRoom(w, 0);
@@ -62,7 +68,13 @@ function startRoom(w: World, index: number): void {
   w.enemies = []; w.projectiles = []; w.hazards = []; w.zones = [];
   w.wave = -1; w.waveTimer = WAVE_DELAY - 0.5; w.bossTime = 0; w.altar = null;
   w.puddles = room.puddles ?? []; w.current = room.current ?? 0; w.flooded = false;
-  p.shield = w.stats.firstHitShield; p.surf = 0;
+  w.level = room.level ?? w.cfg.level;
+  const mods = levelCombatModifiers(w.stats.level, w.level);
+  w.dealt = mods.dealt; w.taken = mods.taken;
+  w.allies = [];
+  startTerrain(w, room);
+  p.shield = w.stats.firstHitShield; p.surf = 0; p.surfKind = 'dodge';
+  p.erased = [0, 0, 0]; p.stolen = -1; p.dreamT = 0; p.spellMap = [0, 1, 2]; p.heldT = 0; p.sleepT = 0; p.confuseT = 0;
   p.x = ARENA.x0 + 100; p.y = (ARENA.y0 + ARENA.y1) / 2;
   p.kx = p.ky = 0; p.state = 'idle'; p.stateT = 0; p.charge = 0; p.slowT = 0; p.iframes = 0; p.hurtInv = 0;
   const pet = w.pet;
@@ -137,6 +149,8 @@ export function step(w: World, inp: Input, dt: number): void {
   if (w.phase === 'fight') w.time += dt;
   updatePlayer(w, inp, dt);
   updatePet(w, inp, dt);
+  updateAllies(w, dt);
+  updateTerrain(w, dt);
   if (w.phase === 'fight') {
     /* quem está perto de um Caramujo-Concha fica protegido; quem pisa em poça fica Molhado */
     const shells = w.enemies.filter((e) => e.kind === 'caramujo' && e.hp > 0 && e.state !== 'spawn');
@@ -162,7 +176,7 @@ export function step(w: World, inp: Input, dt: number): void {
 }
 
 function updateWaves(w: World, dt: number): void {
-  const room = w.cfg.rooms[w.room], alive = w.enemies.filter((e) => !e.fake).length;
+  const room = w.cfg.rooms[w.room], alive = w.enemies.filter((e) => !e.fake && !e.illusion).length;
   const lastWave = w.wave >= room.waves.length - 1;
   /* a onda seguinte entra quando a atual está quase no fim, para não haver respiro */
   const size = w.wave >= 0 ? room.waves[w.wave].length : 0;
@@ -188,6 +202,14 @@ function updateWaves(w: World, dt: number): void {
       const pos = { x: def.x, y: def.y };
       clampArena(w, pos, 20);
       spawnEnemy(w, { ...def, ...pos });
+    }
+    /* Pantanal: cópias falsas de alguns monstros da onda */
+    const wv = room.waves[w.wave];
+    for (let i = 0; i < (room.illusions ?? 0) && wv.length; i++) {
+      const src = wv[Math.floor(rand(w) * wv.length)], pos = { x: src.x + (rand(w) - 0.5) * 160, y: src.y + (rand(w) - 0.5) * 140 };
+      clampArena(w, pos, 20);
+      const e = spawnEnemy(w, { kind: src.kind, x: pos.x, y: pos.y });
+      e.illusion = true; e.hp = e.maxHp = 1; e.dmg *= 0.3;
     }
     emit(w, { type: 'wave', x: 0, y: 0, value: w.wave, kind: String(room.waves.length) });
   }

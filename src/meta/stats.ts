@@ -2,8 +2,8 @@
  * Transforma o perfil (nível, atributos, talentos, equipamento, companheiro) e as bênçãos da fase
  * nos números que o combate usa. Fórmulas de docs/gdd/02-personagem-e-talentos.md.
  */
-import { COMPANIONS, MAX_POTIONS, POTION_HEAL, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
-import { ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type WeaponKind } from '../data/items';
+import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
+import { GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
 import { makeRng } from '../data/rng';
 import { ATTRS, ATTR_BASE, addTalent, newProfile, spellLevel, type AttrKey, type Profile } from './profile';
 
@@ -31,6 +31,22 @@ export interface HeroStats {
   freeCast: number; echo: number;
   reactionMult: number;
   res: Record<ElementId, number>;
+  /** Dano extra por elemento (feitiços e golpes com aquele elemento). */
+  elemDamage: Record<ElementId, number>;
+  /** Gema da arma: aplica o efeito do elemento com esta chance a cada golpe. */
+  weaponGem: { el: ElementId; chance: number } | null;
+  /** Peças equipadas de cada conjunto. */
+  sets: Record<string, number>;
+  /** Duração dos efeitos de elemento nos inimigos. */
+  statusDuration: number;
+  /** Velocidade de carga do Supremo. */
+  supremoRate: number;
+  /** Bônus por companheiro passivo e conjunto (flags de efeito na simulação). */
+  passives: {
+    rootedBonus: number; bossDamage: number; wetBonus: number; armoredBonus: number;
+    perfectNova: boolean; perfectWave: boolean; perfectWhirl: boolean; dodgeDust: boolean;
+    critBurn: boolean; burnExplode: boolean; quake: boolean; killHeal: number; frenzy: boolean; reactionBonus: number;
+  };
   lifesteal: number; thorns: number;
   /** Fração da vida recuperada por segundo. */
   regen: number;
@@ -59,6 +75,9 @@ export interface HeroStats {
   uniques: {
     mandibulaDaRainha: boolean; presaDaCaipora: boolean; coroaDeCipo: boolean;
     ferraoDeArraia: boolean; denteDoBoto: boolean; escamaDaIara: boolean;
+    maoDoCorpoSeco: boolean; alpercatasDoRedemoinho: boolean; cachimboDoSaci: boolean; crinaDaMula: boolean; olhoDoBoitata: boolean;
+    couroDoCapelobo: boolean; garraDoMapinguari: boolean; pedraDaTeiniagua: boolean; denteDoLobisomem: boolean; toucaDaPisadeira: boolean;
+    colherDaCuca: boolean; fioDoEsquecimento: boolean;
   };
 }
 
@@ -82,14 +101,23 @@ export function activeItems(p: Profile): Item[] {
   });
 }
 
+/** Peças equipadas de cada conjunto. */
+export function setCounts(items: Item[]): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const it of items) if (it.set) out[it.set] = (out[it.set] ?? 0) + 1;
+  return out;
+}
+
 export function totalAttrs(p: Profile, blessings: BlessingId[] = []): Record<AttrKey, number> {
-  const a = affixSums(activeItems(p)), t = p.talents, b = blessingCounts(blessings);
+  const items = activeItems(p), a = affixSums(items), t = p.talents, b = blessingCounts(blessings);
   const root: Record<AttrKey, string> = { forca: 'raizForca', agilidade: 'raizAgilidade', inteligencia: 'raizInteligencia', vitalidade: 'raizVitalidade', espirito: 'raizEspirito', sorte: 'raizSorte' };
   const out = {} as Record<AttrKey, number>;
   for (const { key } of ATTRS) out[key] = ATTR_BASE + p.attrs[key] + (a[key] || 0) + (t[root[key]] ? 3 : 0);
   if (t.eloSorteInteligencia) { out.sorte += 2; out.inteligencia += 2; }
   if (t.eloAgilidadeSorte) { out.agilidade += 2; out.sorte += 2; }
   out.forca += 6 * (b.forca ?? 0); out.agilidade += 6 * (b.agilidade ?? 0); out.inteligencia += 6 * (b.inteligencia ?? 0);
+  if ((setCounts(items).lembranca ?? 0) >= 2) for (const { key } of ATTRS) out[key] += 4;
+  if (p.companion === 'mico' && p.companions.mico) out.sorte += 15;
   return out;
 }
 
@@ -98,8 +126,10 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
   const rank = (id: string) => t[id] || 0;
   const bl = (b: BlessingId) => bc[b] ?? 0;
   const weaponItem = p.equipped.arma;
-  const weapon: WeaponKind = weaponItem && weaponItem.type === 'arco' ? 'arco' : 'facao';
+  const weapon: WeaponKind = weaponItem && ['arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'].includes(weaponItem.type) ? weaponItem.type as WeaponKind : 'facao';
   const bow = weapon === 'arco';
+  const sets = setCounts(items), set = (k: string, n: number) => (sets[k] ?? 0) >= n;
+  const pet = (id: CompanionId) => companion === id;
   const chest = p.equipped.peito?.type;
   const hasShield = !bow && p.equipped.mao?.type === 'escudo';
   const quiver = bow && p.equipped.mao?.type === 'aljava';
@@ -107,61 +137,86 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
   const pct = (k: AffixKey) => (a[k] || 0) / 100;
   const uniq = (key: string) => items.some((i) => i.unique === key);
 
-  const mainAttr = bow ? attrs.agilidade : attrs.forca;
+  const mainAttr = weapon === 'arco' || weapon === 'peixeiras' ? attrs.agilidade : weapon === 'zagaia' ? (attrs.forca + attrs.agilidade) * 0.55 : weapon === 'cajado' ? attrs.inteligencia : attrs.forca;
   const damageMult = (1 + 0.012 * mainAttr)
     * (1 + pct('dano') + 0.03 * rank('maoPesada') + (rank('eloForcaVitalidade') ? 0.02 : 0) + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaCacador')
-      + (quiver ? 0.08 : 0) + (bow ? 0.03 * rank('flechaCerteira') : 0) + 0.15 * bl('furia'));
+      + (quiver ? 0.08 : 0) + (bow ? 0.03 * rank('flechaCerteira') : 0) + 0.15 * bl('furia') + (set('tropeiro', 2) ? 0.08 : 0) + (pet('tamandua') ? 0.06 : 0));
 
   let defense = 0.2 * attrs.vitalidade;
   for (const it of items) if (ITEM_TYPES[it.type].base === 'defesa') defense += baseValue(it);
-  defense *= 1 + pct('defesa') + 0.03 * rank('couroCurtido');
+  defense *= 1 + pct('defesa') + 0.03 * rank('couroCurtido') + (set('seringueiro', 2) ? 0.12 : 0) + (set('sentinela', 4) ? 0.1 : 0) + (pet('tatu') ? 0.08 : 0);
 
   const hpFlat = 190 + 10 * p.level + 12 * attrs.vitalidade + (a.vida || 0) + (rank('eloForcaVitalidade') ? 15 : 0) + (rank('eloVitalidadeEspirito') ? 10 : 0);
-  const maxHp = Math.round(hpFlat * (1 + 0.04 * rank('folego') + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaMonge') + (companion === 'capivara' ? 0.08 : 0) + 0.2 * bl('vigor')));
+  const maxHp = Math.round(hpFlat * (1 + 0.04 * rank('folego') + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaMonge') + (companion === 'capivara' ? 0.08 : 0) + 0.2 * bl('vigor')
+    + (set('mateiro', 2) ? 0.08 : 0) + (set('sentinela', 2) ? 0.1 : 0)));
   const manaFlat = 60 + 3 * attrs.espirito + (a.mana || 0) + (rank('eloVitalidadeEspirito') ? 6 : 0) + (rank('eloInteligenciaEspirito') ? 6 : 0);
-  const maxMana = Math.round(manaFlat * (1 + 0.05 * rank('fonte') + 0.03 * rank('joiaMonge') + 0.03 * rank('joiaRezador') + (chest === 'manto' ? 0.2 : 0)));
+  const maxMana = Math.round(manaFlat * (1 + 0.05 * rank('fonte') + 0.03 * rank('joiaMonge') + 0.03 * rank('joiaRezador') + (chest === 'manto' ? 0.2 : 0) + (set('ribeirinho', 2) ? 0.12 : 0)));
 
   const cooldownCut = Math.min(0.4, 0.005 * attrs.espirito + pct('recarga') + 0.03 * rank('pressa') + (chest === 'manto' ? 0.1 : 0));
   const haste = rank('eloAgilidadeForca') ? 0.02 : 0;
-  const resAll = 0.04 * rank('peleGrossa');
+  const resAll = 0.04 * rank('peleGrossa') + pct('resTudo') + (set('lembranca', 4) ? 0.15 : 0);
+  const res = {} as Record<ElementId, number>, elemDamage = {} as Record<ElementId, number>;
+  for (const el of ELEMENT_ORDER) { res[el] = resAll; elemDamage[el] = 0; }
+  res.natureza += pct('resNatureza');
+  elemDamage.natureza += pct('danoNatureza');
+  if (uniq('olhoDoBoitata')) elemDamage.fogo += 0.3;
+  let weaponGem: HeroStats['weaponGem'] = null;
+  for (const it of items) {
+    if (!it.gem) continue;
+    if (ITEM_TYPES[it.type].group === 'arma') { elemDamage[it.gem.el] += GEM_WEAPON_DAMAGE[it.gem.lvl] / 100; weaponGem = { el: it.gem.el, chance: GEM_STATUS_CHANCE[it.gem.lvl] / 100 }; }
+    else res[it.gem.el] += GEM_RESIST[it.gem.lvl] / 100;
+  }
+  for (const el of ELEMENT_ORDER) res[el] = Math.min(0.75, res[el]);
+  const levelBonus = uniq('ecoDosSete') ? 1 : 0;
 
   return {
     level: p.level, attrs, maxHp, maxMana,
-    manaRegen: (2 + 0.04 * attrs.espirito) * (1 + 0.12 * rank('menteCalma')),
+    manaRegen: (2 + 0.04 * attrs.espirito) * (1 + 0.12 * rank('menteCalma') + (pet('vagalume') ? 0.25 : 0)),
     weapon, hasShield,
     weaponDamage: weaponItem ? baseValue(weaponItem) : 6,
     damageMult,
-    attackSpeed: 1 + 0.004 * attrs.agilidade + pct('velAtaque') + haste + 0.02 * rank('maosRapidas') + 0.01 * rank('joiaCacador') + 0.12 * bl('pressa'),
+    attackSpeed: 1 + 0.004 * attrs.agilidade + pct('velAtaque') + haste + 0.02 * rank('maosRapidas') + 0.01 * rank('joiaCacador') + 0.12 * bl('pressa')
+      + (set('lunar', 2) ? 0.06 : 0) + (pet('carcara') ? 0.06 : 0),
     critChance: Math.min(0.85, 0.05 + 0.0015 * attrs.agilidade + pct('critico') + 0.02 * rank('golpeCerteiro') + 0.01 * rank('joiaMalandro')
       + (chest === 'gibao' ? 0.03 : 0) + (companion === 'onca' ? 0.05 : 0) + 0.1 * bl('olho')),
     critMult: 1.5 + pct('danoCritico') + 0.06 * rank('brutalidade') + 0.35 * bl('ferocidade'),
     defense: Math.round(defense * 10) / 10,
     damageTaken: Math.pow(0.88, bl('couro')),
-    moveSpeed: BASE_MOVE_SPEED * (1 + 0.02 * rank('peLigeiro') + haste + 0.12 * bl('vento') + (uniq('escamaDaIara') ? 0.12 : 0)),
+    moveSpeed: BASE_MOVE_SPEED * (1 + 0.02 * rank('peLigeiro') + haste + 0.12 * bl('vento') + (uniq('escamaDaIara') ? 0.12 : 0) + pct('movimento')
+      + (set('vaqueiro', 2) ? 0.1 : 0) + (pet('loboguara') ? 0.06 : 0)),
     dodgeCooldown: BASE_DODGE_COOLDOWN * (1 - 0.04 * rank('reflexo')) * Math.pow(0.75, bl('passo')),
     dodgeDistance: chest === 'couraca' ? 0.8 : 1,
     dodgeCharges: 1 + (rank('segundaEsquiva') ? 1 : 0) + bl('folego'),
     spellPower: (1 + 0.012 * attrs.inteligencia)
-      * (1 + pct('danoNatureza') + 0.03 * rank('palavraForte') + (rank('eloInteligenciaEspirito') ? 0.03 : 0) + 0.02 * rank('joiaRezador') + (rank('arquimago') ? 0.25 : 0) + 0.2 * bl('mandinga')),
+      * (1 + pct('danoFeitico') + 0.03 * rank('palavraForte') + (rank('eloInteligenciaEspirito') ? 0.03 : 0) + 0.02 * rank('joiaRezador') + (rank('arquimago') ? 0.25 : 0) + 0.2 * bl('mandinga')
+        + (set('benzedeira', 2) ? 0.1 : 0) + (pet('coruja') ? 0.08 : 0)),
     spellCrit: 0.05 + 0.02 * rank('foco'),
     spellCritMult: rank('sobrecarga') ? 2.5 : 1.5,
-    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * Math.pow(0.8, bl('ligeireza')),
+    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * Math.pow(0.8, bl('ligeireza')) * (weapon === 'cajado' ? 0.8 : 1) * (pet('tuiuiu') ? 0.92 : 1),
     manaCostMult: (rank('arquimago') ? 0.8 : 1) * Math.pow(0.7, bl('fonte')),
     spellArea: 1 + 0.05 * rank('alcanceMagico') + 0.25 * bl('gigante'),
     poisonMult: 1 + 0.1 * rank('venenoForte'),
     durationMult: 1 + 0.06 * rank('duracao'),
-    freeCast: rank('fluxo') ? 0.25 : 0,
-    echo: rank('eco') ? 0.2 : 0,
+    freeCast: Math.max(rank('fluxo') ? 0.25 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0),
+    echo: Math.max(rank('eco') ? 0.2 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0),
     reactionMult: rank('catalisador') ? 1.4 : 1,
-    res: { natureza: Math.min(0.75, pct('resNatureza') + resAll), agua: Math.min(0.75, resAll) },
+    res, elemDamage, weaponGem, sets,
+    statusDuration: set('benzedeira', 4) ? 2 : 1,
+    supremoRate: set('lembranca', 6) ? 2 : 1,
+    passives: {
+      rootedBonus: pet('sucuri') ? 0.1 : 0, bossDamage: pet('jacarezinho') ? 0.1 : 0, wetBonus: set('ribeirinho', 4) ? 0.15 : 0, armoredBonus: set('seringueiro', 4) ? 0.25 : 0,
+      perfectNova: set('mateiro', 6), perfectWave: set('ribeirinho', 6), perfectWhirl: set('vaqueiro', 6), dodgeDust: set('vaqueiro', 4),
+      critBurn: set('tropeiro', 4), burnExplode: set('tropeiro', 6), quake: set('seringueiro', 6), killHeal: set('lunar', 4) ? 0.02 : 0, frenzy: set('lunar', 6),
+      reactionBonus: set('benzedeira', 6) ? 0.6 : 0,
+    },
     lifesteal: pct('rouboVida') + 0.04 * bl('sanguessuga'),
     thorns: (rank('espinhoVivo') ? 0.25 : 0) + 0.35 * bl('espinhos'),
     regen: 0.0015 * rank('sangueBom') + 0.01 * bl('seiva'),
-    healMult: 1 + 0.06 * rank('curaMaior'),
-    goldMult: 1 + pct('ouro') + 0.002 * attrs.sorte + 0.03 * rank('olhoVivo') + 0.02 * rank('joiaCurioso') + 0.02 * rank('joiaMalandro') + (companion === 'arara' ? 0.1 : 0),
-    xpMult: 1 + 0.04 * rank('sabedoria') + 0.02 * rank('joiaCurioso'),
+    healMult: 1 + 0.06 * rank('curaMaior') + (pet('botinho') ? 0.1 : 0),
+    goldMult: 1 + pct('ouro') + 0.002 * attrs.sorte + 0.03 * rank('olhoVivo') + 0.02 * rank('joiaCurioso') + 0.02 * rank('joiaMalandro') + (companion === 'arara' || companion === 'graxaim' ? 0.1 : 0) + (set('andarilho', 2) ? 0.1 : 0),
+    xpMult: 1 + 0.04 * rank('sabedoria') + 0.02 * rank('joiaCurioso') + (set('andarilho', 4) ? 0.15 : 0),
     luck: attrs.sorte + 4 * rank('boaEstrela'),
-    eliteDamage: 1 + 0.05 * rank('quebraCasca'),
+    eliteDamage: 1 + 0.05 * rank('quebraCasca') + (pet('jacarezinho') ? 0.1 : 0),
     thirdHitMult: 1 + 0.06 * rank('pesoDoGolpe'),
     reachMult: 1 + 0.25 * bl('gigante'),
     comboWide: !!rank('golpeLargo'), ignoreArmor: !!rank('arrombar'),
@@ -172,16 +227,16 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
     manaPerHitMult: rank('mare') ? 2 : 1, manaOnKill: rank('sopro') ? 6 : 0, manaOnElite: !!rank('pocoFundo'),
     revives: 1 + (rank('segundoFolego') ? 1 : 0),
     potions: Math.min(p.potions, MAX_POTIONS + (rank('cantilCheio') ? 1 : 0)),
-    potionHeal: POTION_HEAL + 0.06 * rank('pocaoForte'),
-    altarChoices: 3 + (rank('bencaoFarta') ? 1 : 0),
+    potionHeal: (POTION_HEAL + 0.06 * rank('pocaoForte')) * (pet('preguica') ? 1.25 : 1),
+    altarChoices: 3 + (rank('bencaoFarta') ? 1 : 0) + (set('andarilho', 6) ? 1 : 0),
     companion,
     companionMult: 1 + 0.05 * rank('bomTrato') + 0.5 * bl('parceria'),
     petCooldownMult: 1 - 0.05 * rank('faro'),
     petFastRevive: !!rank('seteVidas'), petDouble: !!rank('ataqueCombinado'),
     loadout: p.loadout.slice(0, 3),
-    spellLevels: p.loadout.slice(0, 3).map((id) => (id ? spellLevel(p, id) : 1)),
+    spellLevels: p.loadout.slice(0, 3).map((id) => Math.min(MAX_SPELL_LEVEL + 1, (id ? spellLevel(p, id) : 1) + levelBonus)),
     supremo: p.supremo && p.supremos.includes(p.supremo) ? p.supremo : null,
-    onHitPoison: bl('peconha') > 0, onKillExplode: bl('estouro') > 0, firstHitShield: bl('amparo') > 0,
+    onHitPoison: bl('peconha') > 0, onKillExplode: bl('estouro') > 0, firstHitShield: bl('amparo') > 0 || set('sentinela', 6),
     nova: bl('ourico'),
     talents: {
       sedeDeBriga: !!rank('sedeDeBriga'), execucao: !!rank('execucao'), contragolpe: !!rank('contragolpe'),
@@ -190,6 +245,9 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
     uniques: {
       mandibulaDaRainha: uniq('mandibulaDaRainha'), presaDaCaipora: uniq('presaDaCaipora'), coroaDeCipo: uniq('coroaDeCipo'),
       ferraoDeArraia: uniq('ferraoDeArraia'), denteDoBoto: uniq('denteDoBoto'), escamaDaIara: uniq('escamaDaIara'),
+      maoDoCorpoSeco: uniq('maoDoCorpoSeco'), alpercatasDoRedemoinho: uniq('alpercatasDoRedemoinho'), cachimboDoSaci: uniq('cachimboDoSaci'), crinaDaMula: uniq('crinaDaMula'),
+      olhoDoBoitata: uniq('olhoDoBoitata'), couroDoCapelobo: uniq('couroDoCapelobo'), garraDoMapinguari: uniq('garraDoMapinguari'), pedraDaTeiniagua: uniq('pedraDaTeiniagua'),
+      denteDoLobisomem: uniq('denteDoLobisomem'), toucaDaPisadeira: uniq('toucaDaPisadeira'), colherDaCuca: uniq('colherDaCuca'), fioDoEsquecimento: uniq('fioDoEsquecimento'),
     },
   };
 }
@@ -241,19 +299,19 @@ const REFERENCE_TALENTS = [
 ];
 
 /** O personagem de referência usado para calibrar as fases: é dele o "poder recomendado". */
-export function referenceProfile(level: number, bow = false): Profile {
+export function referenceProfile(level: number, bow = false, weapon: ItemType = bow ? 'arco' : 'facao'): Profile {
   const p = newProfile(1), rng = makeRng(level * 31 + 7);
   p.level = level;
   const pts = (level - 1) * 3;
   if (bow) p.attrs.agilidade = Math.ceil(pts / 2); else p.attrs.forca = Math.ceil(pts / 2);
   p.attrs.vitalidade = Math.floor(pts / 2);
   const plus = Math.min(4, Math.floor(level / 2));
-  const set = (slot: 'arma' | 'mao' | 'cabeca' | 'peito' | 'maos' | 'pes', type: Parameters<typeof makeItem>[4]) => {
+  const set = (slot: 'arma' | 'mao' | 'cabeca' | 'peito' | 'maos' | 'pes', type: ItemType) => {
     const it = makeItem(p.nextItemId++, rng, level, level > 1 ? 1 : 0, type);
     it.affixes = []; it.plus = plus;
     p.equipped[slot] = it;
   };
-  set('arma', bow ? 'arco' : 'facao'); set('cabeca', 'chapeu'); set('peito', 'gibao');
+  set('arma', weapon); set('cabeca', 'chapeu'); set('peito', 'gibao');
   if (level >= 2) { set('mao', bow ? 'aljava' : 'escudo'); set('maos', 'luvas'); set('pes', 'alpercatas'); }
   /* talentos: um ponto por nível, num caminho simples de dano e vida */
   p.talentPoints = level - 1;

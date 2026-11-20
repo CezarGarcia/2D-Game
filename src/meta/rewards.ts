@@ -3,10 +3,12 @@
  * XP e ouro caem em fase fácil, o item com nome não sofre redução e tem azar com limite.
  */
 import { SUPREMOS, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
-import { makeItem, makeUnique, rollRarity, sellValue, type Item } from '../data/items';
+import { ELEMENT_ORDER } from '../data/content';
+import { makeItem, makeSetItem, makeUnique, rollRarity, sellValue, setsOfChapter, type Gem, type Item } from '../data/items';
 import { BOSS_STAGE_XP_BONUS, FIRST_CLEAR_XP_BONUS, goldMultiplier, stageGold, stageXp, xpMultiplier } from '../data/progression';
 import { CHAPTERS, STAGES, STAGE_BY_ID, stagesOf, type StageDef } from '../data/stages';
-import { addItem, addXp, profileRng, refillPotions, type Materials, type Profile, type StageRecord } from './profile';
+import { FLOORS_PER_RUN, isTowerId, towerChapter, towerRun } from '../data/tower';
+import { addGem, addItem, addXp, profileRng, refillPotions, weekKey, type Materials, type Profile, type StageRecord } from './profile';
 import { deriveStats, powerOf, recommendedPower } from './stats';
 
 export interface StageOutcome {
@@ -22,6 +24,8 @@ export interface StageOutcome {
   hitsTaken: number;
   /** Bênçãos escolhidas nos altares desta tentativa. */
   blessings?: BlessingId[];
+  /** Itens afanados pelo graxaim de elites e chefões. */
+  stolen?: number;
 }
 
 export interface StageRewards {
@@ -43,8 +47,13 @@ export interface StageRewards {
   rescued: CompanionId | null;
   /** Encantado libertado nesta vitória, que passa a poder ser chamado como Supremo. */
   supremo: ElementId | null;
+  gems: Gem[];
+  /** Venceu o Esquecimento pela primeira vez: mostrar o final. */
+  credits: boolean;
   talentPoints: number;
   starChest: { stars: number; gold: number; mata: number; talent: boolean } | null;
+  /** Torre: andares vencidos nesta subida e o recorde. */
+  tower?: { from: number; floors: number; best: number; newBest: boolean; weekBest: number };
 }
 
 export type StageTag = 'verde' | 'amarela' | 'cinza' | 'vermelha';
@@ -88,6 +97,11 @@ export function totalStars(p: Profile, chapter?: number): number {
 /** Baús de estrelas: 3 por capítulo, pelo total de estrelas do jogo. */
 export const STAR_CHESTS = [12, 24, 36, 48, 60, 72];
 
+/** A Torre abre depois de libertar o Curupira. */
+export function isTowerUnlocked(p: Profile): boolean {
+  return recordOf(p, '1-12').cleared;
+}
+
 /** O ferreiro abre depois da fase 1-2. */
 export function isForgeUnlocked(p: Profile): boolean {
   return recordOf(p, '1-2').cleared;
@@ -117,6 +131,7 @@ export function namedChance(p: Profile, stage: StageDef): number {
 
 /** Aplica o resultado de uma fase ao perfil e devolve o resumo para a tela de resultado. */
 export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
+  if (isTowerId(o.stageId)) return applyTowerOutcome(p, o);
   const stage = STAGE_BY_ID.get(o.stageId)!;
   const rng = profileRng(p), stats = deriveStats(p);
   const rec = recordOf(p, stage.id);
@@ -134,19 +149,30 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
     namedChance: namedChance(p, stage),
     materials: { mata: 0, po: 0, lagrima: 0, tomo: 0 },
     stars: [rec.stars[0], rec.stars[1], rec.stars[2]], newStars: 0, bestTime: false,
-    levels: 0, spells: [], rescued: null, supremo: null, talentPoints: 0, starChest: null,
+    levels: 0, spells: [], rescued: null, supremo: null, gems: [], credits: false, talentPoints: 0, starChest: null,
   };
 
   if (o.won) {
     const drops: Item[] = [];
     if (firstClear) for (const type of stage.firstClear ?? []) drops.push(makeItem(p.nextItemId++, rng, stage.level, 1, type));
     const count = 2 + (stage.rooms.length >= 6 ? 1 : 0) + (stage.final !== 'normal' ? 1 : 0) + (firstClear ? 1 : 0)
-      + (t.farejador ? 1 : 0) + (bl.fartura ?? 0);
+      + (t.farejador ? 1 : 0) + (bl.fartura ?? 0) + Math.min(1, o.stolen ?? 0);
+    const sets = setsOfChapter(stage.chapter);
     for (let i = 0; i < count; i++) {
       let rarity = rollRarity(rng, stage.chapter, stats.luck);
       if (i === 0 && stage.final === 'elite') rarity = Math.max(rarity, 1);
       if (i === 0 && (stage.final === 'chefao' || t.dedoDeOuro)) rarity = Math.max(rarity, 2);
-      drops.push(makeItem(p.nextItemId++, rng, stage.level, rarity));
+      /* peça de conjunto do capítulo: mais chance nas fases finais */
+      const setChance = rarity >= 2 ? (stage.final === 'chefao' ? 0.25 : stage.final === 'elite' ? 0.14 : 0.07) : 0;
+      if (sets.length && rng() < setChance) drops.push(makeSetItem(p.nextItemId++, rng, sets[Math.floor(rng() * sets.length)].key, stage.level, rarity));
+      else drops.push(makeItem(p.nextItemId++, rng, stage.level, rarity, undefined, stage.chapter));
+    }
+    /* gemas: elites e chefões sempre, fase comum às vezes */
+    const gemLvl = Math.min(3, 1 + Math.floor((stage.chapter - 1) / 3));
+    const gemN = stage.final === 'chefao' ? 2 : stage.final === 'elite' ? 1 : rng() < 0.18 ? 1 : 0;
+    for (let i = 0; i < gemN; i++) {
+      const g: Gem = { el: ELEMENT_ORDER[Math.floor(rng() * ELEMENT_ORDER.length)], lvl: Math.max(1, gemLvl - (i === 0 ? 0 : 1)) };
+      addGem(p, g); out.gems.push(g);
     }
     if (stage.named) {
       if (rng() * 100 < out.namedChance) { out.named = makeUnique(p.nextItemId++, rng, stage.named.unique, stage.level); drops.push(out.named); rec.pity = 0; }
@@ -174,6 +200,7 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
       out.rescued = stage.rescue;
     }
     if (stage.id === '1-12') p.curupiraFreed = true;
+    if (stage.id === '8-12' && !p.credits) { p.credits = true; out.credits = true; }
     for (const el of Object.keys(SUPREMOS) as ElementId[]) {
       if (SUPREMOS[el].stage === stage.id && !p.supremos.includes(el)) {
         p.supremos.push(el); out.supremo = el;
@@ -197,6 +224,54 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
     if (chest.talent) p.talentPoints += 1;
     out.starChest = chest;
   }
+  refillPotions(p);
+  return out;
+}
+
+/** Resultado de uma subida da Torre: paga por andar vencido e guarda o recorde. */
+export function applyTowerOutcome(p: Profile, o: StageOutcome): StageRewards {
+  const run = towerRun(Number(o.stageId.slice(6))), rng = profileRng(p), stats = deriveStats(p), bl = blessingCounts(o.blessings ?? []);
+  const floors = run.rooms.slice(0, Math.max(0, o.roomsCleared)).filter((r) => r.floor != null);
+  const top = floors.length ? floors[floors.length - 1].floor! : run.number - 1;
+  const out: StageRewards = {
+    won: o.won, xp: 0, gold: 0, xpMult: 1, goldMult: 1, firstClear: false, items: [], soldOverflow: [], named: null, namedChance: 0,
+    materials: { mata: 0, po: 0, lagrima: 0, tomo: 0 }, stars: [false, false, false], newStars: 0, bestTime: false,
+    levels: 0, spells: [], rescued: null, supremo: null, gems: [], credits: false, talentPoints: 0, starChest: null,
+  };
+  let xp = 0, gold = 0;
+  const drops: Item[] = [];
+  for (const r of floors) {
+    const f = r.floor!, lv = r.level ?? run.level, ch = towerChapter(f);
+    xp += stageXp(lv) * 0.45 * xpMultiplier(p.level, lv);
+    gold += stageGold(lv) * 0.5;
+    out.materials.mata += 1 + Math.floor(lv / 12);
+    if (f % 5 === 0) out.materials.tomo += 1;
+    if (f % 10 === 0) {
+      for (let i = 0; i < 2; i++) { const g = { el: ELEMENT_ORDER[Math.floor(rng() * ELEMENT_ORDER.length)], lvl: Math.min(6, 1 + Math.floor(f / 25) + (i === 0 ? 1 : 0)) }; addGem(p, g); out.gems.push(g); }
+      const rarity = Math.max(2, rollRarity(rng, ch, stats.luck));
+      drops.push(rng() < 0.3 ? makeSetItem(p.nextItemId++, rng, rng() < 0.5 ? 'andarilho' : 'sentinela', lv, rarity) : makeItem(p.nextItemId++, rng, lv, rarity, undefined, ch));
+      out.materials.po += 1;
+      if (f === 50 && !p.companions.mico) { p.companions.mico = { level: 1 }; out.rescued = 'mico'; }
+    }
+  }
+  if (o.won) for (let i = 0; i < 2; i++) drops.push(makeItem(p.nextItemId++, rng, run.level, rollRarity(rng, towerChapter(top), stats.luck), undefined, towerChapter(top)));
+  for (const it of drops) {
+    if (addItem(p, it)) out.items.push(it);
+    else { const g = sellValue(it); gold += g; out.soldOverflow.push({ item: it, gold: g }); }
+  }
+  out.xp = Math.round(xp * stats.xpMult * (1 + 0.25 * (bl.sabedoria ?? 0)));
+  out.gold = Math.round(gold * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  const t = p.tower, wk = weekKey(), climbed = top >= run.number ? top : 0;
+  if (t.week !== wk) { t.week = wk; t.weekBest = 0; t.weekTime = 0; }
+  const newBest = climbed > t.best;
+  if (newBest) t.best = climbed;
+  if (climbed > t.weekBest || (climbed === t.weekBest && climbed > 0 && o.time < t.weekTime)) { t.weekBest = climbed; t.weekTime = Math.round(o.time * 10) / 10; }
+  if (o.won) t.checkpoint = Math.min(91, run.number + FLOORS_PER_RUN);
+  out.tower = { from: run.number, floors: floors.length, best: t.best, newBest, weekBest: t.weekBest };
+  p.gold += out.gold;
+  p.materials.mata += out.materials.mata; p.materials.po += out.materials.po; p.materials.tomo += out.materials.tomo;
+  const up = addXp(p, out.xp);
+  out.levels = up.levels; out.spells = up.spells;
   refillPotions(p);
   return out;
 }

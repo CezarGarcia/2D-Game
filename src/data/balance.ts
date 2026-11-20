@@ -4,6 +4,8 @@
  * Vida e dano dos monstros estão no valor do nível 1 e sobem com o nível da fase.
  */
 
+import { BOSSES, MONSTERS, type BossKind, type MonsterKind } from './bestiary';
+
 export const VIEW = { w: 1280, h: 720 };
 
 /** Área em que personagens podem andar. */
@@ -38,6 +40,37 @@ export const PLAYER = {
   shield: { parryWindow: 0.2, blockReduce: 0.6, parryStun: 1.6, moveMult: 0.45 },
   contragolpe: 2.5,
 
+  /** Golpes das armas corpo a corpo além do facão (o facão usa `combo`). */
+  weapons: {
+    borduna: {
+      combo: [
+        { windup: 0.17, total: 0.62, mult: 1, lunge: 90, range: 112, arc: 1.6 },
+        { windup: 0.2, total: 0.78, mult: 1.55, lunge: 140, range: 124, arc: 1.8 },
+      ],
+      /** Golpe carregado: segura o botão direito; solta para bater no chão à frente. */
+      heavy: { chargeTime: 1.0, moveMult: 0.35, radius: 135, offset: 70, mult: 3, crack: 6, posture: 22 },
+    },
+    peixeiras: {
+      combo: [
+        { windup: 0.04, total: 0.17, mult: 1, lunge: 90, range: 72, arc: 1.05 },
+        { windup: 0.04, total: 0.17, mult: 1, lunge: 90, range: 72, arc: 1.05 },
+        { windup: 0.04, total: 0.17, mult: 1, lunge: 90, range: 72, arc: 1.05 },
+        { windup: 0.05, total: 0.19, mult: 1.1, lunge: 100, range: 74, arc: 1.05 },
+        { windup: 0.08, total: 0.3, mult: 1.7, lunge: 150, range: 80, arc: 1.25 },
+      ],
+    },
+    zagaia: {
+      combo: [
+        { windup: 0.09, total: 0.36, mult: 1, lunge: 110, range: 138, arc: 0.42 },
+        { windup: 0.09, total: 0.36, mult: 1, lunge: 110, range: 138, arc: 0.42 },
+        { windup: 0.13, total: 0.48, mult: 1.55, lunge: 170, range: 150, arc: 0.5 },
+      ],
+      /** Estocada: segura o botão direito; solta para atravessar a fila à frente. */
+      thrust: { chargeTime: 0.8, moveMult: 0.35, len: 280, width: 54, mult: 2.4 },
+    },
+    cajado: { interval: 0.5, speed: 780, range: 620, mult: 1.05, statusChance: 0.35 },
+  },
+
   /** Arco: disparo rápido e tiro carregado. */
   bow: { interval: 0.42, speed: 920, range: 720, mult: 0.9, shotSlow: 0.5, chargeTime: 0.9, chargeMult: 2.6, chargeMoveMult: 0.3 },
 
@@ -57,8 +90,19 @@ export const PLAYER = {
   potionCooldown: 1,
 };
 
-export type EnemyKind = 'sauva' | 'queixada' | 'cuspidor' | 'tronco' | 'urutau' | 'cogumelo' | 'caipora' | 'curupira'
+export type LegacyKind = 'sauva' | 'queixada' | 'cuspidor' | 'tronco' | 'urutau' | 'cogumelo' | 'caipora' | 'curupira'
   | 'piranha' | 'sapo' | 'arraia' | 'caramujo' | 'jacare' | 'boto' | 'iara';
+export type EnemyKind = LegacyKind | MonsterKind | BossKind;
+export const LEGACY_KINDS: LegacyKind[] = ['sauva', 'queixada', 'cuspidor', 'tronco', 'urutau', 'cogumelo', 'caipora', 'curupira', 'piranha', 'sapo', 'arraia', 'caramujo', 'jacare', 'boto', 'iara'];
+export function isLegacy(k: EnemyKind): k is LegacyKind { return (LEGACY_KINDS as string[]).includes(k); }
+export function isMonster(k: EnemyKind): k is MonsterKind { return k in MONSTERS; }
+export function isBossKind(k: EnemyKind): k is BossKind { return k in BOSSES; }
+/** Raio e vida no nível 1, para qualquer inimigo. */
+export function enemyBase(k: EnemyKind): { radius: number; hp: number } {
+  if (isLegacy(k)) return ENEMY[k];
+  if (isMonster(k)) return MONSTERS[k];
+  return BOSSES[k];
+}
 /** Modificadores de elite (docs/gdd/05). */
 export type EliteMod = 'blindado' | 'veloz' | 'vampirico' | 'explosivo' | 'regenerador';
 
