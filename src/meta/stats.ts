@@ -309,7 +309,7 @@ export function referenceProfile(level: number, bow = false, weapon: ItemType = 
   if (bow) p.attrs.agilidade = Math.ceil(pts / 2); else p.attrs.forca = Math.ceil(pts / 2);
   p.attrs.vitalidade = Math.floor(pts / 2);
   /* do Capítulo 3 em diante, quem chega lá já usou o ferreiro: itens Raros (e Épicos depois do 42) mais aprimorados */
-  const rarity = level >= 48 ? 3 : level >= 30 ? 2 : level > 1 ? 1 : 0;
+  const rarity = level >= 48 ? 3 : level >= 24 ? 2 : level > 1 ? 1 : 0;
   const plus = level >= 24 ? Math.min(rarity === 3 ? 12 : rarity === 2 ? 9 : 6, Math.floor(level / 6)) : Math.min(4, Math.floor(level / 2));
   const set = (slot: 'arma' | 'mao' | 'cabeca' | 'peito' | 'maos' | 'pes', type: ItemType) => {
     const it = makeItem(p.nextItemId++, rng, level, rarity, type);

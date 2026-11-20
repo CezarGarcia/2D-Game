@@ -1,14 +1,21 @@
-/** Resultado da fase: faixa de vitória ou derrota, estrelas, XP, ganhos e os itens saltando em fila. */
+/**
+ * Resultado da fase: faixa de vitória ou derrota, estrelas, XP, ganhos e os itens saltando em fila.
+ * Na Torre, os andares vencidos e o recorde tomam o lugar das estrelas. Na primeira vitória sobre o
+ * Esquecimento, antes de tudo vem a tela do final.
+ */
 import { paintHeroBackdrop } from '../art/backdrops';
+import { gemName, gemText, type Gem, type Item } from '../data/items';
 import { COMPANIONS, ELEMENTS, SPELLS, SUPREMOS } from '../data/content';
 import { xpNeeded } from '../data/progression';
 import { STAGES, type StageDef } from '../data/stages';
+import { FLOORS_PER_RUN, TOWER_FLOORS, findStage, isTowerId } from '../data/tower';
 import { ATTR_PER_LEVEL, MATERIAL_LABEL, talentFree, type Materials } from '../meta/profile';
 import { isUnlocked, recordOf, type StageRewards } from '../meta/rewards';
 import { MAT_ICON, VIEW_H, VIEW_W, type Ctx } from './ctx';
-import { backdrop, clock, h, num, pct, star, ui, type Child } from './dom';
-import type { CampTab } from './host';
-import { itemTile, itemTip } from './itens';
+import { backdrop, clock, h, hdCanvas, num, pct, star, ui, type Child } from './dom';
+import type { Tab } from './ctx';
+import { gemTile, itemTile, itemTip } from './itens';
+import { FREED, drawFigure } from './retratos';
 import { tip, type TipRow, type TipSpec } from './tip';
 
 /** Número que sobe de zero até o valor, para dar gosto de ganho. */

@@ -81,6 +81,132 @@ function arrow(): HTMLElement {
   return h('span', 'to', ui('seta', 26));
 }
 
+function modeBar(c: Ctx): HTMLElement {
+  const st = c.st, mode = st.forgeMode;
+  const setMode = (m: ForgeMode) => { st.forgeMode = m; st.forgeFodder = []; st.forgeAffix = null; c.redraw(`modo-${m}`); };
+  return h('div', { class: 'forge-modes', role: 'tablist', 'aria-label': 'Modo do ferreiro' }, MODES.map((m) => tip(h('button', {
+    type: 'button', class: `mode-btn${mode === m.id ? ' on' : ''}`, role: 'tab', 'aria-selected': String(mode === m.id), 'data-fk': `modo-${m.id}`, onclick: () => setMode(m.id),
+  }, ui(m.icon, 52), h('span', null, m.label)), { title: m.label, icon: ui(m.icon, 36), rows: [{ text: m.text }] })));
+}
+
+/* ---------- modo Gemas ---------- */
+
+/** O que a gema faz na arma e na armadura (o texto vem da camada de dados). */
+function gemEffects(g: Gem): { weapon: string; armor: string } {
+  const probe = (type: Item['type']): Item => ({ id: -1, type, name: '', ilvl: 1, rarity: 0, plus: 0, affixes: [], gem: g });
+  return { weapon: gemText(probe('facao')), armor: gemText(probe('gibao')) };
+}
+
+function renderGemas(c: Ctx, bg: HTMLElement): HTMLElement {
+  const p = c.p, st = c.st, fx = st.forgeFx;
+  let main = st.forgeSel != null ? findItem(p, st.forgeSel)?.item ?? null : null;
+  if (main && !canHoldGem(main)) main = null;
+  if (!main) st.forgeSel = null;
+  st.forgeFodder = []; st.forgeAffix = null;
+  const bag = gemList(p), equippedIds = new Set(Object.values(p.equipped).map((i) => i?.id));
+  const clear = () => { st.forgeSel = null; c.redraw(); };
+
+  /* ---------- itens: só armas e armaduras acendem ---------- */
+  const grid = allItems(p).map((it) => {
+    const ok = canHoldGem(it), isMain = main?.id === it.id;
+    return itemTile(it, {
+      size: 52, fk: `forja-${it.id}`, cls: `${ok ? 'lit' : 'dim'}${isMain ? ' picked' : ''}`, equipped: equippedIds.has(it.id),
+      onClick: () => {
+        if (isMain) { clear(); return; }
+        if (!ok) { c.toast(NO_SOCKET, 'bad'); return; }
+        st.forgeSel = it.id; c.redraw(`forja-${it.id}`);
+      },
+      tipSpec: () => itemTip(c.p, it, { where: 'outro', noSell: true, extra: ok ? [] : [{ icon: 'cadeado', text: NO_SOCKET, tone: 'bad' }], foot: [isMain ? 'Clique: soltar' : ok ? 'Clique: escolher' : null] }),
+    });
+  });
+
+  /* ---------- item escolhido e o encaixe ---------- */
+  const g = main?.gem ?? null;
+  const pull = () => {
+    if (!main) return;
+    const r = unsocketGem(c.p, main.id);
+    if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+    st.forgeFx = { ok: true, text: 'Solta!', color: g ? ELEMENTS[g.el].color : undefined };
+    c.commit('tirar');
+  };
+  const socket = g
+    ? tip(h('span', { class: 'gem-socket full', style: `--gc:${ELEMENTS[g.el].color}`, tabindex: 0 }, gemTile(g, 76)),
+      { title: gemName(g), color: ELEMENTS[g.el].color, tag: `Nv ${g.lvl}`, icon: gemTile(g, 36), rows: [{ text: gemText(main!) }] })
+    : tip(h('span', { class: `gem-socket${main ? ' wait' : ''}`, tabindex: 0 }, h('i', 'socket-hole')),
+      { title: 'Encaixe', sub: main ? 'Vazio' : undefined, rows: [{ text: main ? 'Clique numa gema da bolsa para encaixar.' : 'Escolha uma arma ou armadura.', tone: 'dim' }] });
+  const removeCost = g ? GEM_REMOVE_COST(g.lvl) : 0;
+  const top = h('div', 'gem-top',
+    main
+      ? itemTile(main, { size: 96, cls: 'on-anvil', fk: 'bigorna', onClick: clear, tipSpec: () => itemTip(c.p, main!, { where: 'outro', noSell: true, foot: ['Clique: soltar'] }) })
+      : tip(emptyTile(null, 96, 'on-anvil wait'), { title: 'Gemas', rows: [{ text: 'Clique numa arma ou armadura acesa.', tone: 'dim' }] }),
+    h('span', 'to', ui('seta', 30)),
+    socket,
+    g && tip(h('button', { type: 'button', class: 'btn pull', 'data-fk': 'tirar', disabled: p.gold < removeCost, onclick: pull }, ui('fechar', 24), stat('ouro', num(removeCost), { size: 22, tone: p.gold < removeCost ? 'bad' : '' })), {
+      title: 'Tirar a gema', color: ELEMENTS[g.el].color, rows: [{ text: 'A gema volta para a bolsa.', tone: 'dim' }, { icon: 'ouro', text: 'Custo', value: num(removeCost), tone: p.gold < removeCost ? 'bad' : undefined }],
+    }));
+  const line = h('div', 'gem-line', g
+    ? h('span', { style: `color:${ELEMENTS[g.el].color}` }, gemText(main!))
+    : main ? [ui('seta', 26, 'flip'), h('span', null, 'Escolha uma gema')] : [ui('seta', 26), h('span', null, 'Escolha um item')]);
+
+  /* ---------- bolsa de gemas ---------- */
+  const cells = bag.map(({ gem, count }) => {
+    const key = `${gem.el}-${gem.lvl}`, color = ELEMENTS[gem.el].color, fx2 = gemEffects(gem);
+    const cost = main ? GEM_SOCKET_COST(gem.lvl) + (main.gem ? GEM_REMOVE_COST(main.gem.lvl) : 0) : GEM_SOCKET_COST(gem.lvl);
+    const fuseCost = GEM_FUSE_COST(gem.lvl), canFuse = count >= 3 && gem.lvl < GEM_MAX;
+    const put = () => {
+      if (!main) { c.toast('Escolha uma arma ou armadura', 'bad'); return; }
+      const r = socketGem(c.p, main.id, gem);
+      if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+      st.forgeFx = { ok: true, text: gemName(gem), color };
+      c.commit(`gema-${key}`);
+    };
+    const fuse = () => {
+      const r = fuseGems(c.p, gem);
+      if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+      const made = { el: gem.el, lvl: gem.lvl + 1 };
+      st.forgeFx = { ok: true, text: gemName(made), sub: `Nv ${made.lvl}`, color };
+      c.commit(`fundir-${gem.el}-${made.lvl}`);
+    };
+    return h('div', { class: `gem-cell${main ? ' can' : ''}`, style: `--gc:${color}` },
+      tip(h('button', { type: 'button', class: 'gem-pick', 'data-fk': `gema-${key}`, 'aria-label': `${gemLabel(gem)}, ${count}`, onclick: put },
+        gemTile(gem, 56), h('b', 'gem-count', `×${count}`)),
+      () => ({
+        title: gemName(gem), color, tag: `Nv ${gem.lvl}`, icon: gemTile(gem, 36),
+        rows: [
+          { icon: 'dano', text: `Na arma: ${fx2.weapon}` },
+          { icon: 'defesa', text: `Na armadura: ${fx2.armor}` },
+          'sep',
+          { node: gemTile(gem, 20), text: 'Na bolsa', value: num(count) },
+          main ? { icon: 'ouro', text: main.gem ? 'Encaixar (troca a atual)' : 'Encaixar', value: num(cost), tone: c.p.gold < cost ? 'bad' : undefined } : { icon: 'seta', text: 'Escolha um item primeiro', tone: 'dim' },
+        ],
+        foot: [main ? 'Clique: encaixar' : null],
+      })),
+      canFuse && tip(h('button', { type: 'button', class: `gem-fuse${p.gold < fuseCost ? ' short' : ''}`, 'data-fk': `fundir-${key}`, 'aria-label': `Fundir 3 em ${gemName({ el: gem.el, lvl: gem.lvl + 1 })}`, onclick: fuse },
+        ui('fundir', 22), stat('ouro', num(fuseCost), { size: 18, tone: p.gold < fuseCost ? 'bad' : '' })),
+      () => ({
+        title: 'Fundir 3 gemas', color, icon: gemTile({ el: gem.el, lvl: gem.lvl + 1 }, 36),
+        rows: [
+          { node: gemTile(gem, 20), text: `3 × ${gemName(gem)}` },
+          { icon: 'seta', text: `${gemName({ el: gem.el, lvl: gem.lvl + 1 })} · Nv ${gem.lvl + 1}`, tone: 'ok' },
+          { icon: 'ouro', text: 'Custo', value: num(fuseCost), tone: c.p.gold < fuseCost ? 'bad' : undefined },
+        ],
+        foot: ['Clique: fundir'],
+      })));
+  });
+
+  return h('div', 'ferreiro gemas',
+    bg,
+    modeBar(c),
+    h('div', 'gem-bench',
+      top,
+      fx && h('div', { class: `forge-fx gemfx ${fx.ok ? 'ok' : 'fail'}`, style: fx.color ? `--fxc:${fx.color}` : null, 'aria-live': 'polite' }, h('i', 'flash'), h('b', null, fx.text), fx.sub && h('span', null, fx.sub)),
+      line,
+      h('section', { class: 'panel gem-items', 'aria-label': 'Seus itens' }, grid)),
+    h('section', { class: 'panel gem-bag', 'aria-label': 'Bolsa de gemas' },
+      cells.length ? cells : tip(h('div', { class: 'gem-none', tabindex: 0 }, ui('gema', 64), h('b', null, '0')),
+        { title: 'Bolsa de gemas', rows: [{ text: 'Elites, chefões e a Torre dão gemas.', tone: 'dim' }] })));
+}
+
 export function renderFerreiro(c: Ctx): HTMLElement {
   const p = c.p, st = c.st;
   const bg = backdrop('ferreiro', MAIN_W, MAIN_H, (g) => paintForgeBackdrop(g, MAIN_W, MAIN_H));
@@ -95,6 +221,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
       tip(h('div', { class: 'big-lock', tabindex: 0 }, ui('cadeado', 96), h('span', 'plate', 'Fase 1-2')),
         { title: 'Ferreiro trancado', color: '#ff7b6b', rows: [{ icon: 'mapa', text: 'Vença a fase 1-2 para abrir.' }] }));
   }
+  if (st.forgeMode === 'gemas') return renderGemas(c, bg);
   c.animate(anvil, paintAnvil);
 
   /* a seleção pode ter sumido (vendida, consumida) ou não valer mais para o modo */
@@ -107,7 +234,6 @@ export function renderFerreiro(c: Ctx): HTMLElement {
   st.forgeFodder = mode === 'fundir' ? st.forgeFodder.filter((id) => cands.some((i) => i.id === id)).slice(0, 2) : [];
   if (main && mode === 'encantar' && (st.forgeAffix == null || !main.affixes[st.forgeAffix])) st.forgeAffix = null;
 
-  const setMode = (m: ForgeMode) => { st.forgeMode = m; st.forgeFodder = []; st.forgeAffix = null; c.redraw(`modo-${m}`); };
   const clear = () => { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; c.redraw(); };
 
   /* ---------- grade de itens ---------- */
@@ -241,9 +367,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
   const litCount = allItems(p).filter((it) => workOf(p, mode, it).lit).length;
   return h('div', 'ferreiro',
     bg,
-    h('div', { class: 'forge-modes', role: 'tablist', 'aria-label': 'Modo do ferreiro' }, MODES.map((m) => tip(h('button', {
-      type: 'button', class: `mode-btn${mode === m.id ? ' on' : ''}`, role: 'tab', 'aria-selected': String(mode === m.id), 'data-fk': `modo-${m.id}`, onclick: () => setMode(m.id),
-    }, ui(m.id, 56), h('span', null, m.label)), { title: m.label, icon: ui(m.id, 36), rows: [{ text: m.text }] }))),
+    modeBar(c),
     h('div', 'forge-bench',
       anvil,
       slots,
