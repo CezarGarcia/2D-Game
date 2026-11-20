@@ -56,7 +56,7 @@ const M = (kind: MonsterKind, chapter: number, name: string, arch: Archetype, el
     enxame: { radius: 15, hp: 44, speed: 160, damage: 14, cost: 1, cap: 10, windup: 0.45, reach: 78, area: 44, recover: 0.55 },
     bruto: { radius: 34, hp: 150, speed: 62, damage: 46, cost: 4, cap: 1, windup: 1.3, reach: 128, area: 108, recover: 2.1, armored: true },
     atirador: { radius: 20, hp: 70, speed: 95, damage: 14, cost: 2.4, cap: 2, windup: 0.85, reach: 0, area: 0, recover: 2.9 },
-    investida: { radius: 27, hp: 175, speed: 95, damage: 32, cost: 3.6, cap: 1, windup: 1.1, reach: 0, area: 60, recover: 2.2 },
+    investida: { radius: 27, hp: 175, speed: 95, damage: 28, cost: 3.6, cap: 1, windup: 1.1, reach: 0, area: 60, recover: 2.2 },
     conjurador: { radius: 20, hp: 92, speed: 85, damage: 22, cost: 3, cap: 1, windup: 0.8, reach: 0, area: 0, recover: 3.4 },
     protetor: { radius: 23, hp: 190, speed: 52, damage: 22, cost: 2.4, cap: 1, windup: 0.95, reach: 115, area: 105, recover: 1.6, armored: true },
     emboscada: { radius: 18, hp: 92, speed: 120, damage: 22, cost: 2.2, cap: 2, windup: 0.65, reach: 175, area: 44, recover: 1.1 },
@@ -89,7 +89,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   totem: M('totem', 5, 'Totem de Barro', 'protetor', 'terra', {}, 'Protege os inimigos em volta. Derrube primeiro.'),
   /* Capítulo 6 · Pampa (Sombra) */
   queroquero: M('queroquero', 6, 'Quero-Quero', 'enxame', 'sombra', { fly: true, speed: 200, hp: 40 }, 'Bando barulhento que mergulha de bico.'),
-  boibarroso: M('boibarroso', 6, 'Boi-Barroso', 'investida', 'sombra', { radius: 32, hp: 210, damage: 36 }, 'Pesado. A investida derruba.'),
+  boibarroso: M('boibarroso', 6, 'Boi-Barroso', 'investida', 'sombra', { radius: 32, hp: 210, damage: 27 }, 'Pesado. A investida derruba.'),
   almapenada: M('almapenada', 6, 'Alma Penada', 'conjurador', 'sombra', { fly: true, circles: { count: 2, radius: 90, delay: 1.2, spread: 90, every: 3.4 } }, 'Amaldiçoa o chão onde você pisa.'),
   fatuo: M('fatuo', 6, 'Fogo-Fátuo', 'explosivo', 'sombra', { fly: true, speed: 160, leaves: 'sombra' }, 'Chama fria que estoura e amaldiçoa.'),
   espantalho: M('espantalho', 6, 'Espantalho', 'atirador', 'sombra', { speed: 70, hp: 100, shot: { mode: 'spin', count: 1, spread: 0, speed: 460, range: 520, radius: 0, tex: 'e_foice', flight: 0 } }, 'Lança foices que voltam.'),
