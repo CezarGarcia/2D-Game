@@ -89,16 +89,16 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   totem: M('totem', 5, 'Totem de Barro', 'protetor', 'terra', {}, 'Protege os inimigos em volta. Derrube primeiro.'),
   /* Capítulo 6 · Pampa (Sombra) */
   queroquero: M('queroquero', 6, 'Quero-Quero', 'enxame', 'sombra', { fly: true, speed: 200, hp: 40 }, 'Bando barulhento que mergulha de bico.'),
-  boibarroso: M('boibarroso', 6, 'Boi-Barroso', 'investida', 'sombra', { radius: 32, hp: 230, damage: 46 }, 'Pesado. A investida derruba.'),
+  boibarroso: M('boibarroso', 6, 'Boi-Barroso', 'investida', 'sombra', { radius: 32, hp: 210, damage: 36 }, 'Pesado. A investida derruba.'),
   almapenada: M('almapenada', 6, 'Alma Penada', 'conjurador', 'sombra', { fly: true, circles: { count: 2, radius: 90, delay: 1.2, spread: 90, every: 3.4 } }, 'Amaldiçoa o chão onde você pisa.'),
   fatuo: M('fatuo', 6, 'Fogo-Fátuo', 'explosivo', 'sombra', { fly: true, speed: 160, leaves: 'sombra' }, 'Chama fria que estoura e amaldiçoa.'),
   espantalho: M('espantalho', 6, 'Espantalho', 'atirador', 'sombra', { speed: 70, hp: 100, shot: { mode: 'spin', count: 1, spread: 0, speed: 460, range: 520, radius: 0, tex: 'e_foice', flight: 0 } }, 'Lança foices que voltam.'),
   /* Capítulo 7 · Pantanal (Encanto) */
-  ariranha: M('ariranha', 7, 'Ariranha', 'enxame', 'encanto', { speed: 180, hp: 48 }, 'Caça em grupo, rápida.'),
-  soco: M('soco', 7, 'Socó', 'atirador', 'encanto', { speed: 80, shot: bolt('e_bico', 820) }, 'Fica parado e dispara o bico em linha reta.'),
-  jararaca: M('jararaca', 7, 'Jararaca', 'emboscada', 'encanto', { hp: 96 }, 'Escondida no capim. O bote confunde.'),
-  cururu: M('cururu', 7, 'Cururu-da-Cuca', 'conjurador', 'encanto', { circles: { count: 3, radius: 72, delay: 1.1, spread: 140, every: 3.2 } }, 'Joga poções que estouram em volta de você.'),
-  tracaja: M('tracaja', 7, 'Tracajá', 'bruto', 'encanto', { hp: 180 }, 'Casco duro. Ataca devagar e forte.'),
+  ariranha: M('ariranha', 7, 'Ariranha', 'enxame', 'encanto', { speed: 185, hp: 56, damage: 18 }, 'Caça em grupo, rápida.'),
+  soco: M('soco', 7, 'Socó', 'atirador', 'encanto', { speed: 80, hp: 84, damage: 19, shot: bolt('e_bico', 860) }, 'Fica parado e dispara o bico em linha reta.'),
+  jararaca: M('jararaca', 7, 'Jararaca', 'emboscada', 'encanto', { hp: 110, damage: 27 }, 'Escondida no capim. O bote confunde.'),
+  cururu: M('cururu', 7, 'Cururu-da-Cuca', 'conjurador', 'encanto', { hp: 110, damage: 28, circles: { count: 4, radius: 72, delay: 1.0, spread: 140, every: 3.0 } }, 'Joga poções que estouram em volta de você.'),
+  tracaja: M('tracaja', 7, 'Tracajá', 'bruto', 'encanto', { hp: 210, damage: 56 }, 'Casco duro. Ataca devagar e forte.'),
   /* Capítulo 8 · Terra Sem Nome (sem elemento) */
   vulto: M('vulto', 8, 'Vulto', 'enxame', null, { speed: 180, hp: 50 }, 'Silhuetas que cercam você.'),
   vazio: M('vazio', 8, 'Vazio', 'explosivo', null, { leaves: 'vazio', speed: 150 }, 'Estoura e puxa tudo para dentro.'),

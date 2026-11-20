@@ -374,7 +374,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   if (el === 'tempestade' && (p.wetT > 0 || p.inPuddle)) { dmg *= 1.5; emit(w, { type: 'zap', x: p.x, y: p.y }); }
   if (p.curseT > 0) dmg *= 1.15;
   if (p.stoneT > 0) dmg *= 1 - 0.4;
-  if (w.moon > 0) dmg *= 1 + 0.25 * w.moon;
+  if (w.moon > 0) dmg *= 1 + 0.15 * w.moon;
   if (src && (src.elite || isBoss(src)) && s.uniques.couroDoCapelobo) dmg *= 0.8;
   if (p.cascaT > 0) {
     if (src && src.hp > 0) damageEnemy(w, src, dmg * 0.5, 'reflect', 0);
