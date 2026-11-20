@@ -1,6 +1,6 @@
 /** Tipos da simulação de combate. */
 import type { EliteMod, EnemyKind } from '../data/balance';
-import type { BlessingId, CompanionId, SpellId } from '../data/content';
+import type { BlessingId, CompanionId, ElementId, SpellId } from '../data/content';
 import type { RoomDef } from '../data/stages';
 import type { HeroStats } from '../meta/stats';
 
@@ -17,11 +17,13 @@ export interface Input {
   spell: [boolean, boolean, boolean];
   petPressed: boolean;
   potionPressed: boolean;
+  /** Chamar o Encantado (Supremo), quando a carga está cheia. */
+  supremoPressed: boolean;
 }
 
 export const NO_INPUT: Input = {
   mx: 0, my: 0, aimX: 0, aimY: 0, attackPressed: false, attackHeld: false, altHeld: false, dodgePressed: false,
-  spell: [false, false, false], petPressed: false, potionPressed: false,
+  spell: [false, false, false], petPressed: false, potionPressed: false, supremoPressed: false,
 };
 
 export type Telegraph =
@@ -50,15 +52,25 @@ export interface Player {
   contraT: number; presaT: number; cascaT: number; slowT: number;
   stacks: number; stackT: number; jabutiUsed: boolean;
   potions: number; potionCd: number;
+  /** Amparo: o próximo golpe desta sala não causa dano. */
+  shield: boolean;
+  novaT: number;
+  /** Carga do Supremo, de 0 a 100. */
+  supremo: number;
+  /** Dentro de uma poça. */
+  inPuddle: boolean;
+  /** Dano da Correnteza enquanto o herói desliza (0 = esquiva comum). */
+  surf: number;
 }
 
 export type EnemyState =
   | 'spawn' | 'chase' | 'windup' | 'recover' | 'stagger' | 'roam' | 'aim' | 'charge' | 'stunned' | 'idle' | 'spit' | 'exposed'
   | 'perched' | 'reveal' | 'hover' | 'dash' | 'fuse' | 'skid' | 'tired' | 'call'
-  | 'vanish' | 'cast' | 'volley' | 'roar' | 'downed' | 'clone';
+  | 'vanish' | 'cast' | 'volley' | 'roar' | 'downed' | 'clone'
+  | 'leap' | 'hop' | 'buried' | 'sting' | 'tail' | 'dive' | 'sing';
 
 export interface Enemy {
-  id: number; kind: EnemyKind; elite: boolean; mods: EliteMod[];
+  id: number; kind: EnemyKind; elite: boolean; champion: boolean; mods: EliteMod[];
   x: number; y: number; kx: number; ky: number;
   hp: number; maxHp: number; radius: number;
   /** Multiplicadores de dano, velocidade e tempo de aviso deste inimigo. */
@@ -69,6 +81,10 @@ export interface Enemy {
   cd: number; flag: boolean; count: number;
   flash: number; sinceHit: number;
   poisonT: number; poisonTick: number; slowT: number; rootT: number; stunT: number;
+  /** Molhado, marcado pela arara, preso numa bolha. */
+  wetT: number; markT: number; bubbleT: number;
+  /** Protegido por um Caramujo-Concha próximo (recalculado a cada passo). */
+  guarded: boolean;
   walk: number; moving: boolean;
   /** Tempo restante atacando o companheiro em vez do herói. */
   aggroPet: number;
@@ -81,7 +97,7 @@ export interface Enemy {
   ax: number; ay: number;
 }
 
-export type ProjectileKind = 'thorn' | 'arrow' | 'cipo' | 'seed' | 'ethorn' | 'stampede';
+export type ProjectileKind = 'thorn' | 'arrow' | 'cipo' | 'seed' | 'ethorn' | 'stampede' | 'jet' | 'bubble' | 'sting' | 'glob' | 'wall';
 
 export interface Projectile {
   id: number; kind: ProjectileKind;
@@ -96,7 +112,7 @@ export interface Projectile {
 /** Golpe com atraso marcado no chão que não pertence a um inimigo vivo. */
 export interface Hazard {
   id: number;
-  kind: 'blast' | 'roots' | 'lane' | 'burst';
+  kind: 'blast' | 'roots' | 'lane' | 'burst' | 'jet' | 'dive';
   tele: Telegraph;
   damage: number;
   slow: number;
@@ -105,7 +121,7 @@ export interface Hazard {
 /** Efeito que fica no chão por um tempo. */
 export interface Zone {
   id: number;
-  kind: 'sementes' | 'broto' | 'cloud';
+  kind: 'sementes' | 'broto' | 'cloud' | 'chuva' | 'puddle' | 'whirl' | 'pop';
   x: number; y: number; r: number; t: number; dur: number; tick: number; power: number;
 }
 
@@ -126,7 +142,8 @@ export type SimEventType =
   | 'roomClear' | 'roomStart' | 'altar' | 'blessing' | 'win' | 'lose'
   | 'bite' | 'charge' | 'crash' | 'spit' | 'splat' | 'slam' | 'telegraph' | 'reveal' | 'explode' | 'hazard'
   | 'sementes' | 'cipo' | 'heal' | 'potion' | 'pet' | 'petHurt' | 'petDown' | 'taunt'
-  | 'phase' | 'vanish' | 'appear' | 'footprints' | 'whistle' | 'cloneBurst' | 'downed' | 'call' | 'jabuti' | 'shrink' | 'enrage' | 'stack';
+  | 'phase' | 'vanish' | 'appear' | 'footprints' | 'whistle' | 'cloneBurst' | 'downed' | 'call' | 'jabuti' | 'shrink' | 'enrage' | 'stack'
+  | 'supremo' | 'brotar' | 'nova' | 'shield' | 'mark' | 'bubble' | 'splash' | 'dive' | 'sing' | 'wave' | 'onda' | 'correnteza' | 'pop' | 'freecast';
 
 export interface SimEvent {
   type: SimEventType;
@@ -173,4 +190,11 @@ export interface World {
   /** Tempo de luta contra o chefão, para a fúria. */
   bossTime: number;
   spells: (SpellId | null)[];
+  /** Poças da sala: molham quem pisa e atrasam o herói. */
+  puddles: { x: number; y: number; r: number }[];
+  /** Correnteza da sala, em pixels por segundo (0 = sem correnteza). */
+  current: number;
+  supremo: ElementId | null;
+  /** O chão está alagado (fase final da Iara): todos ficam Molhados e o herói anda mais devagar. */
+  flooded: boolean;
 }

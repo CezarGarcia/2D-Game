@@ -1,5 +1,6 @@
 /** Funções compartilhadas da simulação: sorteio, geometria, dano e criação de inimigos. */
-import { ELITE, ENEMY, MOD, PLAYER, enemyDamageMult, enemyHpMult, type SpawnDef } from '../data/balance';
+import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, type EnemyKind, type SpawnDef } from '../data/balance';
+import { BROTAR, SUPREMO_NUM, WET_DURATION } from '../data/content';
 import { damageReduction } from '../meta/stats';
 import type { Enemy, EnemyState, Hazard, SimEvent, Telegraph, World } from './types';
 
@@ -58,28 +59,61 @@ export function targetOf(w: World, e: Enemy): { x: number; y: number } {
   return e.aggroPet > 0 && pet && pet.state !== 'down' ? pet : w.player;
 }
 
+const BOSSES: EnemyKind[] = ['curupira', 'caipora', 'boto', 'iara'];
 export function isBoss(e: Enemy): boolean {
-  return e.kind === 'curupira' || e.kind === 'caipora';
+  return BOSSES.includes(e.kind);
+}
+
+/** Crescimento por nível do que não vem de arma (feitiços, companheiro), para acompanhar a vida dos monstros. */
+export function levelScale(level: number): number {
+  return 1 + 0.3 * (level - 1) + 0.014 * (level - 1) ** 2;
+}
+
+/** Dano de feitiço cresce com o nível do herói. */
+export function spellScale(w: World): number {
+  return w.stats.spellPower * levelScale(w.stats.level);
+}
+
+export function chargeSupremo(w: World, amount: number): void {
+  if (w.supremo) w.player.supremo = Math.min(100, w.player.supremo + amount);
+}
+
+export function wet(w: World, e: Enemy): void {
+  if (e.hp <= 0 || e.fake) return;
+  e.wetT = WET_DURATION * w.stats.durationMult;
+}
+
+/** Reação Natureza + Água: vinhas brotam do inimigo molhado, ferem em volta, prendem e curam um pouco o herói. */
+export function brotar(w: World, e: Enemy): void {
+  e.wetT = 0;
+  const dmg = BROTAR.damage * spellScale(w) * w.stats.reactionMult, r = BROTAR.radius * w.stats.spellArea;
+  emit(w, { type: 'brotar', x: e.x, y: e.y, value: r });
+  for (const o of w.enemies) {
+    if (o.hp <= 0 || o.hidden || o.fake || o.state === 'spawn' || Math.hypot(o.x - e.x, o.y - e.y) > r + o.radius * 0.5) continue;
+    damageEnemy(w, o, dmg, 'reaction', Math.atan2(o.y - e.y, o.x - e.x));
+    if (o.hp > 0) { if (isBoss(o)) o.slowT = Math.max(o.slowT, BROTAR.root); else { o.rootT = Math.max(o.rootT, BROTAR.root * w.stats.durationMult); o.tele = null; } }
+  }
+  healPlayer(w, w.stats.maxHp * BROTAR.heal);
 }
 
 export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quiet?: boolean } = {}): Enemy {
   const base = ENEMY[def.kind], level = w.cfg.level, mods = def.mods ?? [];
-  const boss = def.kind === 'curupira' || def.kind === 'caipora';
-  const elite = !!def.elite && !boss;
-  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : 1));
+  const boss = BOSSES.includes(def.kind);
+  const elite = !!def.elite && !boss, champion = !!def.champion && !elite && !boss;
+  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1));
   const e: Enemy = {
-    id: w.nextId++, kind: def.kind, elite: !!def.elite, mods,
-    x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : 1),
-    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : 1),
-    speedMult: mods.includes('veloz') ? MOD.veloz.speed : 1,
-    windupMult: mods.includes('veloz') ? MOD.veloz.windup : 1,
+    id: w.nextId++, kind: def.kind, elite: !!def.elite, champion, mods,
+    x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : champion ? CHAMPION.scale : 1),
+    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1),
+    speedMult: (boss ? 1 : enemySpeedMult(level)) * (mods.includes('veloz') ? MOD.veloz.speed : 1),
+    windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1),
     state: 'spawn', stateT: 0, facing: -1, dirX: -1, dirY: 0, tele: null,
     cd: 0.4 + rand(w) * 0.8, flag: false, count: 0, flash: 0, sinceHit: 9,
-    poisonT: 0, poisonTick: 0, slowT: 0, rootT: 0, stunT: 0, walk: rand(w) * 6, moving: false,
+    poisonT: 0, poisonTick: 0, slowT: 0, rootT: 0, stunT: 0, wetT: 0, markT: 0, bubbleT: 0, guarded: false, walk: rand(w) * 6, moving: false,
     aggroPet: 0, hidden: false, fake: !!opts.fake,
     phase: 0, posture: 0, pattern: '', step: 0, calls: 0, ax: def.x, ay: def.y,
   };
-  if (def.kind === 'tronco' && !mods.includes('blindado')) e.mods = [...mods, 'blindado'];
+  if ((def.kind === 'tronco' || def.kind === 'caramujo') && !mods.includes('blindado')) e.mods = [...mods, 'blindado'];
   w.enemies.push(e);
   if (!opts.quiet) emit(w, { type: 'spawn', x: e.x, y: e.y, kind: e.kind, id: e.id });
   return e;
@@ -95,11 +129,11 @@ export function healPlayer(w: World, amount: number, quiet = false): void {
   const p = w.player;
   if (p.state === 'dead' || amount <= 0) return;
   const before = p.hp;
-  p.hp = Math.min(w.stats.maxHp, p.hp + amount);
+  p.hp = Math.min(w.stats.maxHp, p.hp + amount * w.stats.healMult);
   if (!quiet && p.hp - before >= 1) emit(w, { type: 'heal', x: p.x, y: p.y, value: Math.round(p.hp - before) });
 }
 
-export type DamageSource = 'melee' | 'arrow' | 'spell' | 'poison' | 'reflect' | 'pet' | 'roll';
+export type DamageSource = 'melee' | 'arrow' | 'spell' | 'poison' | 'reflect' | 'pet' | 'roll' | 'reaction' | 'blast';
 
 /** Aplica dano a um inimigo, com blindagem, fraquezas, crítico e efeitos de morte. Devolve o dano causado. */
 export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSource, ang: number, forceCrit = false): number {
@@ -113,7 +147,14 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   }
   let dmg = amount * w.dealt, armored = false;
   const open = e.state === 'exposed' || e.state === 'stunned' || e.state === 'tired' || e.state === 'downed' || e.rootT > 0 || e.stunT > 0;
-  if (e.mods.includes('blindado') && !open) { dmg *= ENEMY.tronco.armor; armored = true; }
+  const weapon = source === 'melee' || source === 'arrow' || source === 'roll';
+  if (e.mods.includes('blindado') && !open && !(weapon && s.ignoreArmor)) { dmg *= e.kind === 'caramujo' ? ENEMY.caramujo.armor : ENEMY.tronco.armor; armored = true; }
+  if (e.guarded && e.kind !== 'caramujo') { dmg *= 1 - ENEMY.caramujo.protect; armored = true; }
+  if (e.markT > 0) dmg *= s.petDouble ? 1.5 : 1.25;
+  if (e.elite || isBoss(e)) dmg *= s.eliteDamage;
+  if (e.kind === 'boto' && e.state === 'tired') dmg *= ENEMY.boto.mergulho.tiredMult;
+  if (e.kind === 'iara' && e.state === 'exposed') dmg *= ENEMY.iara.canto.exposedMult;
+  if (e.kind === 'iara' && e.state === 'downed') dmg *= ENEMY.iara.posture.downedMult;
   if (e.kind === 'queixada' && e.state === 'stunned') dmg *= ENEMY.queixada.stunDamageMult;
   if (e.kind === 'caipora' && e.state === 'tired') dmg *= ENEMY.caipora.tiredDamageMult;
   if (e.kind === 'curupira' && e.state === 'exposed') dmg *= C.investida.exposedMult;
@@ -126,17 +167,26 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     if (crit) dmg *= s.critMult;
   } else if (!crit && source === 'spell') {
     crit = rand(w) < s.spellCrit;
-    if (crit) dmg *= 1.5;
+    if (crit) dmg *= s.spellCritMult;
   } else if (crit) dmg *= s.critMult;
 
   dmg = Math.max(1, Math.round(dmg));
   e.hp -= dmg;
   e.flash = 0.1; e.sinceHit = 0;
 
-  const light = e.kind === 'sauva' || e.kind === 'cogumelo' || (e.kind === 'urutau' && e.state !== 'dash');
-  if (source === 'melee' && light && !e.elite) {
+  if (crit && weapon) {
+    if (s.critHaste) { if (p.dodgeCharges < s.dodgeCharges) p.dodgeTimer += 0.5; for (let i = 0; i < 3; i++) p.cds[i] = max0(p.cds[i] - 0.3); }
+    if (s.uniques.denteDoBoto) wet(w, e);
+  }
+  if (weapon || source === 'spell') chargeSupremo(w, SUPREMO_NUM.perHit);
+  const light = e.kind === 'sauva' || e.kind === 'cogumelo' || e.kind === 'piranha' || (e.kind === 'urutau' && e.state !== 'dash');
+  if (source === 'melee' && light && !e.elite && !e.champion) {
     e.kx = Math.cos(ang) * 170; e.ky = Math.sin(ang) * 170;
-    if (e.kind === 'sauva' && e.state !== 'stagger') { e.tele = null; setState(e, 'stagger'); }
+    if ((e.kind === 'sauva' || e.kind === 'piranha') && e.state !== 'stagger' && e.state !== 'leap') { e.tele = null; setState(e, 'stagger'); }
+  }
+  if (e.kind === 'iara' && e.state !== 'downed') {
+    const P = ENEMY.iara.posture;
+    e.posture = Math.min(P.max, e.posture + (source === 'spell' ? P.spell : source === 'melee' || source === 'arrow' ? P.hit : 0));
   }
   if (e.kind === 'curupira') {
     const P = C.posture;
@@ -148,12 +198,18 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     }
   }
   if ((source === 'melee' || source === 'arrow') && s.lifesteal > 0) healPlayer(w, dmg * s.lifesteal, true);
-  if ((source === 'melee' || source === 'arrow') && s.uniques.mandibulaDaRainha && e.hp > 0 && rand(w) < PLAYER.mandibulaChance) { e.poisonT = 3; e.poisonTick = 0.5; }
+  if ((source === 'melee' || source === 'arrow') && e.hp > 0) {
+    if (s.onHitPoison || (s.uniques.mandibulaDaRainha && rand(w) < PLAYER.mandibulaChance)) { e.poisonT = 3 * s.durationMult; e.poisonTick = Math.min(e.poisonTick > 0 ? e.poisonTick : 0.5, 0.5); }
+    if (s.uniques.ferraoDeArraia && !isBoss(e) && rand(w) < 0.15) { e.rootT = Math.max(e.rootT, 1); e.tele = null; }
+  }
 
   emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id });
   if (e.hp <= 0) {
     e.tele = null;
     w.kills++;
+    if (s.manaOnKill) p.mana = Math.min(s.maxMana, p.mana + s.manaOnKill);
+    if (s.manaOnElite && (e.elite || isBoss(e))) p.mana = s.maxMana;
+    if (s.onKillExplode && source !== 'blast') w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 105 * s.spellArea, t: 0, dur: 0.14, tick: 0, power: Math.max(e.maxHp * 0.3, s.weaponDamage * s.damageMult * 1.2) });
     if (s.talents.sedeDeBriga) { p.stacks = Math.min(PLAYER.sedeDeBriga.max, p.stacks + 1); p.stackT = PLAYER.sedeDeBriga.duration; emit(w, { type: 'stack', x: p.x, y: p.y, value: p.stacks }); }
     if (e.mods.includes('explosivo')) {
       addHazard(w, { kind: 'blast', tele: { shape: 'circle', x: e.x, y: e.y, r: MOD.explosivo.radius, t: 0, dur: MOD.explosivo.delay }, damage: MOD.explosivo.damage * e.dmg, slow: 0 });
@@ -180,7 +236,7 @@ export function attackSpeed(w: World): number {
 }
 
 export interface HurtOpts {
-  src?: Enemy | null; unblockable?: boolean; melee?: boolean; nature?: boolean;
+  src?: Enemy | null; unblockable?: boolean; melee?: boolean; nature?: boolean; water?: boolean;
   /** Dano contínuo (nuvem de esporos): ignora a invulnerabilidade de quem acabou de apanhar e não interrompe o herói. */
   soft?: boolean;
 }
@@ -190,24 +246,29 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   const p = w.player, s = w.stats, src = o.src ?? null;
   if (p.state === 'dead' || w.phase === 'won' || w.phase === 'lost') return false;
   if (p.iframes > 0) {
-    if (p.state === 'dodge' && p.stateT <= PLAYER.perfectWindow && !p.perfectUsed) {
+    if (p.state === 'dodge' && p.stateT <= s.perfectWindow && !p.perfectUsed) {
       p.perfectUsed = true; p.perfectT = PLAYER.perfectDuration;
       p.dodgeCharges = Math.min(s.dodgeCharges, p.dodgeCharges + 1); p.dodgeTimer = 0;
       if (s.uniques.presaDaCaipora) p.presaT = PLAYER.presa.duration;
-      if (src && src.kind === 'curupira' && src.state !== 'downed') src.posture = Math.min(ENEMY.curupira.posture.max, src.posture + ENEMY.curupira.posture.perfect);
+      if (src && (src.kind === 'curupira' || src.kind === 'iara') && src.state !== 'downed') src.posture = Math.min(ENEMY[src.kind].posture.max, src.posture + ENEMY[src.kind].posture.perfect);
       w.perfects++;
       emit(w, { type: 'perfect', x: p.x, y: p.y });
     }
     return false;
   }
   if (p.hurtInv > 0 && !o.soft) return false;
+  if (p.shield && !o.soft) {
+    p.shield = false; p.hurtInv = PLAYER.hurtInvuln;
+    emit(w, { type: 'shield', x: p.x, y: p.y });
+    return false;
+  }
 
   let dmg = base * w.taken;
   if (p.state === 'block' && !o.unblockable) {
     if (p.blockT <= PLAYER.shield.parryWindow) {
       if (src) {
-        if (src.kind === 'curupira') { if (src.state !== 'downed') src.posture = Math.min(ENEMY.curupira.posture.max, src.posture + ENEMY.curupira.posture.parry); }
-        else if (o.melee && src.kind !== 'caipora') src.stunT = PLAYER.shield.parryStun;
+        if (src.kind === 'curupira' || src.kind === 'iara') { if (src.state !== 'downed') src.posture = Math.min(ENEMY[src.kind].posture.max, src.posture + ENEMY[src.kind].posture.parry); }
+        else if (o.melee && !isBoss(src)) src.stunT = PLAYER.shield.parryStun;
       }
       if (s.talents.contragolpe) p.contraT = 4;
       p.hurtInv = 0.25;
@@ -217,8 +278,9 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
     dmg *= 1 - PLAYER.shield.blockReduce;
     emit(w, { type: 'block', x: p.x, y: p.y });
   }
-  dmg *= 1 - damageReduction(s.defense, w.cfg.level);
-  if (o.nature) dmg *= 1 - s.resNatureza;
+  dmg *= (1 - damageReduction(s.defense, w.cfg.level)) * s.damageTaken;
+  if (o.nature) dmg *= 1 - s.res.natureza;
+  if (o.water) dmg *= 1 - s.res.agua;
   if (p.cascaT > 0) {
     if (src && src.hp > 0) damageEnemy(w, src, dmg * 0.5, 'reflect', 0);
     dmg *= 1 - 0.45;
@@ -232,7 +294,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
     return true;
   }
   p.hp -= dmg;
-  if (!o.soft) { p.hurtInv = PLAYER.hurtInvuln; w.hitsTaken++; }
+  if (!o.soft) { p.hurtInv = PLAYER.hurtInvuln; w.hitsTaken++; chargeSupremo(w, SUPREMO_NUM.perHurt); }
   if (src && src.mods.includes('vampirico') && src.hp > 0) src.hp = Math.min(src.maxHp, src.hp + src.maxHp * MOD.vampirico.heal);
   const dx = p.x - fromX, dy = p.y - fromY, d = Math.hypot(dx, dy) || 1;
   p.kx = (dx / d) * knock; p.ky = (dy / d) * knock;

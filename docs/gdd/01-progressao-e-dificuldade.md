@@ -26,22 +26,26 @@ xpNecessario(L) = arredonda( (0,45 + 0,085 × L^1,2) × (20 + 12 × L) )
 
 ## Nível da fase
 
-As 96 fases sobem de nível em linha reta, do 1 ao 60:
+As 96 fases vão do nível 1 ao 60. O começo sobe rápido, um nível por fase, e depois a subida fica mais lenta:
 
 ```
-nivelDaFase(i) = 1 + arredonda( i × 59 / 95 )      (i = 0 para a fase 1-1, 95 para a 8-12)
+nivelDaFase(i) = 1 + i                              para i de 0 a 11   (Capítulo 1)
+               = 13 + arredonda( (i − 12) × 10/11 ) para i de 12 a 23  (Capítulo 2)
+               = 24 + arredonda( (i − 24) × 36/71 ) para i de 24 a 95  (Capítulos 3 a 8)
 ```
+
+A versão anterior subia em linha reta (`1 + arredonda(i × 59/95)`). Com ela, quem jogava cada fase uma vez chegava ao fim do Capítulo 1 três níveis acima das fases, e não havia parede. Com a regra atual, quem não repete nada chega ao fim do Capítulo 1 no nível das fases e ao fim do Capítulo 2 três níveis abaixo.
 
 | Capítulo | Nível das fases |
 |---|---|
-| 1 · Mata Atlântica | 1 a 8 |
-| 2 · Rios do Norte | 8 a 15 |
-| 3 · Sertão | 16 a 23 |
-| 4 · Cerrado em chamas | 23 a 30 |
-| 5 · Selva Profunda | 31 a 38 |
-| 6 · Pampa de lua cheia | 38 a 45 |
-| 7 · Pantanal da Cuca | 46 a 53 |
-| 8 · Terra Sem Nome | 53 a 60 |
+| 1 · Mata Atlântica | 1 a 12 |
+| 2 · Rios do Norte | 13 a 23 |
+| 3 · Sertão | 24 a 30 |
+| 4 · Cerrado em chamas | 30 a 36 |
+| 5 · Selva Profunda | 36 a 42 |
+| 6 · Pampa de lua cheia | 42 a 48 |
+| 7 · Pantanal da Cuca | 48 a 54 |
+| 8 · Terra Sem Nome | 54 a 60 |
 
 ## Recompensa de uma fase
 
@@ -92,20 +96,22 @@ Estar abaixo pesa muito. Estar acima ajuda pouco: sobrar nível não substitui d
 
 ### 2. A curva de XP
 
-Jogando cada fase uma única vez, o XP não acompanha o nível das fases a partir do Capítulo 4. Simulação com os valores acima, exigindo no máximo 1 nível abaixo da fase:
+Jogando cada fase uma única vez, o XP acompanha as fases só no Capítulo 1. Simulação com os valores acima e a regra atual de nível das fases, repetindo a fase que mais rende até ficar no máximo 1 nível abaixo da próxima:
 
-| Capítulo | Nível ao terminar, sem repetir fases | Repetições necessárias | Horas no capítulo |
+| Capítulo | Nível ao terminar | Fases vão até | Repetições só por XP |
 |---|---:|---:|---:|
-| 1 | 11 (fases vão até 8) | 0 | 1,3 |
-| 2 | 18 (fases vão até 15) | 0 | 1,3 |
-| 3 | 23 (fases vão até 23) | 0 | 1,3 |
-| 4 | 28 (fases vão até 30) | 11 | 2,1 |
-| 5 | 33 (fases vão até 38) | 27 | 3,3 |
-| 6 | 37 (fases vão até 45) | 33 | 3,8 |
-| 7 | 42 (fases vão até 53) | 53 | 5,3 |
-| 8 | 45 (fases vão até 60) | 57 | 5,6 |
+| 1 | 14 | 12 | 0 |
+| 2 | 22 | 23 | 6 |
+| 3 | 29 | 30 | 6 |
+| 4 | 35 | 36 | 8 |
+| 5 | 41 | 42 | 11 |
+| 6 | 47 | 48 | 15 |
+| 7 | 53 | 54 | 19 |
+| 8 | 59 | 60 | 23 |
 
-Total: cerca de 24 horas de combate, mais forja, menus e tentativas em chefões. **Meta: 30 a 35 horas até os créditos.**
+Isso é o piso. Na prática repete-se mais, porque estar no nível não basta: as três últimas fases de cada capítulo são calibradas para o personagem de referência (itens Incomuns do nível, levemente aprimorados) vencer cerca de metade das tentativas, então o jogador também volta atrás por ouro e resina para o ferreiro e por tentativas no item com nome. A tabela de horas da versão anterior deste documento valia para a regra antiga e precisa ser refeita quando os capítulos 3 a 8 existirem.
+
+**Meta: 30 a 35 horas até os créditos**, a conferir com a simulação refeita.
 
 Torre, missões diárias e desafios também dão XP e reduzem as repetições em cerca de um quarto. Repetir não precisa ser sempre a mesma fase.
 

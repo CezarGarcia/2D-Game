@@ -3,22 +3,22 @@
  * (subir de nível, distribuir pontos, equipar, forjar). As funções alteram o perfil recebido;
  * quem chama decide quando salvar.
  */
-import { MAX_POTIONS, SPELLS, SPELL_ORDER, type CompanionId, type SpellId } from '../data/content';
+import { MAX_POTIONS, MAX_SPELL_LEVEL, SPELLS, SPELL_ORDER, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import {
-  ITEM_TYPES, MAX_RARITY, RARITIES, makeItem, rollAffix, sellValue, type Item, type ItemType, type Slot, SLOTS,
+  AFFIXES, ITEM_TYPES, MAX_RARITY, RARITIES, makeItem, rollAffix, sellValue, type Item, type ItemType, type Slot, SLOTS,
 } from '../data/items';
 import { MAX_LEVEL_CAMPAIGN, xpNeeded } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
-import { canAddTalent, canRemoveTalent, talentSpent, type TalentRanks } from '../data/talents';
+import { canAddTalent, canRemoveTalent, talentSpent, talentsConnected, type TalentRanks } from '../data/talents';
 
 export type AttrKey = 'forca' | 'agilidade' | 'inteligencia' | 'vitalidade' | 'espirito' | 'sorte';
-export const ATTRS: { key: AttrKey; label: string; desc: string }[] = [
-  { key: 'forca', label: 'Força', desc: '+1,2% de dano com facão por ponto' },
-  { key: 'agilidade', label: 'Agilidade', desc: '+1,2% de dano com arco, +0,4% de velocidade de ataque e +0,15% de crítico por ponto' },
-  { key: 'inteligencia', label: 'Inteligência', desc: '+1,2% de dano de feitiço por ponto' },
-  { key: 'vitalidade', label: 'Vitalidade', desc: '+12 de vida e +0,2 de defesa por ponto' },
-  { key: 'espirito', label: 'Espírito', desc: '+3 de mana e −0,5% na recarga de feitiços por ponto (limite de 40%)' },
-  { key: 'sorte', label: 'Sorte', desc: 'Mais chance de raridade alta nos baús e +0,2% de ouro por ponto' },
+export const ATTRS: { key: AttrKey; label: string; desc: string; perPoint: string }[] = [
+  { key: 'forca', label: 'Força', desc: 'Faz o facão bater mais forte.', perPoint: '+1,2% de dano com facão' },
+  { key: 'agilidade', label: 'Agilidade', desc: 'Faz o arco bater mais forte, os golpes saírem mais rápido e os críticos acontecerem mais.', perPoint: '+1,2% de dano com arco, +0,4% de velocidade de ataque, +0,15% de crítico' },
+  { key: 'inteligencia', label: 'Inteligência', desc: 'Faz os feitiços causarem mais dano e curarem mais.', perPoint: '+1,2% de poder dos feitiços' },
+  { key: 'vitalidade', label: 'Vitalidade', desc: 'Dá mais vida e um pouco de defesa. É o que te mantém de pé.', perPoint: '+12 de vida, +0,2 de defesa' },
+  { key: 'espirito', label: 'Espírito', desc: 'Dá mais mana para lançar feitiços e faz eles recarregarem mais rápido.', perPoint: '+3 de mana, feitiços 0,5% mais rápidos' },
+  { key: 'sorte', label: 'Sorte', desc: 'Faz os baús darem itens mais raros e rende mais ouro.', perPoint: '+0,3% de chance de raridade maior, +0,2% de ouro' },
 ];
 export const ATTR_BASE = 5;
 export const ATTR_PER_LEVEL = 3;
@@ -35,8 +35,15 @@ export interface StageRecord {
   clears: number;
 }
 
-export interface Materials { mata: number; po: number; lagrima: number }
-export const MATERIAL_LABEL: Record<keyof Materials, string> = { mata: 'Resina da Mata', po: 'Pó de Assombro', lagrima: 'Lágrima de Encantado' };
+export interface Materials { mata: number; po: number; lagrima: number; tomo: number }
+export const MATERIAL_LABEL: Record<keyof Materials, string> = { mata: 'Resina', po: 'Pó de Assombro', lagrima: 'Lágrima de Encantado', tomo: 'Tomo' };
+/** Para que serve cada material, em uma linha. */
+export const MATERIAL_USE: Record<keyof Materials, string> = {
+  mata: 'Aprimora e reforja itens. Vem das fases e de desmontar itens.',
+  po: 'Encanta itens: troca um bônus por outro. Vem de desmontar itens raros.',
+  lagrima: 'Funde itens até Mítico. Só os chefões dão.',
+  tomo: 'Sobe o nível dos feitiços. Vem de elites e chefões.',
+};
 
 export interface Profile {
   version: 1;
@@ -51,6 +58,11 @@ export interface Profile {
   equipped: Partial<Record<Slot, Item>>;
   materials: Materials;
   loadout: (SpellId | null)[];
+  /** Nível de cada feitiço (1 se não estiver aqui). */
+  spellLevels: Partial<Record<SpellId, number>>;
+  /** Encantados libertados, que podem ser chamados como Supremo. */
+  supremos: ElementId[];
+  supremo: ElementId | null;
   companions: Partial<Record<CompanionId, { level: number }>>;
   companion: CompanionId | null;
   potions: number;
@@ -70,8 +82,9 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     attrs: { forca: 0, agilidade: 0, inteligencia: 0, vitalidade: 0, espirito: 0, sorte: 0 }, attrPoints: 0,
     talents: {}, talentPoints: 0,
     inventory: [], equipped: {},
-    materials: { mata: 0, po: 0, lagrima: 0 },
+    materials: { mata: 0, po: 0, lagrima: 0, tomo: 0 },
     loadout: ['dardo', null, null],
+    spellLevels: {}, supremos: [], supremo: null,
     companions: {}, companion: null, potions: MAX_POTIONS,
     stages: {}, starChests: 0, curupiraFreed: false,
     nextItemId: 1, seed,
@@ -90,10 +103,25 @@ export function loadProfile(): Profile {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Profile;
-      if (p && p.version === 1 && typeof p.level === 'number') return { ...newProfile(p.seed), ...p };
+      if (p && p.version === 1 && typeof p.level === 'number') return migrate(p);
     }
   } catch { /* sem armazenamento ou save corrompido: começa do zero */ }
   return newProfile();
+}
+
+/** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
+export function migrate(saved: Profile): Profile {
+  const base = newProfile(saved.seed);
+  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials } };
+  if (!talentsConnected(p.talents)) p.talents = {};
+  if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];
+  if (!p.supremo && p.supremos.length) p.supremo = p.supremos[0];
+  p.potions = maxPotions(p);
+  return p;
+}
+
+export function maxPotions(p: Profile): number {
+  return MAX_POTIONS + (p.talents.cantilCheio ? 1 : 0);
 }
 
 export function saveProfile(p: Profile): boolean {
@@ -257,7 +285,7 @@ export function sellItem(p: Profile, id: number): number {
 }
 
 export function dismantleYield(item: Item): Materials {
-  return { mata: 1 + item.rarity + Math.floor(item.ilvl / 4) + Math.floor(item.plus / 2), po: item.rarity, lagrima: 0 };
+  return { mata: 1 + item.rarity + Math.floor(item.ilvl / 4) + Math.floor(item.plus / 2), po: item.rarity, lagrima: 0, tomo: 0 };
 }
 
 export function dismantleItem(p: Profile, id: number): Materials | null {
@@ -278,11 +306,16 @@ export function toggleLock(p: Profile, id: number): boolean {
 
 /* ---------- ferreiro ---------- */
 
+/** Multiplicador do custo em ouro do ferreiro (talento Pechincha). */
+export function forgeDiscount(p: Profile): number {
+  return 1 - 0.04 * (p.talents.pechincha || 0);
+}
+
 export interface UpgradeInfo { possible: boolean; reason?: string; gold: number; mata: number; chance: number }
 
 export function upgradeInfo(p: Profile, item: Item): UpgradeInfo {
   const max = RARITIES[item.rarity].maxPlus;
-  const gold = 20 + 12 * item.ilvl * (item.plus + 1), mata = 2 + item.plus;
+  const gold = Math.round((20 + 12 * item.ilvl * (item.plus + 1)) * forgeDiscount(p)), mata = 2 + item.plus;
   const base = item.plus < 5 ? 1 : Math.max(0.3, 1 - (item.plus - 4) * 0.07);
   const chance = Math.min(1, base + (item.pity ?? 0) / 100);
   if (item.plus >= max) return { possible: false, reason: `${RARITIES[item.rarity].label} vai só até +${max}. Suba a raridade para continuar.`, gold, mata, chance };
@@ -313,7 +346,7 @@ export function fuseInfo(p: Profile, mainId: number, fodderIds: number[]): FuseI
   if (!main) return { ...none, reason: 'Escolha o item principal.' };
   const m = main.item;
   if (m.rarity >= MAX_RARITY) return { ...none, reason: 'Já está na raridade máxima.' };
-  const gold = Math.round(40 * (m.rarity + 1) * (1 + m.ilvl * 0.25)), chance = FUSE_CHANCE[m.rarity], lagrima = m.rarity + 1 === MAX_RARITY ? 1 : 0;
+  const gold = Math.round(40 * (m.rarity + 1) * (1 + m.ilvl * 0.25) * forgeDiscount(p)), chance = FUSE_CHANCE[m.rarity], lagrima = m.rarity + 1 === MAX_RARITY ? 1 : 0;
   const info: FuseInfo = { possible: false, gold, chance, lagrima };
   if (m.unique) return { ...info, reason: 'Itens com nome não podem ser fundidos.' };
   if (fodderIds.length !== 2 || fodderIds[0] === fodderIds[1] || fodderIds.includes(mainId)) return { ...info, reason: 'Escolha 2 outros itens para consumir.' };
@@ -345,6 +378,113 @@ export function fuseItems(p: Profile, mainId: number, fodderIds: number[], rng: 
   return { done: true, success: false };
 }
 
+/** Itens da mochila que servem de consumo para fundir o item principal. */
+export function fuseCandidates(p: Profile, mainId: number): Item[] {
+  const f = findItem(p, mainId);
+  if (!f) return [];
+  const m = f.item;
+  return p.inventory.filter((i) => i.id !== mainId && !i.locked && i.rarity === m.rarity && ITEM_TYPES[i.type].group === ITEM_TYPES[m.type].group);
+}
+
+/** Todos os itens do herói: equipados primeiro, depois a mochila. */
+export function allItems(p: Profile): Item[] {
+  const eq = SLOTS.map((s) => p.equipped[s]).filter((i): i is Item => !!i);
+  return [...eq, ...p.inventory];
+}
+
+/* ---------- encantar: troca um bônus por outro ---------- */
+
+export interface EnchantInfo { possible: boolean; reason?: string; gold: number; po: number }
+
+export function enchantInfo(p: Profile, item: Item): EnchantInfo {
+  const n = item.enchants ?? 0;
+  const gold = Math.round((30 + 10 * item.ilvl) * (1 + n * 0.5) * forgeDiscount(p)), po = Math.min(64, 2 ** n);
+  if (!item.affixes.length) return { possible: false, reason: 'Este item não tem bônus para trocar.', gold, po };
+  if (p.gold < gold) return { possible: false, reason: 'Falta ouro.', gold, po };
+  if (p.materials.po < po) return { possible: false, reason: `Falta ${MATERIAL_LABEL.po}.`, gold, po };
+  return { possible: true, gold, po };
+}
+
+/** Sorteia de novo o bônus de posição `index`. Os outros ficam como estão. */
+export function enchantItem(p: Profile, id: number, index: number, rng: Rng = profileRng(p)): { done: boolean; reason?: string } {
+  const f = findItem(p, id);
+  if (!f) return { done: false, reason: 'Item não encontrado.' };
+  const info = enchantInfo(p, f.item);
+  if (!info.possible) return { done: false, reason: info.reason };
+  if (!f.item.affixes[index]) return { done: false, reason: 'Escolha o bônus a trocar.' };
+  p.gold -= info.gold; p.materials.po -= info.po;
+  f.item.affixes[index] = rollAffix(rng, f.item.ilvl, f.item.affixes.map((a) => a.k));
+  f.item.enchants = (f.item.enchants ?? 0) + 1;
+  return { done: true };
+}
+
+/* ---------- reforjar: traz o item para o seu nível ---------- */
+
+export interface ReforgeInfo { possible: boolean; reason?: string; gold: number; mata: number; toLevel: number }
+
+export function reforgeInfo(p: Profile, item: Item): ReforgeInfo {
+  const gain = p.level - item.ilvl;
+  const gold = Math.round(25 * Math.max(0, gain) * (1 + item.rarity * 0.5) * forgeDiscount(p)), mata = 3 * Math.max(0, gain);
+  const base = { gold, mata, toLevel: p.level };
+  if (gain <= 0) return { ...base, possible: false, reason: 'O item já está no seu nível.' };
+  if (p.gold < gold) return { ...base, possible: false, reason: 'Falta ouro.' };
+  if (p.materials.mata < mata) return { ...base, possible: false, reason: `Falta ${MATERIAL_LABEL.mata}.` };
+  return { ...base, possible: true };
+}
+
+/** Uma cópia do item como ele ficaria no nível dado: valor base e bônus que dependem de nível sobem juntos. */
+export function reforgedPreview(item: Item, level: number): Item {
+  const affixes = item.affixes.map((a) => {
+    const d = AFFIXES[a.k], was = d.max(item.ilvl), now = d.max(level);
+    return { k: a.k, v: now > was ? Math.max(a.v, Math.round((a.v * now) / was)) : a.v };
+  });
+  return { ...item, ilvl: level, affixes };
+}
+
+export function reforgeItem(p: Profile, id: number): { done: boolean; reason?: string } {
+  const f = findItem(p, id);
+  if (!f) return { done: false, reason: 'Item não encontrado.' };
+  const info = reforgeInfo(p, f.item);
+  if (!info.possible) return { done: false, reason: info.reason };
+  p.gold -= info.gold; p.materials.mata -= info.mata;
+  const next = reforgedPreview(f.item, info.toLevel);
+  f.item.ilvl = next.ilvl; f.item.affixes = next.affixes;
+  return { done: true };
+}
+
+/* ---------- nível dos feitiços e Supremo ---------- */
+
+export function spellLevel(p: Profile, id: SpellId): number {
+  return Math.max(1, Math.min(MAX_SPELL_LEVEL, p.spellLevels[id] ?? 1));
+}
+
+export interface SpellUpgradeInfo { possible: boolean; reason?: string; gold: number; tomos: number }
+
+export function spellUpgradeInfo(p: Profile, id: SpellId): SpellUpgradeInfo {
+  const lv = spellLevel(p, id);
+  const tomos = Math.max(1, lv - (p.talents.estudioso ? 1 : 0)), gold = 40 * lv;
+  const base = { gold, tomos };
+  if (!knownSpells(p).includes(id)) return { ...base, possible: false, reason: `Aprende no nível ${SPELLS[id].unlock}.` };
+  if (lv >= MAX_SPELL_LEVEL) return { ...base, possible: false, reason: 'Nível máximo.' };
+  if (p.materials.tomo < tomos) return { ...base, possible: false, reason: `Faltam tomos.` };
+  if (p.gold < gold) return { ...base, possible: false, reason: 'Falta ouro.' };
+  return { ...base, possible: true };
+}
+
+export function upgradeSpell(p: Profile, id: SpellId): boolean {
+  const info = spellUpgradeInfo(p, id);
+  if (!info.possible) return false;
+  p.gold -= info.gold; p.materials.tomo -= info.tomos;
+  p.spellLevels[id] = spellLevel(p, id) + 1;
+  return true;
+}
+
+export function setSupremo(p: Profile, el: ElementId | null): boolean {
+  if (el && !p.supremos.includes(el)) return false;
+  p.supremo = el;
+  return true;
+}
+
 export function refillPotions(p: Profile): void {
-  p.potions = MAX_POTIONS;
+  p.potions = maxPotions(p);
 }

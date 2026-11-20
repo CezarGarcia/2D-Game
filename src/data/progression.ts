@@ -14,7 +14,10 @@ export function xpNeeded(level: number): number {
 
 /** Nível dos monstros da fase de índice `i` (0 = fase 1-1, 95 = fase 8-12). */
 export function stageLevel(i: number): number {
-  return 1 + Math.round((i * 59) / 95);
+  /* O começo sobe rápido: um nível por fase no Capítulo 1 e quase isso no 2. Depois a subida fica mais lenta. */
+  if (i < 12) return 1 + i;
+  if (i < 24) return 13 + Math.round(((i - 12) * 10) / 11);
+  return 24 + Math.round(((i - 24) * 36) / 71);
 }
 
 export function stageXp(level: number): number {

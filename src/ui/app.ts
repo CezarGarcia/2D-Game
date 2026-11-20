@@ -1,30 +1,31 @@
 /**
  * Telas de menu do jogo: acampamento (mapa, herói, ferreiro, talentos, feitiços, companheiros) e
- * resultado da fase. É HTML por cima do canvas. Nenhuma regra mora aqui: as telas leem o perfil,
- * chamam as funções de src/meta e pedem para salvar.
+ * resultado da fase. É HTML por cima do canvas, num palco de 1280×720 que amplia junto com o jogo.
+ * Nenhuma regra mora aqui: as telas leem o perfil, chamam as funções de src/meta e pedem para salvar.
  */
 import './ui.css';
+import { COMPANION_ORDER } from '../data/content';
 import { xpNeeded } from '../data/progression';
-import { MATERIAL_LABEL, talentFree, type Materials } from '../meta/profile';
+import { ATTR_PER_LEVEL, MATERIAL_LABEL, MATERIAL_USE, knownSpells, talentFree, type Materials } from '../meta/profile';
 import { isForgeUnlocked, type StageRewards } from '../meta/rewards';
 import { deriveStats, powerOf } from '../meta/stats';
 import { renderCompanheiros } from './companheiros';
-import { newState, type Ctx } from './ctx';
-import { btn, h, icon, num } from './dom';
+import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen, type ConfirmSpec, type Ctx } from './ctx';
+import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
-import { closeFerreiro, renderFerreiro } from './ferreiro';
-import { closeHeroi, renderHeroi } from './heroi';
+import { renderFerreiro } from './ferreiro';
+import { renderHeroi, renderItemMenu } from './heroi';
 import type { CampTab, UiController, UiHost } from './host';
-import { lockIcon } from './itens';
 import { defaultStage, renderMapa } from './mapa';
 import { renderResultado } from './resultado';
-import { closeTalentos, renderTalentos } from './talentos';
+import { renderTalentos } from './talentos';
+import { mountTips, tip } from './tip';
 
 const TABS: { id: CampTab; label: string }[] = [
   { id: 'mapa', label: 'Mapa' }, { id: 'heroi', label: 'Herói' }, { id: 'ferreiro', label: 'Ferreiro' },
   { id: 'talentos', label: 'Talentos' }, { id: 'feiticos', label: 'Feitiços' }, { id: 'companheiros', label: 'Companheiros' },
 ];
-const MAT_ICON: Record<keyof Materials, string> = { mata: 'material', po: 'po', lagrima: 'lagrima' };
+const TOAST_MS = 2200;
 
 type Draw = (g: CanvasRenderingContext2D, t: number) => void;
 
@@ -35,8 +36,25 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   let st = newState();
   let mode: 'camp' | 'results' = 'camp';
   let results: { stageId: string; rewards: StageRewards } | null = null;
+  let scale = 1;
+  let shownTab: string | null = null;
 
-  /* ---------- canvas animados (retrato do herói, companheiros) ---------- */
+  /* ---------- palco de tamanho fixo, ampliado para caber na janela (igual ao canvas do jogo) ---------- */
+  const view = h('div', 'enc-view');
+  const stage = h('div', 'enc-stage', view);
+  const tips = mountTips(stage, VIEW_W, VIEW_H, () => scale);
+  stage.appendChild(tips.el);
+  root.replaceChildren(stage);
+
+  const layout = () => {
+    const w = window.innerWidth || VIEW_W, hgt = window.innerHeight || VIEW_H;
+    scale = Math.max(0.1, Math.min(w / VIEW_W, hgt / VIEW_H));
+    stage.style.transform = `translate(${Math.round((w - VIEW_W * scale) / 2)}px,${Math.round((hgt - VIEW_H * scale) / 2)}px) scale(${scale})`;
+  };
+  layout();
+  window.addEventListener('resize', layout);
+
+  /* ---------- canvas animados (herói, bigorna, companheiros) ---------- */
   const anims = new Map<HTMLCanvasElement, Draw>();
   const still = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
   let raf = 0;
@@ -57,51 +75,111 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     get p() { return host.getProfile(); },
     get st() { return st; },
     set st(v) { st = v; },
-    redraw: (focus?: string) => render(focus),
-    commit: () => { host.save(); render(); },
+    redraw: (focus) => render(focus),
+    commit: (focus) => { host.save(); render(focus); },
     go: (tab) => showCamp(tab),
     animate: (cv, draw) => {
       anims.set(cv, draw);
       paint(cv, draw, performance.now() / 1000);
       if (!still && !raf) raf = requestAnimationFrame(tick);
     },
+    toast: (text, tone = 'ok') => {
+      st.toast = { text, tone, at: performance.now() };
+      view.querySelector('.toast-layer')?.replaceChildren(...toastNodes());
+    },
+    confirm: (spec) => { st.confirm = spec; st.options = false; st.menu = null; render('confirm-no'); },
+    point: (e) => {
+      const r = stage.getBoundingClientRect();
+      return { x: (e.clientX - r.left) / scale, y: (e.clientY - r.top) / scale };
+    },
+    scale: () => scale,
+    muteTips: (on) => tips.mute(on),
+    still,
   };
 
-  /* ---------- barra superior ---------- */
-  function topbar(): HTMLElement {
-    const p = host.getProfile(), need = xpNeeded(p.level), free = talentFree(p), forge = isForgeUnlocked(p);
-    const badge: Partial<Record<CampTab, number>> = { heroi: p.attrPoints, talentos: free };
-    const badgeLabel: Partial<Record<CampTab, string>> = { heroi: 'pontos de atributo para distribuir', talentos: 'pontos de talento livres' };
-    return h('header', 'top',
-      h('div', 'top-row',
-        h('div', 'brand', 'Encantados'),
-        h('div', 'level',
-          h('span', 'level-n', 'Nível ', h('b', 'num', p.level)),
-          h('div', { class: 'bar', role: 'img', 'aria-label': `${p.xp} de ${need} de XP para o próximo nível` }, h('i', { style: `width:${Math.min(100, (p.xp / need) * 100)}%` })),
-          h('span', 'num small muted', `${num(p.xp)}/${num(need)} XP`)),
-        h('ul', { class: 'res', 'aria-label': 'Recursos' },
-          h('li', { title: 'Ouro' }, icon('misc', 'ouro', 24), h('span', 'res-text', h('span', 'k', 'Ouro'), h('b', 'num', num(p.gold)))),
-          (Object.keys(MATERIAL_LABEL) as (keyof Materials)[]).map((k) =>
-            h('li', { title: MATERIAL_LABEL[k] }, icon('misc', MAT_ICON[k], 24), h('span', 'res-text', h('span', 'k', MATERIAL_LABEL[k]), h('b', 'num', num(p.materials[k])))))),
-        h('div', { class: 'power', title: 'Poder: resume dano e resistência do seu herói' }, h('span', 'k', 'Poder'), h('b', 'num', num(powerOf(deriveStats(p))))),
-        btn('Apagar progresso', () => { st.confirmReset = true; render('cancelar-apagar'); }, { small: true, kind: 'quiet', fk: 'apagar' })),
-      h('nav', { class: 'tabs', 'aria-label': 'Acampamento' }, TABS.map((t, i) => {
-        const n = badge[t.id] ?? 0;
-        return h('button', {
-          type: 'button', class: `tab${st.tab === t.id ? ' on' : ''}${n > 0 ? ' has-badge' : ''}`, 'aria-current': st.tab === t.id ? 'page' : null,
-          'data-fk': `tab-${t.id}`, onclick: () => showCamp(t.id),
-        },
-        h('kbd', { 'aria-hidden': 'true' }, i + 1), h('span', null, t.label),
-        n > 0 && h('span', { class: 'badge num', title: badgeLabel[t.id] }, n, h('span', 'sr', ` ${badgeLabel[t.id]}`)),
-        t.id === 'ferreiro' && !forge && h('span', { class: 'tab-lock', title: 'Abre ao vencer a fase 1-2' }, lockIcon(12), h('span', 'sr', ' (fechado)')));
+  /* ---------- HUD ---------- */
+  function hud(): HTMLElement {
+    const p = host.getProfile(), need = xpNeeded(p.level);
+    const mats = Object.keys(MATERIAL_LABEL) as (keyof Materials)[];
+    return h('header', 'hud',
+      tip(h('div', 'hud-level',
+        h('span', 'lvl-medal', p.level),
+        h('span', 'xp',
+          h('span', 'xp-bar', h('i', { style: `width:${Math.min(100, (p.xp / need) * 100)}%` })),
+          h('span', 'xp-text', `${num(p.xp)} / ${num(need)}`))),
+      () => ({
+        title: `Nível ${p.level}`, icon: ui('xp', 36),
+        rows: [
+          { icon: 'xp', text: 'Experiência', value: `${num(p.xp)} / ${num(need)}` },
+          'sep',
+          { head: 'A cada nível' },
+          { icon: 'forca', text: 'Pontos de atributo', value: `+${ATTR_PER_LEVEL}`, tone: 'ok' },
+          { icon: 'talentos', text: 'Ponto de talento', value: '+1', tone: 'ok' },
+        ],
       })),
+      tip(stat('poder', num(powerOf(deriveStats(p))), { size: 26, cls: 'hud-power' }), {
+        title: 'Poder', icon: ui('poder', 36),
+        rows: [{ text: 'Resume o dano e a resistência do herói. Compare com o poder pedido por cada fase no mapa.' }],
+      }),
+      h('div', 'hud-gap'),
+      h('div', 'hud-res',
+        tip(stat('ouro', compact(p.gold), { size: 26, cls: 'gold' }), { title: 'Ouro', color: '#f2c14e', icon: ui('ouro', 36), rows: [{ text: 'Paga o ferreiro e o nível dos feitiços. Vem das fases e de vender itens.' }, { icon: 'ouro', text: 'Você tem', value: num(p.gold) }] }),
+        mats.map((k) => tip(stat(MAT_ICON[k], compact(p.materials[k]), { size: 26 }), {
+          title: MATERIAL_LABEL[k], icon: ui(MAT_ICON[k], 36),
+          rows: [{ text: MATERIAL_USE[k] }, { icon: MAT_ICON[k], text: 'Você tem', value: num(p.materials[k]) }],
+        }))),
+      tip(h('button', {
+        type: 'button', class: `round-btn hud-gear${st.options ? ' on' : ''}`, 'aria-label': 'Opções', 'aria-expanded': String(st.options), 'data-fk': 'opcoes',
+        onclick: () => { st.options = !st.options; st.menu = null; render(st.options ? 'recomecar' : 'opcoes'); },
+      }, ui('opcoes', 28)), { title: 'Opções' }),
     );
+  }
+
+  function optionsMenu(): HTMLElement {
+    return h('div', { class: 'pop options', role: 'menu' },
+      tip(h('button', {
+        type: 'button', class: 'pop-btn danger', role: 'menuitem', 'data-fk': 'recomecar',
+        onclick: () => ctx.confirm({
+          title: 'Recomeçar o jogo?', text: 'Apaga todo o progresso.', icon: 'caveira', ok: 'Apagar tudo', danger: true,
+          run: () => { host.resetGame(); forgetSeen(); st = newState(); showCamp('mapa'); },
+        }),
+      }, ui('fechar', 30), h('span', null, 'Recomeçar')), { title: 'Recomeçar o jogo', color: '#ff7b6b', rows: [{ text: 'Apaga nível, itens, talentos e estrelas. Pede confirmação.', tone: 'dim' }] }));
+  }
+
+  /* ---------- barra de ícones ---------- */
+  function badges(): Partial<Record<CampTab, { n: number | string; why: string }>> {
+    const p = host.getProfile(), free = talentFree(p), out: Partial<Record<CampTab, { n: number | string; why: string }>> = {};
+    if (p.attrPoints > 0) out.heroi = { n: p.attrPoints, why: `${p.attrPoints} ${p.attrPoints === 1 ? 'ponto de atributo' : 'pontos de atributo'} para gastar` };
+    if (free > 0) out.talentos = { n: free, why: `${free} ${free === 1 ? 'ponto de talento' : 'pontos de talento'} para gastar` };
+    const spells = unseen('feiticos', knownSpells(p)).length + unseen('supremos', p.supremos).length;
+    if (spells > 0) out.feiticos = { n: '!', why: spells === 1 ? 'Feitiço novo' : 'Feitiços novos' };
+    if (unseen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id])).length > 0) out.companheiros = { n: '!', why: 'Companheiro novo' };
+    return out;
+  }
+
+  function dock(): HTMLElement {
+    const p = host.getProfile(), forge = isForgeUnlocked(p), bd = badges();
+    return h('nav', { class: 'dock', 'aria-label': 'Acampamento' }, TABS.map((t, i) => {
+      const b = bd[t.id], locked = t.id === 'ferreiro' && !forge, on = st.tab === t.id;
+      return tip(h('button', {
+        type: 'button', class: `dock-btn${on ? ' on' : ''}${locked ? ' locked' : ''}`, 'aria-current': on ? 'page' : null,
+        'aria-label': t.label + (b ? `, ${b.why}` : ''), 'data-fk': `tab-${t.id}`, onclick: () => showCamp(t.id),
+      },
+      h('span', 'dock-ico', ui(t.id, 46)),
+      h('span', 'dock-label', t.label),
+      b && !on && h('span', 'dock-badge', b.n),
+      locked && h('span', 'dock-lock', ui('cadeado', 22))),
+      () => ({
+        title: t.label, tag: `Tecla ${i + 1}`,
+        rows: [b ? { icon: 'novo', text: b.why, tone: 'gold' } : null, locked ? { icon: 'cadeado', text: 'Abre ao vencer a fase 1-2', tone: 'bad' } : null],
+      }));
+    }));
   }
 
   function tabContent(): HTMLElement {
     switch (st.tab) {
       case 'heroi': return renderHeroi(ctx);
-      case 'ferreiro': return renderFerreiro(ctx, isForgeUnlocked(host.getProfile()));
+      case 'ferreiro': return renderFerreiro(ctx);
       case 'talentos': return renderTalentos(ctx);
       case 'feiticos': return renderFeiticos(ctx);
       case 'companheiros': return renderCompanheiros(ctx);
@@ -109,101 +187,127 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     }
   }
 
-  function resetDialog(): HTMLElement {
-    const cancel = () => { st.confirmReset = false; render('apagar'); };
+  /* ---------- janelinha de confirmação e avisos ---------- */
+  function confirmDialog(spec: ConfirmSpec): HTMLElement {
+    const cancel = () => { st.confirm = null; render(); };
+    const short = (spec.cost ?? []).some((cst) => cst.have < cst.amount);
     return h('div', { class: 'modal-back', onclick: (e: Event) => { if (e.target === e.currentTarget) cancel(); } },
-      h('div', { class: 'modal panel', role: 'alertdialog', 'aria-modal': 'true', 'aria-labelledby': 'enc-reset-title', 'aria-describedby': 'enc-reset-text' },
-        h('h2', { class: 'title', id: 'enc-reset-title' }, 'Apagar todo o progresso?'),
-        h('p', { id: 'enc-reset-text' }, 'Nível, itens, talentos, estrelas e companheiros serão apagados, e o jogo recomeça da fase 1-1. Não dá para desfazer.'),
-        h('div', 'actions',
-          btn('Cancelar', cancel, { fk: 'cancelar-apagar' }),
-          btn('Apagar tudo e recomeçar', () => {
-            host.resetGame();
-            st = newState();
-            showCamp('mapa');
-          }, { kind: 'danger', fk: 'confirmar-apagar' }))));
+      h('div', { class: `modal${spec.danger ? ' danger' : ''}`, role: 'alertdialog', 'aria-modal': 'true', 'aria-label': spec.title },
+        spec.icon && h('div', 'modal-ico', ui(spec.icon, 64)),
+        h('div', 'modal-title', spec.title),
+        spec.text && h('div', 'modal-text', spec.text),
+        spec.cost && h('div', 'modal-cost', spec.cost.length
+          ? spec.cost.map((cst) => stat(cst.icon, num(cst.amount), { size: 30, tone: cst.have < cst.amount ? 'bad' : '' }))
+          : h('span', 'free', 'Grátis')),
+        h('div', 'modal-actions',
+          h('button', { type: 'button', class: 'btn', 'data-fk': 'confirm-no', onclick: cancel }, 'Cancelar'),
+          h('button', {
+            type: 'button', class: `btn ${spec.danger ? 'danger' : 'primary'}`, disabled: short, 'data-fk': 'confirm-ok',
+            onclick: () => { st.confirm = null; spec.run(); render(); },
+          }, spec.ok))));
+  }
+
+  function toastNodes(): HTMLElement[] {
+    const t = st.toast;
+    if (!t) return [];
+    const age = performance.now() - t.at;
+    if (age > TOAST_MS) { st.toast = null; return []; }
+    return [h('div', { class: `toast ${t.tone}`, role: 'status', style: `animation-delay:-${Math.round(age)}ms` }, t.text)];
   }
 
   function camp(): HTMLElement {
-    return h('div', 'camp',
-      h('div', { class: 'camp-in', inert: st.confirmReset },
-        topbar(),
-        h('main', { class: `main main-${st.tab}`, tabindex: -1, 'data-fk': 'main' }, tabContent())),
-      st.confirmReset && resetDialog());
+    const enter = shownTab !== st.tab;
+    shownTab = st.tab;
+    const blocked = !!st.confirm;
+    return h('div', `camp tab-${st.tab}`,
+      h('div', { class: 'camp-in', inert: blocked },
+        hud(),
+        dock(),
+        h('main', { class: `main main-${st.tab}${enter ? ' enter' : ''}`, style: `top:${HUD_H}px` }, tabContent()),
+        st.options && h('div', { class: 'pop-back', onclick: () => { st.options = false; render('opcoes'); } }),
+        st.options && optionsMenu(),
+        st.menu && st.tab === 'heroi' && renderItemMenu(ctx),
+        h('div', { class: 'toast-layer', 'aria-live': 'polite' }, toastNodes())),
+      st.confirm && confirmDialog(st.confirm));
   }
 
-  /* ---------- redesenho, guardando foco e rolagem ---------- */
+  /* ---------- remonta a tela, guardando o foco ---------- */
   function render(focus?: string): void {
     if (root.hidden) return;
     const active = document.activeElement;
-    const had = active instanceof Element && root.contains(active);
+    const had = active instanceof Element && view.contains(active);
     const fk = focus ?? (had ? active.closest('[data-fk]')?.getAttribute('data-fk') : null);
-    const scroll = new Map<string, number>();
-    root.querySelectorAll<HTMLElement>('[data-sk]').forEach((el) => scroll.set(el.dataset.sk ?? '', el.scrollTop));
     anims.clear();
 
-    root.replaceChildren(mode === 'results' && results ? renderResultado(ctx, results.stageId, results.rewards) : camp());
+    if (mode === 'results' && results) { shownTab = null; view.replaceChildren(renderResultado(ctx, results.stageId, results.rewards)); }
+    else view.replaceChildren(camp());
+    st.forgeFx = null;
 
-    root.querySelectorAll<HTMLElement>('[data-sk]').forEach((el) => { const y = scroll.get(el.dataset.sk ?? ''); if (y) el.scrollTop = y; });
-    if (fk || had) {
-      const target = fk ? root.querySelector<HTMLElement>(`[data-fk="${fk}"]`) : null;
-      target?.focus();
-      if (!target || document.activeElement !== target) root.querySelector<HTMLElement>('[data-fk="main"], [data-fk="voltar"]')?.focus();
-    }
+    tips.quiet(true);
+    if (fk) view.querySelector<HTMLElement>(`[data-fk="${fk}"]`)?.focus({ preventScroll: true });
+    tips.quiet(false);
+    tips.refresh();
+  }
+
+  /** Ao sair de uma aba, o que era novidade nela passa a contar como visto. */
+  function seeTab(tab: CampTab): void {
+    const p = host.getProfile();
+    if (tab === 'feiticos') { markSeen('feiticos', knownSpells(p)); markSeen('supremos', p.supremos); }
+    if (tab === 'companheiros') markSeen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id]));
   }
 
   function showCamp(tab: CampTab = 'mapa'): void {
     const opening = root.hidden || mode !== 'camp';
+    if (!opening && st.tab !== tab) seeTab(st.tab);
     mode = 'camp'; results = null;
-    if (st.tab !== tab || opening) { st.armed = null; st.note = null; st.forgeResult = null; }
+    if (st.tab !== tab || opening) { st.menu = null; st.options = false; st.confirm = null; st.forgeFx = null; st.spellSel = null; }
     st.tab = tab;
-    if (tab === 'mapa' && (opening || !st.mapSel)) st.mapSel = defaultStage(host.getProfile());
+    if (tab === 'mapa' && (opening || !st.mapSel)) {
+      const def = defaultStage(host.getProfile());
+      st.mapSel = def.id; st.chapter = def.chapter;
+    }
     root.hidden = false;
-    render();
-    if (opening) root.querySelector<HTMLElement>('[data-fk="main"]')?.focus();
+    layout();
+    render(opening ? undefined : `tab-${tab}`);
   }
 
   function showResults(stageId: string, rewards: StageRewards): void {
+    if (!root.hidden && mode === 'camp') seeTab(st.tab);
     mode = 'results'; results = { stageId, rewards };
-    st.confirmReset = false;
+    st.confirm = null; st.options = false; st.menu = null;
     root.hidden = false;
-    render();
-    root.querySelector<HTMLElement>('.results-foot .btn.primary')?.focus();
+    layout();
+    render('res-principal');
   }
 
   function hide(): void {
+    if (!root.hidden && mode === 'camp') seeTab(st.tab);
     root.hidden = true;
     anims.clear();
-    root.replaceChildren();
+    tips.hide();
+    view.replaceChildren();
+    shownTab = null;
   }
 
   /* ---------- teclado ---------- */
-  function closeDetail(): string | null {
-    if (st.armed) { st.armed = null; return ''; }
-    switch (st.tab) {
-      case 'heroi': return closeHeroi(ctx);
-      case 'ferreiro': return closeFerreiro(ctx);
-      case 'talentos': return closeTalentos(ctx);
-      default: return null;
-    }
-  }
-
   document.addEventListener('keydown', (e) => {
     if (root.hidden || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
-    const t = e.target instanceof HTMLElement ? e.target : null;
-    const field = !!t && (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
     if (e.key === 'Escape') {
-      if (st.confirmReset) { st.confirmReset = false; render('apagar'); e.preventDefault(); return; }
+      if (st.confirm) { st.confirm = null; render(); e.preventDefault(); return; }
+      if (st.options) { st.options = false; render('opcoes'); e.preventDefault(); return; }
+      if (st.menu) { st.menu = null; render(); e.preventDefault(); return; }
       if (mode !== 'camp') return;
-      const back = closeDetail();
-      if (back !== null) { render(back || undefined); e.preventDefault(); }
+      if (st.tab === 'ferreiro' && st.forgeSel != null) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; render(); e.preventDefault(); return; }
+      if (st.tab === 'feiticos' && st.spellSel) { st.spellSel = null; render(); e.preventDefault(); }
       return;
     }
-    if (mode === 'camp' && !field && !st.confirmReset && e.key.length === 1 && e.key >= '1' && e.key <= '6') {
+    if (mode === 'camp' && !st.confirm && e.key.length === 1 && e.key >= '1' && e.key <= '6') {
       showCamp(TABS[Number(e.key) - 1].id);
       e.preventDefault();
     }
   });
+  /* o menu do navegador não tem lugar dentro do jogo */
+  stage.addEventListener('contextmenu', (e) => e.preventDefault());
 
   return {
     showCamp, showResults, hide,

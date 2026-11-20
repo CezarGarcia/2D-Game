@@ -1,174 +1,237 @@
-/** Aba Ferreiro: aprimorar (+1) e fundir (subir a raridade). As chances e os custos vêm prontos das regras. */
-import { STAGES } from '../data/stages';
-import { ITEM_TYPES, MAX_RARITY, RARITIES, SLOTS, affixText, baseLabel, baseValue, itemScore, type Item } from '../data/items';
-import { FUSE_CHANCE, MATERIAL_LABEL, findItem, fuseInfo, fuseItems, upgradeInfo, upgradeItem } from '../meta/profile';
-import type { Ctx } from './ctx';
-import { br, btn, h, icon, num, pct } from './dom';
-import { fullName, itemCard, itemTile } from './itens';
-import { slotName } from './heroi';
+/** Ferreiro: quatro modos em ícones, a bigorna no meio e a grade de itens que acende o que dá para trabalhar. */
+import { drawAnvil, paintForgeBackdrop } from '../art/backdrops';
+import { ITEM_TYPES, MAX_RARITY, RARITIES, affixText, baseLabel, itemScore, type Item } from '../data/items';
+import {
+  allItems, enchantInfo, enchantItem, findItem, fuseCandidates, fuseInfo, fuseItems, reforgeInfo, reforgeItem, reforgedPreview,
+  upgradeInfo, upgradeItem, type Profile,
+} from '../meta/profile';
+import { isForgeUnlocked } from '../meta/rewards';
+import { MAIN_H, MAIN_W, type CostLine, type Ctx, type ForgeMode } from './ctx';
+import { backdrop, br, h, hdCanvas, num, pct, s, stat, ui } from './dom';
+import { AFFIX_ICON, emptyTile, itemTile, itemTip, rarColor } from './itens';
+import { tip, type TipRow } from './tip';
 
-function cost(kind: string, label: string, need: number, have: number): HTMLElement {
-  return h('div', `cost${have < need ? ' short' : ''}`, icon('misc', kind, 22),
-    h('div', null, h('span', 'k', label), h('b', 'num', num(need)), h('span', 'muted num small', ` · você tem ${num(have)}`)));
-}
+const MODES: { id: ForgeMode; label: string; text: string }[] = [
+  { id: 'aprimorar', label: 'Aprimorar', text: 'Sobe o +N do item: mais dano ou defesa. Falhar não destrói.' },
+  { id: 'fundir', label: 'Fundir', text: 'Junta 3 itens da mesma raridade e espaço: o principal sobe de raridade e ganha um bônus.' },
+  { id: 'encantar', label: 'Encantar', text: 'Troca um bônus do item por outro, sorteado.' },
+  { id: 'reforjar', label: 'Reforjar', text: 'Traz um item antigo para o seu nível.' },
+];
 
-function pickSel(c: Ctx, id: number): void {
-  c.st.forgeSel = c.st.forgeSel === id ? null : id;
-  c.st.forgeFodder = []; c.st.forgeResult = null;
-  c.redraw();
-}
+interface Work { lit: boolean; can: boolean; why?: string }
 
-function picker(c: Ctx): HTMLElement {
-  const p = c.p, mode = c.st.forgeMode;
-  const worn = SLOTS.filter((sl) => p.equipped[sl]).map((sl) => ({ slot: sl, item: p.equipped[sl] as Item }));
-  const bag = p.inventory.slice().sort((a, b) => b.rarity - a.rarity || itemScore(b) - itemScore(a) || b.id - a.id);
-  const setMode = (m: 'aprimorar' | 'fundir') => () => { c.st.forgeMode = m; c.st.forgeFodder = []; c.st.forgeResult = null; c.redraw(); };
-  const rules = mode === 'aprimorar'
-    ? ['Cada + aumenta o dano ou a defesa do item; anéis, amuletos e aljavas não têm valor base.',
-      'Falhar gasta o custo, mas nunca destrói o item, e a próxima chance sobe 5 pontos.',
-      `Cada raridade tem um teto: ${RARITIES.slice(0, 5).map((r) => `${r.label} +${r.maxPlus}`).join(', ')}.`]
-    : ['Junta 3 itens da mesma raridade e do mesmo espaço: o principal sobe uma raridade e ganha um bônus novo.',
-      'Se falhar, você perde só um dos dois itens consumidos. O principal nunca se perde.',
-      `Chance por raridade de partida: ${FUSE_CHANCE.map((ch, i) => `${RARITIES[i].label} ${pct(ch)}`).join(', ')}.`];
-
-  return h('section', { class: 'panel forge-pick', 'aria-label': 'Escolha do item' },
-    h('div', { class: 'seg', role: 'group', 'aria-label': 'Modo do ferreiro' },
-      btn('Aprimorar', setMode('aprimorar'), { pressed: mode === 'aprimorar', fk: 'modo-aprimorar' }),
-      btn('Fundir', setMode('fundir'), { pressed: mode === 'fundir', fk: 'modo-fundir' })),
-    h('ul', 'rules', rules.map((r) => h('li', null, r))),
-    h('div', { class: 'panel-scroll', 'data-sk': 'forge-pick' },
-      h('h3', null, mode === 'aprimorar' ? 'Equipados' : 'Item principal: equipados'),
-      h('div', 'bag-grid', worn.map(({ slot, item }) => itemTile(item, {
-        fk: `fg-${item.id}`, selected: c.st.forgeSel === item.id, title: `${fullName(item)} · ${slotName(slot)}`, onClick: () => pickSel(c, item.id),
-      }))),
-      h('h3', null, 'Mochila'),
-      bag.length
-        ? h('div', 'bag-grid', bag.map((item) => itemTile(item, { fk: `fg-${item.id}`, selected: c.st.forgeSel === item.id, onClick: () => pickSel(c, item.id) })))
-        : h('p', 'muted', 'Mochila vazia.')),
-  );
-}
-
-interface Work { body: HTMLElement; foot: HTMLElement }
-
-function result(c: Ctx): HTMLElement {
-  const r = c.st.forgeResult;
-  return r ? h('div', { class: `result ${r.ok ? 'ok' : 'fail'}`, role: 'status' }, h('strong', null, r.title), h('span', null, r.text)) : h('div', { class: 'result-slot', role: 'status' });
-}
-
-function upgradePanel(c: Ctx, item: Item): Work {
-  const p = c.p, info = upgradeInfo(p, item), max = RARITIES[item.rarity].maxPlus, atMax = item.plus >= max;
-  const after = baseLabel({ ...item, plus: item.plus + 1 }), hasBase = baseValue(item) > 0;
-  const body = h('div', 'forge-body',
-    result(c),
-    itemCard(item, true),
-    h('div', 'steps',
-      h('div', 'step', h('span', 'k', 'Agora'), h('b', 'num big', `+${item.plus}`), hasBase && h('span', 'num', br(baseLabel(item)))),
-      h('span', { class: 'arrow', 'aria-hidden': 'true' }, '→'),
-      atMax
-        ? h('div', 'step', h('span', 'k', 'Teto da raridade'), h('b', 'num big', `+${max}`), h('span', 'muted small', 'Funda para subir a raridade'))
-        : h('div', 'step next', h('span', 'k', 'Depois'), h('b', 'num big', `+${item.plus + 1}`), hasBase && h('span', 'num', br(after))),
-      !atMax && h('div', 'step chance', h('span', 'k', 'Chance'), h('b', 'num big', pct(info.chance)),
-        h('span', 'muted small', (item.pity ?? 0) > 0 ? `inclui +${num(item.pity ?? 0)} pontos de falhas anteriores` : `teto de ${RARITIES[item.rarity].label}: +${max}`))),
-    !atMax && h('div', 'costs', cost('ouro', 'Ouro', info.gold, p.gold), cost('material', MATERIAL_LABEL.mata, info.mata, p.materials.mata)),
-  );
-  const foot = h('div', 'panel-foot forge-foot',
-    !info.possible && h('p', 'warn-text', info.reason),
-    h('div', 'actions',
-      btn(atMax ? 'No teto' : `Aprimorar para +${item.plus + 1}`, () => {
-        const r = upgradeItem(c.p, item.id), now = findItem(c.p, item.id)?.item ?? item;
-        c.st.forgeResult = !r.done ? { ok: false, title: 'Não deu para aprimorar.', text: r.reason ?? '' }
-          : r.success ? { ok: true, title: `Deu certo: ${now.name} agora é +${now.plus}.`, text: baseLabel(now) ? `Valor base: ${br(baseLabel(now))}.` : 'O aprimoramento ficou gravado no item.' }
-            : { ok: false, title: 'A forja falhou.', text: 'O item não foi destruído nem perdeu nada. O custo foi gasto e a próxima chance subiu 5 pontos.' };
-        c.commit();
-      }, { kind: 'primary', disabled: !info.possible, fk: 'aprimorar', cls: 'big' })),
-  );
-  return { body, foot };
-}
-
-function fusePanel(c: Ctx, item: Item): Work {
-  const p = c.p;
-  c.st.forgeFodder = c.st.forgeFodder.filter((id) => p.inventory.some((i) => i.id === id));
-  const fodder = c.st.forgeFodder, info = fuseInfo(p, item.id, fodder);
-  const canBeMain = !item.unique && item.rarity < MAX_RARITY;
-  const group = ITEM_TYPES[item.type].group;
-  const options = p.inventory.filter((i) => i.id !== item.id && i.rarity === item.rarity && ITEM_TYPES[i.type].group === group);
-  const next = item.rarity < MAX_RARITY ? RARITIES[item.rarity + 1] : null;
-  const toggle = (id: number) => () => {
-    c.st.forgeFodder = fodder.includes(id) ? fodder.filter((x) => x !== id) : fodder.length < 2 ? [...fodder, id] : [fodder[1], id];
-    c.st.forgeResult = null; c.redraw();
-  };
-  const body = h('div', 'forge-body',
-    result(c),
-    itemCard(item, true),
-    canBeMain && [
-      h('h3', null, `Itens para consumir: ${fodder.length} de 2 escolhidos`),
-      options.length
-        ? h('div', 'bag-grid fodder', options.map((it) => itemTile(it, {
-          fk: `fd-${it.id}`, selected: fodder.includes(it.id), disabled: !!it.locked, onClick: toggle(it.id),
-          title: it.locked ? `${fullName(it)} · travado, não pode ser consumido` : fullName(it),
-        })))
-        : h('p', 'muted', `Não há outros itens ${RARITIES[item.rarity].label} do mesmo espaço na mochila.`),
-      h('p', 'muted small', `Só aparecem itens da mochila que servem: ${RARITIES[item.rarity].label}, mesmo espaço de equipamento. Em caso de falha, o primeiro escolhido é o que se perde.`),
-    ],
-    canBeMain && next && h('div', 'steps',
-      h('div', 'step', h('span', 'k', 'Agora'), h('b', { class: 'big', style: `color:${RARITIES[item.rarity].color}` }, RARITIES[item.rarity].label), h('span', 'muted small num', `teto +${RARITIES[item.rarity].maxPlus}`)),
-      h('span', { class: 'arrow', 'aria-hidden': 'true' }, '→'),
-      h('div', 'step next', h('span', 'k', 'Depois'), h('b', { class: 'big', style: `color:${next.color}` }, next.label), h('span', 'muted small num', `teto +${next.maxPlus} · 1 bônus novo`)),
-      h('div', 'step chance', h('span', 'k', 'Chance'), h('b', 'num big', pct(info.chance)))),
-    canBeMain && h('div', 'costs',
-      cost('ouro', 'Ouro', info.gold, p.gold),
-      info.lagrima > 0 && cost('lagrima', MATERIAL_LABEL.lagrima, info.lagrima, p.materials.lagrima)),
-  );
-  const foot = h('div', 'panel-foot forge-foot',
-    !info.possible && h('p', 'warn-text', info.reason),
-    h('div', 'actions',
-      btn('Fundir', () => {
-        const before = item.affixes.length, lost = c.p.inventory.find((i) => i.id === fodder[0]);
-        const lostName = lost ? fullName(lost) : '';
-        const r = fuseItems(c.p, item.id, fodder), now = findItem(c.p, item.id)?.item ?? item;
-        c.st.forgeResult = !r.done ? { ok: false, title: 'Não deu para fundir.', text: r.reason ?? '' }
-          : r.success ? { ok: true, title: `Fusão feita: ${now.name} agora é ${RARITIES[now.rarity].label}.`, text: now.affixes.length > before ? `Bônus novo: ${affixText(now.affixes[now.affixes.length - 1])}.` : '' }
-            : { ok: false, title: 'A fusão falhou.', text: `Você perdeu só um item consumido (${lostName}). O principal e o outro ficaram com você.` };
-        c.st.forgeFodder = [];
-        c.commit();
-      }, { kind: 'primary', disabled: !info.possible, fk: 'fundir', cls: 'big' })),
-  );
-  return { body, foot };
-}
-
-export function renderFerreiro(c: Ctx, unlocked: boolean): HTMLElement {
-  if (!unlocked) {
-    const gate = STAGES.find((s) => s.id === '1-2') ?? STAGES[1];
-    return h('div', 'tab-locked',
-      h('div', 'panel locked-box',
-        h('h1', 'title', 'O ferreiro ainda não chegou'),
-        h('p', null, `Ele monta a bigorna no acampamento quando você vencer a fase ${gate.id} · ${gate.name}.`),
-        h('p', 'muted', 'Depois disso você pode aprimorar itens (+1, +2…) e fundir três itens para subir a raridade.'),
-        btn('Ver o mapa', () => c.go('mapa'), { kind: 'primary' })));
+/** O item serve para o modo atual? E dá para pagar agora? */
+function workOf(p: Profile, mode: ForgeMode, it: Item): Work {
+  if (mode === 'aprimorar') {
+    const i = upgradeInfo(p, it);
+    return { lit: it.plus < RARITIES[it.rarity].maxPlus, can: i.possible, why: i.reason };
   }
-  const found = c.st.forgeSel != null ? findItem(c.p, c.st.forgeSel) : null;
-  if (!found) c.st.forgeSel = null;
-  const mode = c.st.forgeMode;
-  const work = found ? (mode === 'aprimorar' ? upgradePanel(c, found.item) : fusePanel(c, found.item)) : null;
-  return h('div', 'tab-ferreiro',
-    picker(c),
-    h('section', { class: 'panel forge-work', 'aria-label': mode === 'aprimorar' ? 'Aprimorar' : 'Fundir' },
-      h('div', { class: 'panel-scroll', 'data-sk': 'forge-work' },
-        h('header', 'panel-head',
-          h('h2', 'title', mode === 'aprimorar' ? 'Aprimorar' : 'Fundir'),
-          found && btn('Fechar', () => c.redraw(closeFerreiro(c) || undefined), { small: true, kind: 'quiet', fk: 'fechar-forja', title: 'Esc' })),
-        work
-          ? work.body
-          : h('div', 'empty-hint',
-            h('p', null, mode === 'aprimorar' ? 'Escolha ao lado o item que você quer aprimorar.' : 'Escolha ao lado o item principal: é ele que sobe de raridade.'),
-            h('p', 'muted', 'O custo e a chance aparecem aqui antes de você confirmar.'))),
-      work && work.foot),
-  );
+  if (mode === 'fundir') {
+    if (it.unique) return { lit: false, can: false, why: 'Itens com nome não podem ser fundidos.' };
+    if (it.rarity >= MAX_RARITY) return { lit: false, can: false, why: 'Já está na raridade máxima.' };
+    const cands = fuseCandidates(p, it.id);
+    if (cands.length < 2) return { lit: true, can: false, why: `Faltam ${2 - cands.length === 1 ? '1 item' : '2 itens'} ${RARITIES[it.rarity].label} do mesmo espaço na mochila.` };
+    const i = fuseInfo(p, it.id, [cands[0].id, cands[1].id]);
+    return { lit: true, can: i.possible, why: i.reason };
+  }
+  if (mode === 'encantar') {
+    const i = enchantInfo(p, it);
+    return { lit: it.affixes.length > 0, can: i.possible, why: i.reason };
+  }
+  const i = reforgeInfo(p, it);
+  return { lit: it.ilvl < p.level, can: i.possible, why: i.reason };
 }
 
-export function closeFerreiro(c: Ctx): string | null {
-  const id = c.st.forgeSel;
-  if (id == null) return null;
-  c.st.forgeSel = null; c.st.forgeFodder = []; c.st.forgeResult = null;
-  return `fg-${id}`;
+function costs(list: (CostLine | null | false)[]): HTMLElement {
+  return h('div', 'costs', list.filter((x): x is CostLine => !!x).map((cst) =>
+    tip(stat(cst.icon, num(cst.amount), { size: 30, tone: cst.have < cst.amount ? 'bad' : '' }),
+      { title: 'Custo', rows: [{ icon: cst.icon, text: 'Precisa', value: num(cst.amount) }, { icon: cst.icon, text: 'Você tem', value: num(cst.have), tone: cst.have < cst.amount ? 'bad' : 'ok' }] })));
+}
+
+/** Medidor de chance: um anel que enche; a parte do bônus de azar aparece em outra cor. */
+function gauge(chance: number, pity: number, failText: string): HTMLElement {
+  const R = 40, C = 2 * Math.PI * R, base = Math.max(0, chance - pity / 100);
+  const color = chance >= 0.9 ? '#5fcb6a' : chance >= 0.6 ? '#f2c14e' : '#ff8a4c';
+  return tip(h('div', { class: 'gauge', style: `--gc:${color}`, tabindex: 0, 'aria-label': `Chance de sucesso: ${pct(chance)}` },
+    s('svg', { viewBox: '0 0 100 100', width: 104, height: 104, 'aria-hidden': 'true' },
+      s('circle', { class: 'g-track', cx: 50, cy: 50, r: R }),
+      s('circle', { class: 'g-pity', cx: 50, cy: 50, r: R, 'stroke-dasharray': `${C * chance} ${C}`, transform: 'rotate(-90 50 50)' }),
+      s('circle', { class: 'g-fill', cx: 50, cy: 50, r: R, 'stroke-dasharray': `${C * base} ${C}`, transform: 'rotate(-90 50 50)' })),
+    h('b', null, pct(chance))),
+  {
+    title: 'Chance de sucesso', tag: pct(chance), color,
+    rows: [
+      pity > 0 ? { icon: 'sorte', text: 'Bônus por falhas anteriores', value: `+${num(pity)}%`, tone: 'ok' } : null,
+      { text: failText, tone: 'dim' },
+    ],
+  });
+}
+
+function arrow(): HTMLElement {
+  return h('span', 'to', ui('seta', 26));
+}
+
+export function renderFerreiro(c: Ctx): HTMLElement {
+  const p = c.p, st = c.st;
+  const bg = backdrop('ferreiro', MAIN_W, MAIN_H, (g) => paintForgeBackdrop(g, MAIN_W, MAIN_H));
+  const AW = 560, AH = 250;
+  const { cv: anvil } = hdCanvas(AW, AH, 'anvil');
+  const paintAnvil = (g: CanvasRenderingContext2D, t: number) => { g.clearRect(0, 0, AW, AH); g.save(); g.translate(AW / 2, AH / 2 + 10); g.scale(1.5, 1.5); drawAnvil(g, t); g.restore(); };
+
+  if (!isForgeUnlocked(p)) {
+    const g = anvil.getContext('2d');
+    if (g) { try { paintAnvil(g, 0); } catch { /* sem bigorna, segue só o cadeado */ } }
+    return h('div', 'ferreiro locked', bg, h('div', 'forge-off', anvil),
+      tip(h('div', { class: 'big-lock', tabindex: 0 }, ui('cadeado', 96), h('span', 'plate', 'Fase 1-2')),
+        { title: 'Ferreiro trancado', color: '#ff7b6b', rows: [{ icon: 'mapa', text: 'Vença a fase 1-2 para abrir.' }] }));
+  }
+  c.animate(anvil, paintAnvil);
+
+  /* a seleção pode ter sumido (vendida, consumida) ou não valer mais para o modo */
+  const mode = st.forgeMode;
+  let main = st.forgeSel != null ? findItem(p, st.forgeSel)?.item ?? null : null;
+  if (main && !workOf(p, mode, main).lit) main = null;
+  if (!main) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; }
+  const cands = main && mode === 'fundir' ? fuseCandidates(p, main.id) : [];
+  st.forgeFodder = mode === 'fundir' ? st.forgeFodder.filter((id) => cands.some((i) => i.id === id)).slice(0, 2) : [];
+  if (main && mode === 'encantar' && (st.forgeAffix == null || !main.affixes[st.forgeAffix])) st.forgeAffix = null;
+
+  const setMode = (m: ForgeMode) => { st.forgeMode = m; st.forgeFodder = []; st.forgeAffix = null; c.redraw(`modo-${m}`); };
+  const clear = () => { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; c.redraw(); };
+
+  /* ---------- grade de itens ---------- */
+  const equippedIds = new Set(Object.values(p.equipped).map((i) => i?.id));
+  const grid = allItems(p).map((it) => {
+    const w = workOf(p, mode, it), isMain = main?.id === it.id;
+    const isCand = !!main && mode === 'fundir' && cands.some((i) => i.id === it.id), isFodder = st.forgeFodder.includes(it.id);
+    const lit = main && mode === 'fundir' ? isMain || isCand : w.lit;
+    const click = () => {
+      if (isMain) { clear(); return; }
+      if (isCand) {
+        if (isFodder) st.forgeFodder = st.forgeFodder.filter((id) => id !== it.id);
+        else st.forgeFodder = [...st.forgeFodder, it.id].slice(-2);
+        c.redraw(`forja-${it.id}`); return;
+      }
+      if (!w.lit) { if (w.why) c.toast(w.why, 'bad'); return; }
+      st.forgeSel = it.id; st.forgeFodder = []; st.forgeAffix = null;
+      c.redraw(`forja-${it.id}`);
+    };
+    const extra: TipRow[] = [];
+    if (isCand) extra.push({ icon: 'fundir', text: isFodder ? 'Vai ser consumido na fusão' : 'Serve para consumir na fusão', tone: isFodder ? 'warn' : 'ok' });
+    else if (w.can) extra.push({ icon: mode, text: 'Dá para fazer agora', tone: 'ok' });
+    else if (w.why) extra.push({ icon: mode, text: w.why, tone: 'bad' });
+    return itemTile(it, {
+      size: 58, fk: `forja-${it.id}`, onClick: click,
+      cls: `${lit ? 'lit' : 'dim'}${isMain ? ' main' : ''}${isFodder ? ' fodder' : ''}`,
+      seal: lit && !isCand && w.can, equipped: equippedIds.has(it.id),
+      tipSpec: () => itemTip(c.p, it, { where: 'outro', noSell: true, extra, foot: [isMain ? 'Clique: tirar da bigorna' : isCand ? (isFodder ? 'Clique: não consumir' : 'Clique: consumir') : w.lit ? 'Clique: pôr na bigorna' : null] }),
+    });
+  });
+
+  /* ---------- bancada ---------- */
+  const fx = st.forgeFx;
+  const mainSlot = (size: number) => main
+    ? itemTile(main, { size, cls: 'on-anvil', fk: 'bigorna', onClick: clear, tipSpec: () => itemTip(c.p, main!, { where: 'outro', noSell: true, foot: ['Clique: tirar da bigorna'] }) })
+    : tip(emptyTile(null, size, 'on-anvil wait'), { title: MODES.find((m) => m.id === mode)!.label, rows: [{ text: 'Clique num item aceso na grade ao lado.', tone: 'dim' }] });
+
+  let slots: HTMLElement, info: HTMLElement | null = null, action: HTMLElement | null = null;
+  const hammer = (ok: boolean, why: string | undefined, run: () => void, label: string) => tip(h('button', {
+    type: 'button', class: 'btn primary big hammer', disabled: !ok, 'data-fk': 'martelo', onclick: run,
+  }, ui(mode, 40), label), { title: label, rows: [!ok && why ? { icon: 'cadeado', text: why, tone: 'bad' } : { text: MODES.find((m) => m.id === mode)!.text, tone: 'dim' }] });
+
+  if (mode === 'fundir') {
+    const fodder = st.forgeFodder.map((id) => cands.find((i) => i.id === id)!);
+    const auto = () => {
+      const pickable = cands.slice().sort((a, b) => itemScore(a) - itemScore(b)).slice(0, 2);
+      if (pickable.length < 2) { c.toast('Faltam itens iguais na mochila', 'bad'); return; }
+      st.forgeFodder = pickable.map((i) => i.id);
+      c.redraw('martelo');
+    };
+    slots = h('div', 'forge-slots fuse',
+      mainSlot(96),
+      h('span', 'plus', '+'),
+      [0, 1].map((k) => fodder[k]
+        ? itemTile(fodder[k], { size: 72, cls: 'fodder', fk: `consumo-${k}`, onClick: () => { st.forgeFodder = st.forgeFodder.filter((id) => id !== fodder[k].id); c.redraw(); }, tipSpec: () => itemTip(c.p, fodder[k], { where: 'outro', noSell: true, foot: ['Clique: não consumir'] }) })
+        : tip(emptyTile(main ? main.type : null, 72, main ? 'wait' : ''), { title: 'Item a consumir', rows: [{ text: 'Mesma raridade e mesmo espaço do principal. Precisa estar na mochila e destravado.', tone: 'dim' }] })),
+      main && tip(h('button', { type: 'button', class: 'btn small auto', 'data-fk': 'auto', disabled: cands.length < 2, onclick: auto }, 'Auto'),
+        { title: 'Auto', rows: [{ text: 'Escolhe os 2 itens mais fracos que servem.', tone: 'dim' }] }));
+    if (main) {
+      const i = fuseInfo(p, main.id, st.forgeFodder), next = RARITIES[main.rarity + 1];
+      info = h('div', 'forge-info',
+        h('div', 'big-line', h('b', { style: `color:${rarColor(main)}` }, RARITIES[main.rarity].label), arrow(), h('b', { style: `color:${next.color}` }, next.label)),
+        h('div', 'sub-line', stat('mais', '1 bônus', { size: 22, tone: 'ok' }), stat('aprimorar', `até +${next.maxPlus}`, { size: 22, tone: 'ok' })));
+      action = h('div', 'forge-act',
+        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, i.lagrima > 0 && { icon: 'lagrima', amount: i.lagrima, have: p.materials.lagrima }]),
+        gauge(i.chance, 0, 'Falhar consome só 1 dos 2 itens. O principal fica como está.'),
+        hammer(i.possible, i.reason, () => {
+          const r = fuseItems(c.p, main!.id, st.forgeFodder);
+          if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+          st.forgeFx = r.success ? { ok: true, text: `${RARITIES[main!.rarity].label}!`, color: rarColor(main!) } : { ok: false, text: 'Falhou', sub: '1 item perdido' };
+          c.commit('martelo');
+        }, 'Fundir'));
+    }
+  } else {
+    slots = h('div', 'forge-slots', mainSlot(96));
+    if (main && mode === 'aprimorar') {
+      const i = upgradeInfo(p, main), after = { ...main, plus: main.plus + 1 }, base = ITEM_TYPES[main.type].base;
+      info = h('div', 'forge-info',
+        h('div', 'big-line', h('b', null, `+${main.plus}`), arrow(), h('b', 'ok', `+${after.plus}`)),
+        base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])));
+      action = h('div', 'forge-act',
+        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
+        gauge(i.chance, main.pity ?? 0, 'Falhar gasta o custo, nunca destrói o item, e soma 5% à próxima tentativa.'),
+        hammer(i.possible, i.reason, () => {
+          const r = upgradeItem(c.p, main!.id);
+          if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+          st.forgeFx = r.success ? { ok: true, text: `+${main!.plus}!` } : { ok: false, text: 'Falhou', sub: '+5% na próxima' };
+          c.commit('martelo');
+        }, 'Aprimorar'));
+    } else if (main && mode === 'encantar') {
+      const i = enchantInfo(p, main), idx = st.forgeAffix;
+      info = h('div', 'forge-info affixes', main.affixes.map((a, k) => tip(h('button', {
+        type: 'button', class: `affix${idx === k ? ' on' : ''}`, 'aria-pressed': String(idx === k), 'data-fk': `bonus-${k}`,
+        onclick: () => { st.forgeAffix = k; c.redraw(`bonus-${k}`); },
+      }, ui(AFFIX_ICON[a.k], 24), h('span', null, affixText(a)), idx === k && h('b', 'swap', ui('seta', 20), '?')),
+      { title: 'Trocar este bônus', rows: [{ text: 'Sai este e entra outro, sorteado. Os demais ficam.', tone: 'dim' }], foot: ['Clique: escolher'] })));
+      action = h('div', 'forge-act',
+        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'po', amount: i.po, have: p.materials.po }]),
+        hammer(i.possible && idx != null, idx == null ? 'Escolha o bônus que vai trocar.' : i.reason, () => {
+          const r = enchantItem(c.p, main!.id, st.forgeAffix ?? -1);
+          if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+          const got = main!.affixes[st.forgeAffix ?? 0];
+          st.forgeFx = { ok: true, text: got ? affixText(got) : 'Trocado!' };
+          c.commit('martelo');
+        }, 'Encantar'));
+    } else if (main && mode === 'reforjar') {
+      const i = reforgeInfo(p, main), after = reforgedPreview(main, i.toLevel), base = ITEM_TYPES[main.type].base;
+      const changed = main.affixes.map((a, k) => ({ a, b: after.affixes[k] })).filter((x) => x.b && x.b.v !== x.a.v);
+      info = h('div', 'forge-info',
+        h('div', 'big-line', h('b', null, `Nv ${main.ilvl}`), arrow(), h('b', 'ok', `Nv ${after.ilvl}`)),
+        base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])),
+        changed.length > 0 && h('div', 'sub-line wrap', changed.slice(0, 4).map((x) => stat(AFFIX_ICON[x.a.k], `${x.a.v} → ${x.b.v}`, { size: 22, tone: 'ok' }))));
+      action = h('div', 'forge-act',
+        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
+        hammer(i.possible, i.reason, () => {
+          const r = reforgeItem(c.p, main!.id);
+          if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
+          st.forgeFx = { ok: true, text: `Nv ${c.p.level}!` };
+          c.commit('martelo');
+        }, 'Reforjar'));
+    }
+  }
+
+  const litCount = allItems(p).filter((it) => workOf(p, mode, it).lit).length;
+  return h('div', 'ferreiro',
+    bg,
+    h('div', { class: 'forge-modes', role: 'tablist', 'aria-label': 'Modo do ferreiro' }, MODES.map((m) => tip(h('button', {
+      type: 'button', class: `mode-btn${mode === m.id ? ' on' : ''}`, role: 'tab', 'aria-selected': String(mode === m.id), 'data-fk': `modo-${m.id}`, onclick: () => setMode(m.id),
+    }, ui(m.id, 56), h('span', null, m.label)), { title: m.label, icon: ui(m.id, 36), rows: [{ text: m.text }] }))),
+    h('div', 'forge-bench',
+      anvil,
+      slots,
+      fx && h('div', { class: `forge-fx ${fx.ok ? 'ok' : 'fail'}`, style: fx.color ? `--fxc:${fx.color}` : null, 'aria-live': 'polite' }, h('i', 'flash'), h('b', null, fx.text), fx.sub && h('span', null, fx.sub)),
+      info,
+      action,
+      !main && h('div', 'forge-hint', litCount > 0 ? [ui('seta', 30), 'Escolha um item'] : 'Nenhum item serve')),
+    h('section', { class: 'panel forge-grid', 'aria-label': 'Seus itens' }, grid));
 }

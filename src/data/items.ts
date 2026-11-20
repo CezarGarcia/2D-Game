@@ -100,6 +100,8 @@ export interface Item {
   locked?: boolean;
   /** Bônus de chance acumulado por falhas de aprimoramento, em pontos percentuais. */
   pity?: number;
+  /** Quantas vezes já foi encantado; o custo dobra a cada vez. */
+  enchants?: number;
 }
 
 export interface UniqueDef { name: string; type: ItemType; rarity: number; effect: string; affixes: AffixKey[] }
@@ -108,6 +110,9 @@ export const UNIQUES: Record<string, UniqueDef> = {
   mandibulaDaRainha: { name: 'Mandíbula da Saúva-Rainha', type: 'anel', rarity: 2, effect: 'Seus golpes de arma têm 12% de chance de envenenar.', affixes: ['dano', 'agilidade'] },
   presaDaCaipora: { name: 'Presa da Caipora', type: 'amuleto', rarity: 3, effect: 'Depois de uma esquiva perfeita, +25% de velocidade de ataque por 4 s.', affixes: ['critico', 'velAtaque', 'forca'] },
   coroaDeCipo: { name: 'Coroa de Cipó', type: 'chapeu', rarity: 4, effect: 'Inimigos presos ou lentos por Natureza recebem +30% de dano.', affixes: ['danoNatureza', 'vitalidade', 'recarga', 'vida'] },
+  ferraoDeArraia: { name: 'Ferrão de Arraia', type: 'facao', rarity: 3, effect: 'Seus golpes de arma têm 15% de chance de prender o inimigo por 1 s.', affixes: ['dano', 'critico', 'agilidade'] },
+  denteDoBoto: { name: 'Dente do Boto', type: 'anel', rarity: 3, effect: 'Seus golpes críticos deixam o inimigo Molhado.', affixes: ['critico', 'danoCritico', 'sorte'] },
+  escamaDaIara: { name: 'Escama da Iara', type: 'amuleto', rarity: 4, effect: 'Poças e correnteza não te atrapalham, e você anda 12% mais rápido.', affixes: ['vida', 'espirito', 'recarga', 'resNatureza'] },
 };
 
 /** Dano (arma) ou defesa (armadura) do item, já com raridade e aprimoramento. Zero para anéis e amuletos. */
@@ -136,7 +141,7 @@ export function rollAffix(rng: Rng, ilvl: number, exclude: AffixKey[] = []): Aff
 /** Chance de cada raridade nos baús, por capítulo (dificuldade normal). */
 export const DROP_TABLE: Record<number, number[]> = {
   1: [70, 25, 5, 0, 0, 0],
-  2: [60, 30, 9, 1, 0, 0],
+  2: [58, 30, 10, 2, 0, 0],
 };
 
 /** Sorteia a raridade. Cada ponto de Sorte desloca 0,3 ponto percentual de Comum para as raridades acima. */

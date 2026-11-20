@@ -1,59 +1,75 @@
-/** Aba Companheiros: quem já está com você, quem falta resgatar, e quem vai para a luta. */
-import { drawCapi } from '../art/characters';
-import { drawOnca } from '../art/characters2';
+/** Companheiros: um cartão com retrato animado para cada um. Clique escolhe quem vai para a fase. */
+import { paintHeroBackdrop } from '../art/backdrops';
 import { COMPANIONS, COMPANION_ORDER, type CompanionId } from '../data/content';
 import { setCompanion } from '../meta/profile';
-import type { Ctx } from './ctx';
-import { btn, h, num } from './dom';
+import { MAIN_H, MAIN_W, unseen, type Ctx } from './ctx';
+import { backdrop, h, hdCanvas, keycap, num, stat, ui } from './dom';
+import { drawCompanion } from './retratos';
+import { tip } from './tip';
 
-function picture(c: Ctx, id: CompanionId, owned: boolean): HTMLElement {
-  const W = 200, H = 120;
-  const cv = h('canvas', { width: W * 2, height: H * 2, 'aria-hidden': 'true' });
-  c.animate(cv, (g, t) => {
-    g.setTransform(2, 0, 0, 2, 0, 0);
+/** Ícone do bônus passivo e escala do retrato de cada companheiro. */
+const LOOK: Record<CompanionId, { icon: string; scale: number; dx: number }> = {
+  capivara: { icon: 'vida', scale: 3.3, dx: -8 },
+  onca: { icon: 'critico', scale: 2.9, dx: -4 },
+  arara: { icon: 'ouro', scale: 3.4, dx: 0 },
+};
+
+function portrait(c: Ctx, id: CompanionId, owned: boolean): HTMLCanvasElement {
+  const W = 300, H = 230, look = LOOK[id];
+  const { cv } = hdCanvas(W, H, 'comp-cv');
+  const draw = (g: CanvasRenderingContext2D, t: number) => {
     g.clearRect(0, 0, W, H);
-    g.fillStyle = 'rgba(8,14,8,.45)';
-    g.beginPath(); g.ellipse(W / 2, H - 22, 62, 9, 0, 0, Math.PI * 2); g.fill();
-    if (id === 'capivara') { g.save(); g.translate(W / 2 - 10, H - 22); g.scale(2.4, 2.4); drawCapi(g, owned ? t : 0, {}); g.restore(); return; }
-    if (id === 'onca') { g.save(); g.translate(W / 2 - 6, H - 22); g.scale(2.2, 2.2); drawOnca(g, owned ? t : 0, {}); g.restore(); return; }
-    /* ainda sem desenho próprio: uma pegada */
-    g.fillStyle = owned ? '#E0A848' : '#51604d';
-    const cx = W / 2, cy = H / 2 + 4;
-    g.beginPath(); g.ellipse(cx, cy + 12, 22, 17, 0, 0, Math.PI * 2); g.fill();
-    for (const [dx, dy] of [[-26, -8], [-10, -22], [10, -22], [26, -8]]) { g.beginPath(); g.ellipse(cx + dx, cy + dy, 8, 10, dx * 0.012, 0, Math.PI * 2); g.fill(); }
-  });
-  return h('div', `comp-pic${owned ? '' : ' off'}`, cv);
+    g.save(); g.translate(W / 2 + look.dx, H - 44); g.scale(look.scale, look.scale); drawCompanion(g, id, t); g.restore();
+    if (!owned) {
+      /* silhueta: pinta de escuro só onde há desenho */
+      g.save(); g.globalCompositeOperation = 'source-in'; g.fillStyle = '#0d1410'; g.fillRect(0, 0, W, H); g.restore();
+    }
+    g.save(); g.globalCompositeOperation = 'destination-over';
+    g.fillStyle = 'rgba(8,14,8,.4)'; g.beginPath(); g.ellipse(W / 2, H - 40, 84, 13, 0, 0, Math.PI * 2); g.fill();
+    g.restore();
+  };
+  if (owned) c.animate(cv, draw);
+  else { const g = cv.getContext('2d'); if (g) { try { draw(g, 0); } catch { /* sem retrato */ } } }
+  return cv;
 }
 
 export function renderCompanheiros(c: Ctx): HTMLElement {
-  const p = c.p;
-  const take = (id: CompanionId | null) => () => { if (setCompanion(c.p, id)) c.commit(); };
-  return h('div', 'tab-companheiros',
-    h('header', 'comp-head',
-      h('div', null, h('h1', 'title', 'Companheiros'), h('p', 'muted', 'Um companheiro vai com você para a fase: dá um bônus passivo e tem uma habilidade própria.')),
-      btn(p.companion ? 'Ir sem companheiro' : 'Indo sem companheiro', take(null), { pressed: p.companion === null, disabled: p.companion === null, fk: 'comp-nenhum' })),
-    h('div', 'comp-list', COMPANION_ORDER.map((id) => {
-      const def = COMPANIONS[id], own = p.companions[id], active = p.companion === id;
-      return h('article', `panel comp${own ? '' : ' missing'}${active ? ' active' : ''}`,
-        picture(c, id, !!own),
-        h('div', 'comp-body',
-          h('div', 'comp-title', h('h2', 'title', def.name), h('span', 'chip', def.element), own && h('span', 'chip', `Nível ${own.level}`), active && h('span', 'chip hot', 'Vai com você')),
-          own
-            ? [
-              h('dl', 'comp-info',
-                h('div', null, h('dt', null, 'Passivo'), h('dd', null, def.passive)),
-                h('div', null, h('dt', null, `Habilidade · ${def.activeName}`), h('dd', null, def.active, h('span', 'muted num', ` Recarga de ${num(def.cooldown, 1)} s.`))),
-                h('div', null, h('dt', null, 'Em combate'), h('dd', 'num', `${num(def.hp)} de vida · ${num(def.damage)} de dano por golpe`))),
-              h('div', 'actions', active
-                ? h('span', 'ok-text', 'Vai com você na próxima fase.')
-                : btn('Levar', take(id), { kind: 'primary', fk: `levar-${id}` })),
-            ]
-            : [
-              h('p', 'comp-where', h('span', 'k', 'Como conseguir'), def.where),
-              h('dl', 'comp-info dim',
-                h('div', null, h('dt', null, 'Passivo'), h('dd', null, def.passive)),
-                h('div', null, h('dt', null, `Habilidade · ${def.activeName}`), h('dd', null, def.active))),
-            ]));
-    })),
-  );
+  const p = c.p, fresh = new Set(unseen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id])));
+  const cards = COMPANION_ORDER.map((id) => {
+    const def = COMPANIONS[id], own = !!p.companions[id], active = own && p.companion === id, look = LOOK[id];
+    const el = h(own ? 'button' : 'div', {
+      type: own ? 'button' : null, class: `comp${own ? '' : ' missing'}${active ? ' active' : ''}`, tabindex: own ? null : 0,
+      'aria-label': `${def.name}${own ? (active ? ', vai com você' : '') : ', ainda não resgatado'}`, 'aria-pressed': own ? String(active) : null, 'data-fk': `comp-${id}`,
+      onclick: own ? () => { if (setCompanion(c.p, active ? null : id)) c.commit(`comp-${id}`); } : null,
+    },
+    h('span', 'comp-pic', portrait(c, id, own), !own && h('span', 'comp-cage', ui('gaiola', 72))),
+    h('span', 'comp-name', own ? def.name : '???'),
+    own
+      ? [
+        h('span', 'comp-row', stat(look.icon, def.passive, { size: 30, tone: 'ok' })),
+        h('span', 'comp-skill', keycap('F'), h('span', null, def.activeName), stat('recarga', `${num(def.cooldown)} s`, { size: 22 })),
+      ]
+      : h('span', 'comp-where', ui('cadeado', 26), def.where),
+    active && h('span', 'comp-flag', ui('check', 22), 'Vai com você'),
+    own && fresh.has(id) && h('span', 'new-tag', 'Novo'));
+    return tip(el, () => ({
+      title: def.name, color: active ? '#f2c14e' : undefined,
+      sub: own ? (active ? 'Vai com você' : 'Fica no acampamento') : 'Ainda preso', subColor: own ? (active ? '#f2c14e' : undefined) : '#ff7b6b',
+      rows: [
+        !own && { icon: 'gaiola', text: `Resgate: ${def.where}`, tone: 'gold' as const },
+        { head: 'Sempre' },
+        { icon: look.icon, text: def.passive, tone: 'ok' as const },
+        { head: `Tecla F · ${def.activeName}` },
+        { icon: 'companheiro', text: def.active },
+        { icon: 'recarga', text: 'Recarga', value: `${num(def.cooldown)} s` },
+        'sep' as const,
+        { icon: 'vida', text: 'Vida', value: num(def.hp) },
+        { icon: 'dano', text: 'Dano por golpe', value: num(def.damage) },
+      ],
+      foot: [own ? (active ? 'Clique: deixar no acampamento' : 'Clique: levar') : null],
+    }));
+  });
+  return h('div', 'companheiros',
+    backdrop('companheiros', MAIN_W, MAIN_H, (g) => paintHeroBackdrop(g, MAIN_W, MAIN_H)),
+    h('div', 'comp-list', cards));
 }

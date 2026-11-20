@@ -5,10 +5,10 @@ import { goldMultiplier, levelCombatModifiers, stageLevel, xpMultiplier, xpNeede
 import { makeRng } from '../src/data/rng';
 import { STAGES, type RoomDef } from '../src/data/stages';
 import { newProfile, type Profile } from '../src/meta/profile';
-import { damageReduction, deriveStats } from '../src/meta/stats';
-import { chooseBlessing, createWorld, exitZone, fingerprint, NO_INPUT, spawnEnemy, step, type Input, type World } from '../src/sim/world';
+import { damageReduction, deriveStats, referenceProfile } from '../src/meta/stats';
+import { HUMAN, PERFECT, idleAt, playStage } from './bot';
+import { chooseBlessing, createWorld, exitZone, fingerprint, spawnEnemy, step, type Input, type World } from '../src/sim/world';
 
-const idleAt = (w: World): Input => ({ ...NO_INPUT, spell: [false, false, false], aimX: w.player.x + 100, aimY: w.player.y });
 
 function run(w: World, seconds: number, input: (w: World, tick: number) => Input = idleAt): void {
   const n = Math.round(seconds / TICK);
@@ -48,7 +48,8 @@ describe('progressão (documento de design 01)', () => {
   it('fases vão do nível 1 ao 60', () => {
     expect(stageLevel(0)).toBe(1);
     expect(stageLevel(95)).toBe(60);
-    expect(stageLevel(36)).toBe(23);
+    expect(stageLevel(11)).toBe(12);
+    expect(stageLevel(23)).toBe(23);
   });
   it('reduz XP e ouro em fase fácil', () => {
     expect(xpMultiplier(10, 10)).toBe(1);
@@ -218,56 +219,182 @@ describe('fase', () => {
 });
 
 describe('simulação', () => {
-  /** Jogador automático simples: persegue o inimigo mais próximo, ataca, esquiva das marcas e segue pelas salas. */
-  function bot(w: World, profile: Profile): Input {
-    const p = w.player;
-    if (w.phase === 'altar') { chooseBlessing(w, 0, (b) => deriveStats(profile, b)); return idleAt(w); }
-    if (w.phase === 'cleared') { const z = exitZone(w); return { ...idleAt(w), mx: 1, my: Math.abs(z.y - p.y) > 8 ? Math.sign(z.y - p.y) : 0 }; }
-    let target = null as World['enemies'][number] | null, best = Infinity;
-    for (const e of w.enemies) { if (e.hidden || e.fake) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < best) { best = d; target = e; } }
-    if (!target) {
-      const hid = w.enemies.find((e) => e.hidden);
-      return hid ? { ...idleAt(w), mx: Math.sign(hid.x - p.x), my: Math.sign(hid.y - p.y) } : idleAt(w);
-    }
-    let danger = false;
-    const near = (t: World['enemies'][number]['tele']) => {
-      if (!t || t.dur - t.t > 0.28 || t.t < 0) return false;
-      if (t.shape === 'circle') return Math.hypot(p.x - t.x, p.y - t.y) < t.r + 24;
-      const dx = t.x2 - t.x, dy = t.y2 - t.y, k = Math.max(0, Math.min(1, ((p.x - t.x) * dx + (p.y - t.y) * dy) / (dx * dx + dy * dy || 1)));
-      return Math.hypot(p.x - (t.x + dx * k), p.y - (t.y + dy * k)) < t.w / 2 + 24;
-    };
-    for (const e of w.enemies) if (near(e.tele)) danger = true;
-    for (const pr of w.projectiles) if (near(pr.tele)) danger = true;
-    for (const h of w.hazards) if (near(h.tele)) danger = true;
-    const dx = target.x - p.x, dy = target.y - p.y, d = Math.hypot(dx, dy) || 1;
-    const bow = w.stats.weapon === 'arco', want = bow ? 300 : target.radius + 70, close = d < want;
-    return {
-      mx: close ? -dy / d : dx / d, my: close ? dx / d : dy / d,
-      aimX: target.x, aimY: target.y,
-      attackPressed: false, attackHeld: bow ? d < 600 : close, altHeld: false, dodgePressed: danger,
-      spell: [!close || bow, d < 400, d < 400], petPressed: true, potionPressed: p.hp < w.stats.maxHp * 0.45,
-    };
-  }
-  function playStage(index: number, profile: Profile, seed: number, maxSeconds = 600): World {
-    const s = STAGES[index], w = createWorld({ stageId: s.id, level: s.level, rooms: s.rooms, stats: deriveStats(profile), seed });
-    for (let i = 0; i < 60 * maxSeconds && w.phase !== 'won' && w.phase !== 'lost'; i++) { step(w, bot(w, profile), TICK); w.events.length = 0; }
-    return w;
-  }
-
   it('é determinística: mesma semente e mesmos comandos dão o mesmo resultado', () => {
-    const p = refProfile(3);
-    expect(fingerprint(playStage(2, p, 42, 40))).toBe(fingerprint(playStage(2, p, 42, 40)));
+    const p = referenceProfile(3);
+    expect(fingerprint(playStage(2, p, 42, PERFECT, 40))).toBe(fingerprint(playStage(2, p, 42, PERFECT, 40)));
   });
 
-  it('todas as 12 fases terminam e nenhum número vira NaN', () => {
+  it('todas as fases dos dois capítulos terminam e nenhum número vira NaN', () => {
     const lines: string[] = [];
     for (const s of STAGES) {
-      const profile = refProfile(s.level), w = playStage(s.index, profile, 100 + s.index);
+      const profile = referenceProfile(s.level), w = playStage(s.index, profile, 100 + s.index, HUMAN);
       expect(w.phase === 'won' || w.phase === 'lost', `fase ${s.id} não terminou (sala ${w.room + 1}, ${w.enemies.map((e) => e.kind + ':' + e.state).join(',')})`).toBe(true);
-      expect(Number.isFinite(w.player.x + w.player.y + w.player.hp + w.player.mana)).toBe(true);
+      expect(Number.isFinite(w.player.x + w.player.y + w.player.hp + w.player.mana + w.player.supremo)).toBe(true);
       for (const e of w.enemies) expect(Number.isFinite(e.x + e.y + e.hp)).toBe(true);
       lines.push(`${s.id} nv${s.level} ${s.rooms.length} salas: ${w.phase === 'won' ? 'venceu' : 'caiu na sala ' + (w.room + 1)} em ${w.time.toFixed(0)}s (alvo ${s.starTime}s), vida ${Math.round(w.player.hp)}/${w.stats.maxHp}, quedas ${w.deaths}, golpes ${w.hitsTaken}`);
     }
-    console.log('jogador automático com equipamento de referência:\n' + lines.join('\n'));
+    console.log('jogador automático que erra como gente, com o personagem de referência:\n' + lines.join('\n'));
+  }, 60000);
+
+  it('quem chega três níveis abaixo não passa do fim do capítulo', () => {
+    for (const index of [9, 11]) {
+      const s = STAGES[index];
+      let wins = 0;
+      for (let k = 0; k < 3; k++) if (playStage(index, referenceProfile(s.level - 3), 300 + k, { ...HUMAN, seed: k + 1 }).phase === 'won') wins++;
+      expect(wins, `fase ${s.id}`).toBe(0);
+    }
+  }, 60000);
+});
+
+describe('dificuldade e bênçãos', () => {
+  it('a onda seguinte entra antes de a atual acabar', () => {
+    const wave = (n: number): SpawnDef[] => Array.from({ length: n }, (_, i) => ({ kind: 'sauva' as const, x: 700 + i * 40, y: 300 + (i % 2) * 80 }));
+    const w = arena(referenceProfile(1), 1, [{ type: 'combat', waves: [wave(4), wave(4)], bg: 0 }]);
+    run(w, 2.2);
+    expect(w.wave).toBe(0);
+    w.enemies[0].hp = 0; w.enemies[1].hp = 0;
+    run(w, 1.4);
+    expect(w.wave).toBe(1);
+    expect(w.enemies.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('monstros de fase alta têm mais vida, andam mais rápido e avisam por menos tempo', () => {
+    const lo = arena(newProfile(7), 1), hi = arena(newProfile(7), 12);
+    const a = put(lo, { kind: 'sauva', x: 800, y: 400 }), b = put(hi, { kind: 'sauva', x: 800, y: 400 });
+    expect(b.maxHp).toBeGreaterThan(a.maxHp * 5);
+    expect(b.speedMult).toBeGreaterThan(a.speedMult);
+    expect(b.windupMult).toBeLessThan(a.windupMult);
+    const champ = put(hi, { kind: 'sauva', x: 820, y: 420, champion: true, mods: ['veloz'] });
+    expect(champ.maxHp).toBeGreaterThan(b.maxHp * 2);
+  });
+
+  it('o altar oferece 3 bênçãos, 4 com o talento Bênção Farta, e elas acumulam', () => {
+    const rooms: RoomDef[] = [{ type: 'altar', waves: [], bg: 0 }, { type: 'combat', waves: [[]], bg: 0 }];
+    const p = newProfile(7);
+    expect(arena(p, 1, rooms).altar!.length).toBe(3);
+    p.talents = { raizEspirito: 1, fonte: 5, mare: 1, curaMaior: 5, bencaoFarta: 1 };
+    expect(arena(p, 1, rooms).altar!.length).toBe(4);
+    const base = deriveStats(p), twice = deriveStats(p, ['furia', 'furia', 'projetil', 'agilidade']);
+    expect(twice.damageMult).toBeCloseTo(base.damageMult + 0.3 * (1 + 0.012 * base.attrs.forca), 5);
+    expect(twice.projectiles).toBe(1);
+    expect(twice.attrs.agilidade).toBe(base.attrs.agilidade + 6);
+  });
+
+  it('+1 projétil: o Dardo solta um espinho a mais e o arco uma flecha a mais', () => {
+    const p = newProfile(7);
+    const w = createWorld({ stageId: 't', level: 1, rooms: [{ type: 'combat', waves: [[]], bg: 0 }], stats: deriveStats(p, ['projetil']), seed: 7 });
+    w.waveTimer = -1e9;
+    step(w, { ...idleAt(w), spell: [true, false, false] }, TICK);
+    expect(w.projectiles.filter((x) => x.kind === 'thorn').length).toBe(4);
+  });
+
+  it('Amparo anula o primeiro golpe de cada sala', () => {
+    const p = newProfile(7);
+    const w = createWorld({ stageId: 't', level: 1, rooms: [{ type: 'combat', waves: [[]], bg: 0 }], stats: deriveStats(p, ['amparo']), seed: 7 });
+    w.waveTimer = -1e9;
+    put(w, { kind: 'sauva', x: w.player.x + 50, y: w.player.y });
+    run(w, ENEMY.spawnTime + 1.2);
+    expect(w.player.hp).toBe(w.stats.maxHp);
+    expect(w.player.shield).toBe(false);
+  });
+});
+
+describe('água, reação e Supremo', () => {
+  const mage = (): Profile => { const p = referenceProfile(14); p.loadout = ['jato', 'dardo', 'onda']; return p; };
+
+  it('o Jato molha e a Natureza em cima faz brotar', () => {
+    const w = arena(mage(), 14);
+    const e = put(w, { kind: 'jacare', x: w.player.x + 200, y: w.player.y });
+    e.state = 'recover'; e.stateT = -99;
+    const aim = (spell: [boolean, boolean, boolean]): Input => ({ ...idleAt(w), aimX: e.x, aimY: e.y, spell });
+    step(w, aim([true, false, false]), TICK);
+    run(w, 0.5, () => aim([false, false, false]));
+    expect(e.wetT).toBeGreaterThan(0);
+    const events: string[] = [];
+    step(w, aim([false, true, false]), TICK);
+    for (let i = 0; i < 40; i++) { step(w, aim([false, false, false]), TICK); for (const ev of w.events) events.push(ev.type); w.events.length = 0; }
+    expect(events).toContain('brotar');
+    expect(e.wetT).toBe(0);
+    expect(e.rootT).toBeGreaterThan(0);
+  });
+
+  it('o Supremo carrega com a luta e atinge a sala toda', () => {
+    const p = mage(); p.supremos = ['natureza']; p.supremo = 'natureza';
+    const w = arena(p, 14);
+    const es = [put(w, { kind: 'sapo', x: 900, y: 300 }), put(w, { kind: 'sapo', x: 1000, y: 500 })];
+    run(w, 1);
+    expect(w.player.supremo).toBeGreaterThan(0);
+    w.player.supremo = 100;
+    step(w, { ...idleAt(w), supremoPressed: true }, TICK);
+    expect(w.player.supremo).toBe(0);
+    for (const e of es) expect(e.hp).toBeLessThan(e.maxHp);
+  });
+});
+
+describe('Capítulo 2', () => {
+  it('a piranha avisa em linha e morde no salto', () => {
+    const w = arena(referenceProfile(13), 13);
+    put(w, { kind: 'piranha', x: w.player.x + 120, y: w.player.y });
+    run(w, ENEMY.spawnTime + 1.6);
+    expect(w.player.hp).toBeLessThan(w.stats.maxHp);
+  });
+
+  it('a arraia fica enterrada até o herói chegar perto, e então atira', () => {
+    const solo = referenceProfile(13); solo.companion = null;
+    const w = arena(solo, 13);
+    const e = put(w, { kind: 'arraia', x: w.player.x + 500, y: w.player.y });
+    run(w, ENEMY.spawnTime + 0.5);
+    expect(e.hidden).toBe(true);
+    e.x = w.player.x + 100;
+    run(w, 1.6);
+    expect(e.hidden).toBe(false);
+    expect(w.projectiles.some((x) => x.kind === 'sting') || w.player.hp < w.stats.maxHp).toBe(true);
+  });
+
+  it('o caramujo protege quem está perto dele', () => {
+    const w = arena(referenceProfile(13), 13);
+    put(w, { kind: 'caramujo', x: 800, y: 400 });
+    const near = put(w, { kind: 'sapo', x: 860, y: 400 }), far = put(w, { kind: 'sapo', x: 300, y: 200 });
+    run(w, ENEMY.spawnTime + 0.2);
+    expect(near.guarded).toBe(true);
+    expect(far.guarded).toBe(false);
+  });
+
+  it('o sapo cospe e deixa uma poça; poças molham os inimigos', () => {
+    const rooms: RoomDef[] = [{ type: 'combat', waves: [[]], bg: 0, puddles: [{ x: 800, y: 400, r: 90 }] }];
+    const w = arena(referenceProfile(13), 13, rooms);
+    w.waveTimer = -1e9;
+    const sapo = put(w, { kind: 'sapo', x: 800, y: 400 });
+    run(w, ENEMY.spawnTime + 3.2, (w) => ({ ...idleAt(w), mx: 0, my: 0 }));
+    expect(sapo.wetT).toBeGreaterThan(0);
+    expect(w.zones.some((z) => z.kind === 'puddle') || w.projectiles.some((x) => x.kind === 'glob')).toBe(true);
+  });
+
+  it('o Boto mergulha, sai debaixo do herói e fica sem fôlego', () => {
+    const w = arena(referenceProfile(22), 22);
+    const b = put(w, { kind: 'boto', x: 800, y: 400, elite: true });
+    const states = new Set<string>();
+    for (let i = 0; i < 60 * 9; i++) { step(w, idleAt(w), TICK); states.add(b.state); w.events.length = 0; }
+    expect(states.has('vanish')).toBe(true);
+    expect(states.has('tired')).toBe(true);
+  });
+
+  it('a Iara canta e puxa o herói; na última fase o chão alaga', () => {
+    const w = arena(referenceProfile(23), 23);
+    const iara = put(w, { kind: 'iara', x: 900, y: 400, elite: true });
+    let sang = false, pulled = 0;
+    for (let i = 0; i < 60 * 14; i++) {
+      const before = Math.hypot(iara.x - w.player.x, iara.y - w.player.y);
+      w.player.hp = w.stats.maxHp;
+      step(w, idleAt(w), TICK);
+      if (iara.state === 'sing') { sang = true; pulled += before - Math.hypot(iara.x - w.player.x, iara.y - w.player.y); }
+      w.events.length = 0;
+    }
+    expect(sang).toBe(true);
+    expect(pulled).toBeGreaterThan(50);
+    iara.hp = iara.maxHp * 0.3;
+    for (let i = 0; i < 60 * 8; i++) { w.player.hp = w.stats.maxHp; step(w, idleAt(w), TICK); w.events.length = 0; }
+    expect(iara.phase).toBe(2);
+    expect(w.flooded).toBe(true);
   });
 });

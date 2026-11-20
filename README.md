@@ -29,8 +29,9 @@ Abra o endereço que aparecer no terminal (normalmente http://localhost:5173).
 | Esquivar | Espaço ou Shift |
 | Feitiços | Q, E e R |
 | Habilidade do companheiro | F |
+| Chamar o Encantado libertado (Supremo), quando a carga enche | T |
 | Poção | 1 ou C |
-| Escolher bênção no altar | 1, 2 ou 3, ou clique |
+| Escolher bênção no altar | 1 a 4, ou clique |
 | Pausar | Esc (X abandona a fase) |
 | Ligar e desligar o som | M |
 

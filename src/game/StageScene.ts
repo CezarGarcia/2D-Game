@@ -5,9 +5,11 @@
 import Phaser from 'phaser';
 import { BAKE, SHEETS, type Sheet } from '../art/bake';
 import { ARENA, ENEMY, PLAYER, TICK, VIEW } from '../data/balance';
-import { BLESSINGS, COMPANIONS, SPELLS, type BlessingId } from '../data/content';
+import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, SUPREMOS, blessingCounts, type BlessingId } from '../data/content';
 import { ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { deriveStats } from '../meta/stats';
+import { isBoss } from '../sim/core';
+import { spellCost } from '../sim/player';
 import { chooseBlessing, createWorld, exitZone, step, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
 import { session } from './session';
 import { Sfx } from './sfx';
@@ -15,6 +17,9 @@ import { Sfx } from './sfx';
 const FONT = '"Londrina Solid", Impact, "Arial Black", sans-serif';
 const INK = '#22100a';
 const INV = 1 / BAKE;
+/** Folhas de sprites por nome, para os bichos que podem ainda não ter arte. */
+const SH = SHEETS as unknown as Record<string, Sheet>;
+const WATER = 0x5cc8f0;
 
 interface Fx {
   kind: 'arc' | 'ring' | 'spark' | 'puff' | 'spikes' | 'line' | 'prints' | 'roots';
@@ -51,7 +56,10 @@ export class StageScene extends Phaser.Scene {
   private ghostT = 0;
 
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
-  private latch = { attack: false, dodge: false, spell: [false, false, false] as [boolean, boolean, boolean], pet: false, potion: false };
+  private latch = { attack: false, dodge: false, spell: [false, false, false] as [boolean, boolean, boolean], pet: false, potion: false, supremo: false };
+  private blessIcons: Phaser.GameObjects.GameObject[] = [];
+  private blessShown = -1;
+  private supIcon: Phaser.GameObjects.Image | null = null;
 
   private txtInfo!: Phaser.GameObjects.Text;
   private txtTime!: Phaser.GameObjects.Text;
@@ -80,10 +88,11 @@ export class StageScene extends Phaser.Scene {
     this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed: 7919 + this.stage.index * 131 });
     this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false;
     this.views.clear(); this.shots.clear(); this.cards = [];
-    this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false };
+    this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
+    this.blessIcons = []; this.blessShown = -1; this.supIcon = null;
 
     this.bg = this.add.image(0, 0, 'bg0').setOrigin(0).setScale(INV).setDepth(-1000);
-    this.add.image(0, 0, 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
+    this.add.image(0, 0, this.stage.chapter === 2 && this.textures.exists('riocanopy') ? 'riocanopy' : 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
     const rays = this.add.image(0, 0, 'rays').setOrigin(0).setScale(INV).setDepth(9001).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: rays, alpha: { from: 0.65, to: 1 }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
@@ -96,9 +105,9 @@ export class StageScene extends Phaser.Scene {
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(INV * 0.95).setDepth(2);
     this.hero = this.makeSprite(this.heroSheet, 'idle0');
     if (this.world.pet) {
-      const s = SHEETS[this.world.pet.id];
+      const id = this.world.pet.id, s = this.sheet(id, 'capivara');
       this.petShadow = this.add.image(0, 0, 'shadow').setScale(INV * 0.8).setDepth(2);
-      this.pet = this.makeSprite(s, 'idle0');
+      this.pet = this.makeSprite(s, s.key === 'arara' ? 'fly0' : 'idle0');
     } else { this.pet = null; this.petShadow = null; }
     this.veil = this.add.rectangle(0, 0, VIEW.w, VIEW.h, 0xb01818, 1).setOrigin(0).setDepth(9500).setAlpha(0);
     this.fade = this.add.rectangle(0, 0, VIEW.w, VIEW.h, 0x060c08, 1).setOrigin(0).setDepth(9600).setAlpha(1);
@@ -123,8 +132,9 @@ export class StageScene extends Phaser.Scene {
     kb.on('keydown-SHIFT', () => { this.latch.dodge = true; });
     (['Q', 'E', 'R'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { this.latch.spell[i] = true; }));
     kb.on('keydown-F', () => { this.latch.pet = true; });
+    kb.on('keydown-T', () => { this.latch.supremo = true; });
     kb.on('keydown-C', () => { this.latch.potion = true; });
-    (['ONE', 'TWO', 'THREE'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar') this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
+    (['ONE', 'TWO', 'THREE', 'FOUR'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar') this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
     kb.on('keydown-M', () => { sfx.muted = !sfx.muted; });
     kb.on('keydown-ESC', () => { if (!this.ended) this.setPaused(!this.paused); });
     kb.on('keydown-X', () => { if (this.paused) { this.setPaused(false); this.finish(false, 0); } });
@@ -142,9 +152,9 @@ export class StageScene extends Phaser.Scene {
       my: (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0),
       aimX: p.worldX, aimY: p.worldY,
       attackPressed: l.attack, attackHeld: p.leftButtonDown(), altHeld: p.rightButtonDown(),
-      dodgePressed: l.dodge, spell: [l.spell[0], l.spell[1], l.spell[2]], petPressed: l.pet, potionPressed: l.potion,
+      dodgePressed: l.dodge, spell: [l.spell[0], l.spell[1], l.spell[2]], petPressed: l.pet, potionPressed: l.potion, supremoPressed: l.supremo,
     };
-    l.attack = l.dodge = l.pet = l.potion = false; l.spell = [false, false, false];
+    l.attack = l.dodge = l.pet = l.potion = l.supremo = false; l.spell = [false, false, false];
     return inp;
   }
 
@@ -188,7 +198,7 @@ export class StageScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => {
       this.tweens.add({
         targets: this.fade, alpha: 1, duration: 300,
-        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken }),
+        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice() }),
       });
     });
   }
@@ -212,7 +222,7 @@ export class StageScene extends Phaser.Scene {
       }
       case 'shoot': sfx.play(e.value ? 'cast' : 'swing'); break;
       case 'hit': {
-        const soft = e.kind === 'poison' || e.kind === 'reflect', pet = e.kind === 'pet';
+        const soft = e.kind === 'poison' || e.kind === 'reflect' || e.kind === 'blast', pet = e.kind === 'pet';
         this.number(e.x, e.y - 70, String(e.value) + (e.crit ? '!' : ''), e.kind === 'poison' ? '#8fe36a' : e.armored ? '#c9c4bd' : e.crit ? '#ffd23f' : pet ? '#ffd9a0' : '#ffffff', soft ? 20 : pet ? 22 : e.crit ? 38 : 28);
         if (!soft) {
           this.fx.push({ kind: 'spark', x: e.x, y: e.y - 34, t: 0, dur: 0.18, color: e.armored ? 0xc9c4bd : 0xfff3c4, n: e.crit ? 9 : 6, seed: e.id! * 7 + w.tick });
@@ -247,7 +257,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'death':
         sfx.play('death');
-        this.banner('VOCÊ CAIU', w.revives > 0 ? 'Segunda chance: a sala recomeça com metade da vida' : 'Fim da fase', '#ff6b5a');
+        this.banner('VOCÊ CAIU', w.revives > 0 ? 'A sala recomeça com metade da vida' : 'Fim da fase', '#ff6b5a');
         break;
       case 'revive':
         this.txtBanner.setVisible(false); this.txtSub.setVisible(false);
@@ -256,7 +266,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'lose': this.finish(false, 500); break;
       case 'win':
-        this.banner(this.stage.final === 'chefao' && this.stage.number === 12 ? 'O CURUPIRA LEMBROU' : 'FASE VENCIDA', `Tempo ${this.fmt(w.time)}`, '#ffb238');
+        this.banner(this.stage.id === '1-12' ? 'O CURUPIRA LEMBROU' : this.stage.id === '2-12' ? 'A IARA LEMBROU' : 'FASE VENCIDA', `Tempo ${this.fmt(w.time)}`, '#ffb238');
         sfx.play('win');
         this.finish(true, 1900);
         break;
@@ -267,7 +277,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'altar': sfx.play('perfect'); break;
       case 'blessing':
-        this.number(p.x, p.y - 140, BLESSINGS[e.kind as BlessingId].name, '#9be7c0', 32, 1.5);
+        this.number(p.x, p.y - 140, BLESSINGS[e.kind as BlessingId].name, BLESSING_TIER_COLOR[BLESSINGS[e.kind as BlessingId].tier], 32, 1.5);
         this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: 0, dur: 0.5, r0: 20, r1: 130, color: 0x9be7c0, width: 7 });
         sfx.play('perfect');
         break;
@@ -291,7 +301,8 @@ export class StageScene extends Phaser.Scene {
       case 'jabuti': this.number(p.x, p.y - 150, 'CASCA DE JABUTI', '#ffd23f', 30, 1.4); sfx.play('perfect'); break;
       case 'stack': break;
       case 'cast': {
-        const col = e.kind === 'casca' ? 0xc9a26b : 0x7bd45a;
+        const water = e.kind === 'jato' || e.kind === 'onda' || e.kind === 'bolha' || e.kind === 'correnteza' || e.kind === 'chuva';
+        const col = e.kind === 'casca' ? 0xc9a26b : water ? WATER : 0x7bd45a;
         this.fx.push({ kind: 'ring', x: e.x + Math.cos(e.ang!) * 26, y: e.y - 44, t: 0, dur: 0.22, r0: 6, r1: e.kind === 'casca' ? 70 : 36, color: col, width: 5 });
         sfx.play('cast');
         break;
@@ -312,11 +323,18 @@ export class StageScene extends Phaser.Scene {
         this.number(e.x, e.y - 80, 'AQUI!', '#ffd23f', 28);
         sfx.play('wave');
         break;
-      case 'pet': if (e.kind === 'bote') sfx.play('dodge'); break;
+      case 'pet':
+        if (e.kind === 'bote') sfx.play('dodge');
+        else if (e.kind === 'bicada') this.fx.push({ kind: 'line', x: e.x, y: e.y - 60, x2: e.x2, y2: e.y2! - 30, t: 0, dur: 0.16, color: 0xffd23f, width: 4 });
+        else if (e.kind === 'volta') this.number(e.x, e.y - 70, 'De volta!', '#ffd9a0', 22);
+        break;
       case 'petHurt': this.number(e.x, e.y - 60, '-' + e.value, '#ffb0a0', 20); break;
-      case 'petDown': this.number(e.x, e.y - 70, 'Caiu: volta na próxima sala', '#ffb0a0', 22, 1.4); break;
+      case 'petDown': this.number(e.x, e.y - 70, w.stats.petFastRevive ? 'Caiu: volta em 8 s' : 'Caiu: volta na próxima sala', '#ffb0a0', 22, 1.4); break;
       case 'spawn': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 20, t: 0, dur: 0.6, color: 0x2a2a34, n: 10, seed: e.id! * 3 }); break;
-      case 'wave': if (Number(e.kind) > 1) this.number(VIEW.w / 2, 210, `Onda ${e.value! + 1} de ${e.kind}`, '#ffb238', 40, 1.1); break;
+      case 'wave':
+        if (e.kind === 'onda') { this.number(VIEW.w / 2, 210, 'ONDA! Ache a passagem', '#8fe3ff', 36, 1.2); sfx.play('tele'); }
+        else if (Number(e.kind) > 1) this.number(VIEW.w / 2, 210, `Onda ${e.value! + 1} de ${e.kind}`, '#ffb238', 40, 1.1);
+        break;
       case 'telegraph': sfx.play('tele'); break;
       case 'bite': this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.18, r0: 14, r1: ENEMY.sauva.biteRadius, color: 0xffe2d0, width: 4 }); break;
       case 'charge': sfx.play('dodge'); break;
@@ -347,6 +365,8 @@ export class StageScene extends Phaser.Scene {
       case 'hazard':
         if (e.kind === 'roots') { this.fx.push({ kind: 'roots', x: e.x, y: e.y, x2: e.x2, y2: e.y2, t: 0, dur: 0.6, r0: e.value!, color: 0x5a4a3a }); this.cameras.main.shake(120, 0.006); sfx.play('slam'); }
         else if (e.kind === 'lane') sfx.play('dodge');
+        else if (e.kind === 'jet') { this.fx.push({ kind: 'line', x: e.x, y: e.y, x2: e.x2, y2: e.y2, t: 0, dur: 0.28, color: 0xbfeaff, width: e.value! * 0.8 }); sfx.play('splat'); }
+        else if (e.kind === 'dive') { this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.45, r0: 20, r1: e.value! * 1.2, color: 0xbfeaff, width: 10 }); this.fx.push({ kind: 'puff', x: e.x, y: e.y - 20, t: 0, dur: 0.5, color: 0xbfeaff, n: 12, seed: w.tick }); this.cameras.main.shake(160, 0.01); sfx.play('slam'); }
         else { this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.4, r0: 20, r1: e.value! * 1.15, color: 0xffb070, width: 8 }); this.cameras.main.shake(140, 0.008); sfx.play('slam'); }
         break;
       case 'cloneBurst': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 40, t: 0, dur: 0.5, color: 0x9aa39a, n: 12, seed: w.tick }); sfx.play('kill'); break;
@@ -356,18 +376,45 @@ export class StageScene extends Phaser.Scene {
       case 'whistle': this.number(e.x, e.y - 190, 'ASSOBIO', '#ffb060', 30); sfx.play('perfect'); break;
       case 'downed': this.number(e.x, e.y - 190, 'POSTURA QUEBRADA', '#ffd23f', 36, 1.4); this.cameras.main.shake(200, 0.012); this.slow = 0.3; sfx.play('crit'); break;
       case 'phase':
-        this.number(VIEW.w / 2, 250, e.value === 1 ? 'A mata acorda' : 'Ele monta', '#ffb060', 54, 1.6);
+        this.number(VIEW.w / 2, 250, this.stage.chapter === 2 ? (e.value === 1 ? 'O rio sobe' : 'A cheia') : e.value === 1 ? 'A mata acorda' : 'Ele monta', '#ffb060', 54, 1.6);
         this.cameras.main.shake(400, 0.012); sfx.play('slam');
         break;
       case 'shrink': break;
       case 'enrage': this.number(e.x, e.y - 190, 'FÚRIA', '#ff6b5a', 44, 1.6); sfx.play('slam'); break;
       case 'call': this.number(e.x, e.y - 170, 'CHAMADO', '#ffb060', 30); sfx.play('perfect'); break;
+      case 'supremo': {
+        const el = e.kind as keyof typeof SUPREMOS, col = el === 'agua' ? WATER : 0x7bd45a;
+        this.banner(SUPREMOS[el].name.toUpperCase() + '!', '', el === 'agua' ? '#8fe3ff' : '#9be36a');
+        this.time.delayedCall(900, () => { if (!this.ended && !this.paused && this.world.phase === 'fight') { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); } });
+        for (let i = 0; i < 4; i++) this.fx.push({ kind: 'ring', x: VIEW.w / 2, y: (ARENA.y0 + ARENA.y1) / 2, t: -i * 0.1, dur: 0.7, r0: 40, r1: 720, color: col, width: 14 });
+        this.cameras.main.shake(420, 0.014); this.cameras.main.flash(260, 255, 255, 255); this.slow = 0.5;
+        sfx.play('win');
+        break;
+      }
+      case 'brotar':
+        this.fx.push({ kind: 'roots', x: e.x, y: e.y, t: 0, dur: 0.6, r0: e.value!, color: 0x4f9448 });
+        this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.35, r0: 10, r1: e.value!, color: 0x9be36a, width: 8 });
+        this.number(e.x, e.y - 110, 'BROTOU!', '#9be36a', 28);
+        sfx.play('splat');
+        break;
+      case 'nova': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 30, t: 0, dur: 0.3, r0: 10, r1: 90, color: 0x9be36a, width: 5 }); sfx.play('cast'); break;
+      case 'shield': this.number(e.x, e.y - 150, 'AMPARO', '#ffe9a8', 30); this.fx.push({ kind: 'ring', x: e.x, y: e.y - 40, t: 0, dur: 0.4, r0: 30, r1: 100, color: 0xffe9a8, width: 7 }); sfx.play('armor'); break;
+      case 'mark': this.number(e.x, e.y - 110, 'MARCADO', '#ffd23f', 26); sfx.play('perfect'); break;
+      case 'bubble': this.number(e.x, e.y - 100, 'PRESO', '#8fe3ff', 24); break;
+      case 'splash': this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.3, r0: 12, r1: e.value!, color: 0xbfeaff, width: 5 }); sfx.play('splat'); break;
+      case 'dive': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 10, t: 0, dur: 0.5, color: 0xbfeaff, n: 12, seed: w.tick }); this.number(e.x, e.y - 150, 'MERGULHO', '#8fe3ff', 28); sfx.play('dodge'); break;
+      case 'sing': this.number(e.x, e.y - 200, 'O CANTO: corra para longe!', '#ffb0e0', 30, 1.6); sfx.play('perfect'); break;
+      case 'onda': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 20, t: 0, dur: 0.3, r0: 30, r1: e.value!, color: WATER, width: 12 }); sfx.play('splat'); break;
+      case 'correnteza': this.fx.push({ kind: 'line', x: e.x, y: e.y - 30, x2: e.x + Math.cos(e.ang!) * 250, y2: e.y - 30 + Math.sin(e.ang!) * 250, t: 0, dur: 0.35, color: WATER, width: 26 }); sfx.play('dodge'); break;
+      case 'pop': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.3, r0: 14, r1: e.value!, color: 0xffb070, width: 8 }); sfx.play('splat'); break;
+      case 'freecast': this.number(e.x, e.y - 150, e.kind === 'eco' ? 'ECO' : 'FLUXO', '#8fe3ff', 22); break;
     }
   }
 
   private onRoomStart(index: number): void {
     const room = this.stage.rooms[index];
-    this.bg.setTexture('bg' + room.bg);
+    const rio = this.stage.chapter === 2 && this.textures.exists('rio' + room.bg);
+    this.bg.setTexture((rio ? 'rio' : 'bg') + room.bg);
     this.altar.setVisible(room.type === 'altar');
     for (const [, v] of this.views) { v.spr.destroy(); v.shadow.destroy(); v.label?.destroy(); }
     this.views.clear();
@@ -381,20 +428,31 @@ export class StageScene extends Phaser.Scene {
   /* ---------- altar ---------- */
 
   private showCards(): void {
-    const opts = this.world.altar ?? [];
+    const opts = this.world.altar ?? [], have = blessingCounts(this.world.blessings);
+    const cw = opts.length > 3 ? 250 : 270, ch = 250, gap = 22;
     opts.forEach((id, i) => {
-      const b = BLESSINGS[id], cw = 300, ch = 190, x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + 26), y = 470;
-      const box = this.add.rectangle(0, 0, cw, ch, 0x1c271b, 0.96).setStrokeStyle(3, 0x9be7c0);
-      const key = this.add.text(-cw / 2 + 16, -ch / 2 + 10, String(i + 1), { fontFamily: FONT, fontStyle: '900', fontSize: '30px', color: '#9be7c0' });
-      const name = this.add.text(0, -ch / 2 + 46, b.name, { fontFamily: FONT, fontStyle: '900', fontSize: '28px', color: '#ffb238', align: 'center' }).setOrigin(0.5, 0).setResolution(2);
-      const desc = this.add.text(0, -ch / 2 + 88, b.desc, { fontFamily: 'system-ui, sans-serif', fontSize: '17px', color: '#f1ebd8', align: 'center', wordWrap: { width: cw - 36 } }).setOrigin(0.5, 0).setResolution(2);
-      const card = this.add.container(x, y, [box, key, name, desc]).setDepth(10004).setSize(cw, ch).setInteractive({ useHandCursor: true });
-      card.on('pointerover', () => box.setFillStyle(0x2d3b2b, 1));
-      card.on('pointerout', () => box.setFillStyle(0x1c271b, 0.96));
+      const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 440;
+      const col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
+      const box = this.add.rectangle(0, 0, cw, ch, 0x16201a, 0.97).setStrokeStyle(4, col);
+      const band = this.add.rectangle(0, -ch / 2 + 17, cw - 8, 26, col, 0.9);
+      const tier = this.add.text(0, -ch / 2 + 17, BLESSING_TIER_LABEL[b.tier].toUpperCase(), { fontFamily: FONT, fontStyle: '900', fontSize: '17px', color: INK }).setOrigin(0.5).setResolution(2);
+      const key = this.add.text(-cw / 2 + 14, -ch / 2 + 34, String(i + 1), { fontFamily: FONT, fontStyle: '900', fontSize: '26px', color: '#f1ebd8', stroke: INK, strokeThickness: 5 }).setResolution(2);
+      const parts: Phaser.GameObjects.GameObject[] = [box, band, tier, key];
+      const disc = this.add.circle(0, -ch / 2 + 82, 38, 0x0a0f0a, 0.7).setStrokeStyle(3, col);
+      parts.push(disc);
+      if (this.textures.exists('ui_' + b.icon)) parts.push(this.add.image(0, -ch / 2 + 82, 'ui_' + b.icon).setScale(INV * 0.95));
+      parts.push(this.add.text(0, -ch / 2 + 128, b.name, { fontFamily: FONT, fontStyle: '900', fontSize: '26px', color: '#ffb238', align: 'center' }).setOrigin(0.5, 0).setResolution(2));
+      parts.push(this.add.text(0, -ch / 2 + 162, b.desc, { fontFamily: FONT, fontSize: '19px', color: '#f1ebd8', align: 'center', wordWrap: { width: cw - 28 }, lineSpacing: -2 }).setOrigin(0.5, 0).setResolution(2));
+      const n = have[id] ?? 0;
+      if (b.max > 1 && b.max < 9) parts.push(this.add.text(cw / 2 - 12, -ch / 2 + 36, `${n}/${b.max}`, { fontFamily: FONT, fontSize: '18px', color: '#c9c4bd', stroke: INK, strokeThickness: 4 }).setOrigin(1, 0).setResolution(2));
+      const card = this.add.container(x, y + 30, parts).setDepth(10004).setSize(cw, ch).setInteractive({ useHandCursor: true }).setAlpha(0);
+      this.tweens.add({ targets: card, y, alpha: 1, duration: 260, delay: i * 70, ease: 'Back.easeOut' });
+      card.on('pointerover', () => { box.setFillStyle(0x263528, 1); card.setScale(1.04); });
+      card.on('pointerout', () => { box.setFillStyle(0x16201a, 0.97); card.setScale(1); });
       card.on('pointerdown', () => this.pickBlessing(i));
       this.cards.push(card);
     });
-    this.txtSub.setText('Escolha uma bênção. Ela vale até o fim da fase.').setPosition(VIEW.w / 2, 340).setVisible(true).setAlpha(1);
+    this.txtSub.setText('Escolha uma bênção').setPosition(VIEW.w / 2, 268).setVisible(true).setAlpha(1);
   }
 
   private clearCards(): void {
@@ -409,6 +467,11 @@ export class StageScene extends Phaser.Scene {
   }
 
   /* ---------- sprites ---------- */
+
+  /** Folha de sprites pelo nome; se a arte ainda não existe, usa a reserva. */
+  private sheet(key: string, fallback: string): Sheet {
+    return SH[key] && this.textures.exists(key) ? SH[key] : SH[fallback];
+  }
 
   private makeSprite(s: Sheet, frame: string): Phaser.GameObjects.Sprite {
     return this.add.sprite(0, 0, s.key, frame).setOrigin(s.ox / s.cellW, s.oy / s.cellH).setScale(INV);
@@ -449,13 +512,14 @@ export class StageScene extends Phaser.Scene {
   private syncPet(): void {
     const pet = this.world.pet, spr = this.pet;
     if (!pet || !spr) return;
-    const A = SHEETS[pet.id].anims as Record<string, number>;
+    const A = this.sheet(pet.id, 'capivara').anims as Record<string, number>;
     let frame: string;
-    if (pet.state === 'pounce' && A.pounce) frame = 'pounce' + Math.min(A.pounce - 1, Math.floor((pet.stateT / 0.28) * A.pounce));
+    if (A.fly) frame = 'fly' + (Math.floor(this.clock * 14) % A.fly);
+    else if (pet.state === 'pounce' && A.pounce) frame = 'pounce' + Math.min(A.pounce - 1, Math.floor((pet.stateT / 0.28) * A.pounce));
     else if (pet.moving) frame = 'walk' + (Math.floor((pet.walk / (Math.PI * 2)) * A.walk) % A.walk);
     else frame = 'idle' + (Math.floor(this.clock * 3) % A.idle);
     const down = pet.state === 'down';
-    spr.setFrame(frame).setPosition(pet.x, pet.y - (pet.state === 'pounce' ? Math.sin(Math.min(1, pet.stateT / 0.28) * Math.PI) * 40 : 0)).setDepth(pet.y)
+    spr.setFrame(frame).setPosition(pet.x, pet.y - (pet.state === 'pounce' ? Math.sin(Math.min(1, pet.stateT / 0.28) * Math.PI) * 40 : 0)).setDepth(pet.y + (A.fly ? 60 : 0))
       .setScale(INV * pet.facing, INV * (down ? 0.6 : 1)).setAlpha(down ? 0.45 : 1);
     if (pet.flash > 0) spr.setTintFill(0xffffff); else if (pet.tauntT > 0) spr.setTint(Math.floor(this.clock * 8) % 2 ? 0xffe9a8 : 0xffffff); else spr.clearTint();
     this.petShadow!.setPosition(pet.x + 4, pet.y + 2).setAlpha(down ? 0.4 : 1);
@@ -502,6 +566,49 @@ export class StageScene extends Phaser.Scene {
       else if (e.state === 'call') frame = 'raise1';
       else frame = 'idle' + (Math.floor(t * 4) % sheet.anims.idle);
       if (e.state === 'tired') sy = 0.93;
+    } else if (e.kind !== 'curupira') {
+      const k = e.kind, has = !!SH[k] && this.textures.exists(k);
+      sheet = has ? SH[k] : k === 'jacare' ? SHEETS.queixada : k === 'boto' || k === 'iara' ? SHEETS.caipora : SHEETS.sauva;
+      const A = sheet.anims as Record<string, number>, ramp = (name: string, v: number) => name + Math.min(A[name] - 1, Math.max(0, Math.floor(v * A[name])));
+      if (!has) { const n0 = Object.keys(A)[0]; frame = n0 + (Math.floor(t * 8 + e.id) % A[n0]); if (e.hidden) alpha = 0.25; }
+      else if (k === 'piranha') {
+        if (e.state === 'leap') { frame = 'leap' + (A.leap - 1); lift = 16; rot = -0.2; }
+        else if (e.state === 'windup' && e.tele) { frame = ramp('leap', (e.stateT / e.tele.dur) * 0.6); ox = jit; }
+        else frame = 'swim' + (Math.floor(t * 12 + e.id) % A.swim);
+      } else if (k === 'sapo') {
+        if (e.state === 'hop') { const q = Math.min(1, e.stateT / ENEMY.sapo.hopTime); frame = ramp('hop', Math.sin(q * Math.PI)); lift = Math.sin(q * Math.PI) * 46; }
+        else if (e.state === 'spit') frame = ramp('spit', Math.min(0.99, e.stateT / 0.35));
+        else frame = 'idle' + (Math.floor(t * 4 + e.id) % A.idle);
+      } else if (k === 'arraia') {
+        if (e.state === 'buried' || e.state === 'spawn') { frame = 'reveal0'; alpha = 0.55 + 0.1 * Math.sin(t * 2 + e.id); }
+        else if (e.state === 'reveal') frame = ramp('reveal', Math.min(0.99, e.stateT / ENEMY.arraia.revealTime));
+        else if (e.state === 'aim' && e.tele) { frame = ramp('sting', Math.min(0.99, e.stateT / e.tele.dur)); ox = jit * 0.6; }
+        else frame = 'swim' + (Math.floor(t * 8 + e.id) % A.swim);
+      } else if (k === 'caramujo') {
+        frame = 'walk' + (Math.floor(t * 5 + e.id) % A.walk);
+        if (e.state === 'windup' && e.tele) { const q = e.stateT / e.tele.dur; sx = sy = 1 + 0.14 * q; ox = jit * q; }
+      } else if (k === 'jacare') {
+        if (e.state === 'windup' && e.tele) { frame = ramp('bite', Math.min(0.7, (e.stateT / e.tele.dur) * 0.7)); ox = jit; }
+        else if (e.state === 'charge') frame = 'bite' + (A.bite - 1);
+        else if (e.state === 'tail' && e.tele) { frame = ramp('tail', Math.min(0.99, e.stateT / e.tele.dur)); ox = jit; }
+        else frame = e.moving ? 'walk' + cyc(A.walk, e.walk) : 'walk0';
+      } else if (k === 'boto') {
+        if (e.state === 'dive') frame = ramp('dive', Math.min(0.99, e.stateT / ENEMY.boto.mergulho.dive));
+        else if (e.hidden) alpha = 0;
+        else if (e.state === 'tired') { frame = 'tired' + (Math.floor(t * 3) % A.tired); }
+        else if (e.state === 'cast' || e.state === 'call') frame = ramp('cast', Math.min(0.99, e.stateT / 0.4));
+        else frame = 'idle' + (Math.floor(t * 7) % A.idle);
+      } else {
+        if (e.state === 'dive') frame = ramp('dive', Math.min(0.99, e.stateT / ENEMY.iara.mergulho.dive));
+        else if (e.hidden) alpha = 0;
+        else if (e.state === 'downed') frame = 'down' + (Math.floor(t * 3) % A.down);
+        else if (e.state === 'sing') frame = 'sing' + (Math.floor(t * 6) % A.sing);
+        else if (e.state === 'cast') frame = ramp('cast', Math.min(0.99, e.stateT / 0.4));
+        else frame = 'idle' + (Math.floor(t * 7) % A.idle);
+        if (e.state === 'exposed') sy = 0.95;
+        if (e.state === 'roar') sx = sy = 1 + 0.08 * Math.sin(t * 30);
+      }
+      if (has && e.hidden && (k === 'boto' || k === 'iara')) alpha = 0;
     } else {
       const mounted = e.phase === 2 && !e.fake;
       sheet = mounted ? SHEETS.curupira_m : SHEETS.curupira;
@@ -530,8 +637,7 @@ export class StageScene extends Phaser.Scene {
       let v = this.views.get(e.id);
       if (!v) {
         v = { spr: this.makeSprite(po.sheet, po.frame), shadow: this.add.image(0, 0, 'shadow').setDepth(2), sheet: po.sheet.key };
-        const boss = e.kind === 'curupira' || e.kind === 'caipora';
-        if (e.elite && !boss) v.label = this.add.text(0, 0, e.mods.map((m) => MOD_NAMES[m]).join(' · '), { fontFamily: FONT, fontStyle: '900', fontSize: '20px', color: '#c9c4bd', stroke: INK, strokeThickness: 5 }).setOrigin(0.5).setResolution(2);
+        if ((e.elite || e.champion) && !isBoss(e) && e.mods.length) v.label = this.add.text(0, 0, e.mods.map((m) => MOD_NAMES[m]).join(' · '), { fontFamily: FONT, fontStyle: '900', fontSize: e.elite ? '20px' : '16px', color: '#c9c4bd', stroke: INK, strokeThickness: 5 }).setOrigin(0.5).setResolution(2);
         this.views.set(e.id, v);
       }
       const spr = v.spr;
@@ -543,8 +649,11 @@ export class StageScene extends Phaser.Scene {
       v.shadow.setPosition(e.x + 5, e.y + 2).setScale(INV * (e.radius / 20)).setAlpha(po.alpha * spawn);
       if (e.flash > 0) spr.setTintFill(0xffffff);
       else if (e.state === 'exposed' || e.state === 'tired' || e.state === 'downed' || e.stunT > 0) spr.setTint(0xffe9a8);
+      else if (e.bubbleT > 0) spr.setTint(0x9fe0ff);
       else if (e.rootT > 0 || e.slowT > 0) spr.setTint(0x9fd08a);
       else if (e.poisonT > 0) spr.setTint(0xa6e08a);
+      else if (e.wetT > 0) spr.setTint(0xa8d4f0);
+      else if (e.champion) spr.setTint(0xffd0d8);
       else spr.clearTint();
       if (v.label) {
         const open = e.state === 'exposed' || e.state === 'stunned' || e.stunT > 0;
@@ -558,13 +667,22 @@ export class StageScene extends Phaser.Scene {
     for (const pr of this.world.projectiles) {
       live.add(pr.id);
       let img = this.shots.get(pr.id);
-      const tex = pr.kind === 'stampede' ? 'queixada' : pr.kind === 'cipo' ? 'thorn' : pr.kind;
+      if (pr.kind === 'wall') {
+        /* onda da Iara: coluna d'água com uma passagem */
+        const a = this.world.arena, g = this.fxG, w2 = pr.t;
+        g.fillStyle(0x2f8fc0, 0.55).fillRect(pr.x - w2 / 2, a.y0 - 30, w2, pr.sx - pr.sy - a.y0 + 30).fillRect(pr.x - w2 / 2, pr.sx + pr.sy, w2, a.y1 + 30 - pr.sx - pr.sy);
+        g.fillStyle(0xdff6ff, 0.8).fillRect(pr.x + (pr.vx > 0 ? w2 / 2 - 8 : -w2 / 2), a.y0 - 30, 8, pr.sx - pr.sy - a.y0 + 30).fillRect(pr.x + (pr.vx > 0 ? w2 / 2 - 8 : -w2 / 2), pr.sx + pr.sy, 8, a.y1 + 30 - pr.sx - pr.sy);
+        g.lineStyle(4, 0xffd23f, 0.9).strokeRect(pr.x - w2 / 2 - 6, pr.sx - pr.sy, w2 + 12, pr.sy * 2);
+        continue;
+      }
+      const want = pr.kind === 'stampede' ? 'queixada' : pr.kind === 'cipo' ? 'thorn' : pr.kind === 'glob' ? 'spit' : pr.kind;
+      const tex = this.textures.exists(want) ? want : pr.kind === 'glob' ? 'seed' : pr.kind === 'sting' ? 'ethorn' : 'thorn';
       if (!img) {
         img = pr.kind === 'stampede' ? this.makeSprite(SHEETS.queixada, 'run0') : this.add.sprite(0, 0, tex).setScale(INV);
         this.shots.set(pr.id, img);
       }
       const ang = Math.atan2(pr.vy, pr.vx);
-      if (pr.kind === 'seed') {
+      if (pr.kind === 'seed' || pr.kind === 'glob') {
         const k = Math.min(1, pr.t / pr.dur);
         img.setPosition(pr.x, pr.y - 90 * (1 - k) - Math.sin(k * Math.PI) * 170).setRotation(this.clock * 9).setDepth(pr.y + 400).setScale(INV * (1.2 + Math.sin(k * Math.PI) * 0.7));
       } else if (pr.kind === 'stampede') {
@@ -612,7 +730,31 @@ export class StageScene extends Phaser.Scene {
       for (let x = a.x0; x < a.x1; x += 26) { g.fillTriangle(x, a.y0, x + 13, a.y0 - 24, x + 26, a.y0).strokeTriangle(x, a.y0, x + 13, a.y0 - 24, x + 26, a.y0); g.fillTriangle(x, a.y1, x + 13, a.y1 + 24, x + 26, a.y1).strokeTriangle(x, a.y1, x + 13, a.y1 + 24, x + 26, a.y1); }
       for (let y = a.y0; y < a.y1; y += 26) { g.fillTriangle(a.x0, y, a.x0 - 24, y + 13, a.x0, y + 26).strokeTriangle(a.x0, y, a.x0 - 24, y + 13, a.x0, y + 26); g.fillTriangle(a.x1, y, a.x1 + 24, y + 13, a.x1, y + 26).strokeTriangle(a.x1, y, a.x1 + 24, y + 13, a.x1, y + 26); }
     }
+    if (w.flooded) g.fillStyle(0x2f8fc0, 0.2 + 0.04 * Math.sin(t * 2)).fillRect(a.x0 - 40, a.y0 - 40, a.x1 - a.x0 + 80, a.y1 - a.y0 + 80);
+    for (const q of w.puddles) {
+      g.fillStyle(0x2f8fc0, 0.3).fillEllipse(q.x, q.y, q.r * 2, q.r * 1.7);
+      g.lineStyle(3, 0xbfeaff, 0.35 + 0.15 * Math.sin(t * 2 + q.x)).strokeEllipse(q.x, q.y, q.r * 2 - 14 - 6 * Math.sin(t * 1.6 + q.y), q.r * 1.7 - 12);
+    }
+    if (w.current) {
+      const dir = Math.sign(w.current);
+      for (let i = 0; i < 14; i++) { const y = a.y0 + 20 + ((i * 37) % (a.y1 - a.y0 - 40)), span = a.x1 - a.x0, x = a.x0 + ((((i * 173 + t * Math.abs(w.current) * 2.2 * dir) % span) + span) % span); g.lineStyle(3, 0xdff6ff, 0.28).lineBetween(x, y, x - dir * 46, y); }
+    }
     for (const z of w.zones) {
+      if (z.kind === 'pop') continue;
+      if (z.kind === 'chuva') {
+        const k = 1 - z.t / z.dur;
+        g.fillStyle(WATER, 0.12).fillCircle(z.x, z.y, z.r); g.lineStyle(3, 0xbfeaff, 0.3 + 0.4 * k).strokeCircle(z.x, z.y, z.r);
+        for (let i = 0; i < 16; i++) { const an = i * 2.4, d = z.r * (0.15 + ((i * 0.37) % 0.8)), fall = ((t * 2.2 + i * 0.21) % 1); const x = z.x + Math.cos(an) * d, y = z.y + Math.sin(an) * d * 0.8; this.fxG.lineStyle(2.5, 0xdff6ff, 0.7 * (1 - fall)).lineBetween(x + 6, y - 150 + fall * 150, x, y - 130 + fall * 150); }
+        continue;
+      }
+      if (z.kind === 'puddle') { const k = 1 - z.t / z.dur; g.fillStyle(0x6f8fa0, 0.32 * Math.min(1, k * 3)).fillEllipse(z.x, z.y, z.r * 2, z.r * 1.7); g.lineStyle(2, 0xc9d8e0, 0.4 * Math.min(1, k * 3)).strokeEllipse(z.x, z.y, z.r * 2, z.r * 1.7); continue; }
+      if (z.kind === 'whirl') {
+        if (z.t < 0) { tele({ shape: 'circle', x: z.x, y: z.y, r: z.r, t: z.t + ENEMY.iara.redemoinho.delay, dur: ENEMY.iara.redemoinho.delay }, 0x2f6fc0, 0x3f8fe0, 0x8fe3ff); continue; }
+        g.fillStyle(0x1f5f90, 0.45).fillCircle(z.x, z.y, z.r);
+        for (let i = 0; i < 3; i++) { g.lineStyle(4, 0xdff6ff, 0.6); g.beginPath(); g.arc(z.x, z.y, z.r * (0.3 + i * 0.28), t * 5 + i * 2, t * 5 + i * 2 + 3.2); g.strokePath(); }
+        g.lineStyle(2, 0x8fe3ff, 0.25).strokeCircle(z.x, z.y, z.r * 2.4);
+        continue;
+      }
       if (z.kind === 'sementes') tele({ shape: 'circle', x: z.x, y: z.y, r: z.r, t: z.t, dur: z.dur }, 0x3f7a40, 0x6fbf5a, 0x9be36a);
       else if (z.kind === 'broto') {
         const k = 1 - z.t / z.dur, pulse = 0.5 + 0.5 * Math.sin(t * 4);
@@ -627,7 +769,9 @@ export class StageScene extends Phaser.Scene {
     }
     for (const e of w.enemies) if (e.tele) tele(e.tele);
     for (const pr of w.projectiles) if (pr.tele) tele(pr.tele);
-    for (const h of w.hazards) tele(h.tele);
+    for (const h of w.hazards) { if (h.kind === 'jet' || h.kind === 'dive') tele(h.tele, 0x2f6fc0, 0x3f8fe0, 0x8fe3ff); else tele(h.tele); }
+    /* concha do caramujo: quem está dentro apanha menos */
+    for (const e of w.enemies) if (e.kind === 'caramujo' && e.state !== 'spawn') g.lineStyle(3, 0xff7ab0, 0.3 + 0.15 * Math.sin(t * 4)).strokeCircle(e.x, e.y, ENEMY.caramujo.aura * (e.elite ? 1.3 : 1));
     /* aura de quem chama a atenção e do escudo erguido */
     const pet = w.pet;
     if (pet && pet.tauntT > 0) g.lineStyle(3, 0xffd23f, 0.5 + 0.3 * Math.sin(t * 10)).strokeCircle(pet.x, pet.y, 34);
@@ -648,6 +792,7 @@ export class StageScene extends Phaser.Scene {
     const g = this.fxG, w = this.world, p = w.player;
     this.fx = this.fx.filter((f) => (f.t += dt) < f.dur);
     for (const f of this.fx) {
+      if (f.t < 0) continue;
       const k = f.t / f.dur, a = 1 - k;
       if (f.kind === 'ring') g.lineStyle(f.width! * a + 1, f.color!, a).strokeCircle(f.x, f.y, f.r0! + (f.r1! - f.r0!) * k);
       else if (f.kind === 'arc') {
@@ -685,16 +830,21 @@ export class StageScene extends Phaser.Scene {
     if (p.state === 'block') { const parry = p.blockT <= PLAYER.shield.parryWindow; g.lineStyle(parry ? 7 : 4, parry ? 0xffe9a8 : 0xc9a26b, 0.9); g.beginPath(); g.arc(p.x, p.y - 40, 44, p.aim - 0.9, p.aim + 0.9); g.strokePath(); }
     if (p.state === 'charge') { g.lineStyle(5, p.charge >= 0.6 ? 0xfff0a8 : 0xffffff, 0.85); g.beginPath(); g.arc(p.x, p.y - 44, 34, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p.charge); g.strokePath(); g.lineStyle(2, 0xffffff, 0.25).lineBetween(p.x, p.y - 44, p.x + Math.cos(p.aim) * 320, p.y - 44 + Math.sin(p.aim) * 320); }
     if (p.cascaT > 0) g.lineStyle(5, 0xc9a26b, 0.55 + 0.25 * Math.sin(this.clock * 8)).strokeEllipse(p.x, p.y - 40, 62, 96);
+    if (p.shield) g.lineStyle(3, 0xffe9a8, 0.5 + 0.2 * Math.sin(this.clock * 5)).strokeEllipse(p.x, p.y - 40, 74, 108);
     for (const e of w.enemies) {
       if (e.hidden || e.fake) continue;
-      const sh = this.views.get(e.id), top = sh ? sh.spr.displayHeight * 0.62 + 6 : 60, boss = e.kind === 'curupira' || e.kind === 'caipora';
-      if ((e.kind === 'queixada' && e.state === 'stunned') || e.stunT > 0 || (e.kind === 'caipora' && e.state === 'tired') || e.state === 'downed') {
+      const sh = this.views.get(e.id), top = sh ? sh.spr.displayHeight * 0.62 + 6 : 60, boss = isBoss(e);
+      if (e.bubbleT > 0) { g.fillStyle(0xbfeaff, 0.25).fillCircle(e.x, e.y - top * 0.45, e.radius + 22); g.lineStyle(3, 0xffffff, 0.8).strokeCircle(e.x, e.y - top * 0.45, e.radius + 22); }
+      if (e.markT > 0) { g.lineStyle(4, 0xffd23f, 0.9).strokeCircle(e.x, e.y - top - 22, 9); g.lineBetween(e.x - 14, e.y - top - 22, e.x + 14, e.y - top - 22).lineBetween(e.x, e.y - top - 36, e.x, e.y - top - 8); }
+      if (e.wetT > 0) for (let i = 0; i < 3; i++) { const fall = (this.clock * 1.6 + i * 0.33 + e.id * 0.1) % 1; g.fillStyle(0xbfeaff, 0.9 * (1 - fall)).fillCircle(e.x - 14 + i * 14, e.y - top * 0.8 + fall * 34, 3.5); }
+      if (e.guarded) { g.lineStyle(3, 0xff7ab0, 0.7); g.beginPath(); g.arc(e.x, e.y - top * 0.45, e.radius + 14, -2.4, -0.7); g.strokePath(); }
+      if ((e.kind === 'queixada' && e.state === 'stunned') || e.stunT > 0 || e.state === 'tired' || e.state === 'downed' || (e.kind === 'iara' && e.state === 'exposed')) {
         for (let i = 0; i < 3; i++) { const an = this.clock * 5 + i * 2.09; g.fillStyle(0xffd23f, 1).fillCircle(e.x + Math.cos(an) * 24, e.y - top + 4 + Math.sin(an) * 7, 5); }
       }
       if (!boss && e.hp < e.maxHp && e.state !== 'spawn') {
-        const bw = e.elite ? 80 : 46, x = e.x - bw / 2, y = e.y - top - 8;
+        const bw = e.elite ? 80 : e.champion ? 62 : 46, x = e.x - bw / 2, y = e.y - top - 8;
         g.fillStyle(0x0a0f0a, 0.8).fillRect(x - 2, y - 2, bw + 4, 9);
-        g.fillStyle(e.elite ? 0xffb238 : 0xd6402b, 1).fillRect(x, y, bw * Math.max(0, e.hp / e.maxHp), 5);
+        g.fillStyle(e.elite ? 0xffb238 : e.champion ? 0xff7ab0 : 0xd6402b, 1).fillRect(x, y, bw * Math.max(0, e.hp / e.maxHp), 5);
       }
     }
   }
@@ -712,7 +862,7 @@ export class StageScene extends Phaser.Scene {
     return this.add.text(x, y, '', { fontFamily: FONT, fontSize: size + 'px', color, stroke: INK, strokeThickness: 4 }).setDepth(10001).setResolution(2);
   }
 
-  private slotX(i: number): number { return VIEW.w - 80 - (6 - i) * 66; }
+  private slotX(i: number): number { return VIEW.w - 80 - (7 - i) * 66; }
 
   private buildHud(): void {
     const w = this.world, bow = w.stats.weapon === 'arco';
@@ -724,12 +874,18 @@ export class StageScene extends Phaser.Scene {
     this.txtBoss = this.label(VIEW.w / 2, 62, 24, '#ffb238').setOrigin(0.5);
     this.txtExit = this.label(0, 0, 26, '#ffb238').setOrigin(1, 0.5).setText('Siga em frente').setVisible(false);
     this.txtHelp = this.label(VIEW.w / 2, VIEW.h - 132, 19, '#f1ebd8').setOrigin(0.5)
-      .setText(`WASD mover · clique atacar · botão direito ${bow ? 'carregar tiro' : 'defender'} · Espaço esquivar · Q E R feitiços · F companheiro · 1 poção · Esc pausa`);
+      .setText(`WASD mover · clique atacar · botão direito ${bow ? 'carregar tiro' : 'defender'} · Espaço esquivar · Q E R feitiços · F companheiro · T Encantado · 1 poção · Esc pausa`);
     this.txtBanner = this.add.text(VIEW.w / 2, VIEW.h / 2 - 50, '', { fontFamily: FONT, fontStyle: '900', fontSize: '92px', color: '#ffb238', stroke: INK, strokeThickness: 12 }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     this.txtSub = this.add.text(VIEW.w / 2, VIEW.h / 2 + 50, '', { fontFamily: FONT, fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
-    const names = ['Clique', bow ? 'Dir.' : (w.stats.hasShield ? 'Dir.' : ''), 'Espaço', 'Q', 'E', 'R', 'F'];
+    const names = ['Clique', bow ? 'Dir.' : (w.stats.hasShield ? 'Dir.' : ''), 'Espaço', 'Q', 'E', 'R', 'F', 'T'];
     this.slotKeys = names.map((s, i) => this.label(this.slotX(i) + 28, VIEW.h - 28, 15).setOrigin(0.5).setText(s));
-    this.slotIcons = [null, null, null, ...w.spells.map((id, i) => (id ? this.add.image(this.slotX(3 + i) + 28, VIEW.h - 74, 'ic_' + id).setScale(INV * 1.05).setDepth(10001) : null)), null];
+    const icon = (i: number, key: string, scale = 0.8) => (this.textures.exists(key) ? this.add.image(this.slotX(i) + 28, VIEW.h - 74, key).setScale(INV * scale).setDepth(10001) : null);
+    this.slotIcons = [
+      icon(0, bow ? 'ui_projetil' : 'ui_dano'), bow || w.stats.hasShield ? icon(1, bow ? 'ui_perfurar' : 'ui_defesa') : null, icon(2, 'ui_esquiva'),
+      ...w.spells.map((id, i) => (id ? icon(3 + i, this.textures.exists('ui_' + id) ? 'ui_' + id : 'ic_' + id, this.textures.exists('ui_' + id) ? 0.8 : 1.05) : null)),
+      w.pet ? icon(6, 'ui_companheiro') : null, null,
+    ];
+    this.supIcon = w.supremo ? icon(7, 'ui_' + w.supremo) : null;
     this.add.image(304, VIEW.h - 68, 'ic_pocao').setScale(INV * 0.8).setDepth(10001);
   }
 
@@ -758,8 +914,19 @@ export class StageScene extends Phaser.Scene {
     this.txtHp.setText(`${Math.ceil(p.hp)} / ${s.maxHp}`);
     this.txtMana.setText(`${Math.floor(p.mana)} / ${s.maxMana}`);
     this.txtPotion.setText(String(p.potions));
-    /* bênçãos ativas */
-    w.blessings.forEach((_, i) => g.fillStyle(0x9be7c0, 1).fillCircle(34 + i * 18, VIEW.h - 96, 6));
+    /* bênçãos ativas: um ícone por bênção, com o número de vezes */
+    if (this.blessShown !== w.blessings.length) {
+      this.blessShown = w.blessings.length;
+      for (const o of this.blessIcons) o.destroy();
+      this.blessIcons = [];
+      const counts = blessingCounts(w.blessings);
+      (Object.keys(counts) as BlessingId[]).forEach((id, i) => {
+        const b = BLESSINGS[id], x = 40 + i * 40, y = VIEW.h - 108, col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
+        this.blessIcons.push(this.add.circle(x, y, 17, 0x0a0f0a, 0.85).setStrokeStyle(2, col).setDepth(10001));
+        if (this.textures.exists('ui_' + b.icon)) this.blessIcons.push(this.add.image(x, y, 'ui_' + b.icon).setScale(INV * 0.42).setDepth(10002));
+        if (counts[id]! > 1) this.blessIcons.push(this.add.text(x + 9, y + 4, String(counts[id]), { fontFamily: FONT, fontStyle: '900', fontSize: '16px', color: '#ffffff', stroke: INK, strokeThickness: 4 }).setDepth(10003).setResolution(2));
+      });
+    }
 
     const slot = (i: number, color: number, cd: number, ok: boolean, show = true) => {
       if (!show) { this.slotKeys[i].setVisible(false); return; }
@@ -775,11 +942,16 @@ export class StageScene extends Phaser.Scene {
     for (let i = 0; i < s.dodgeCharges; i++) g.fillStyle(i < p.dodgeCharges ? 0xffffff : 0x3a4a3a, 1).fillCircle(this.slotX(2) + 12 + i * 14, VIEW.h - 112, 4);
     for (let i = 0; i < 3; i++) {
       const id = w.spells[i];
-      slot(3 + i, 0x2d3b2b, id ? p.cds[i] / p.cdMax[i] : 0, !!id && p.mana >= SPELLS[id].cost * s.manaCostMult, !!id);
-      this.slotIcons[3 + i]?.setAlpha(id && p.cds[i] <= 0 && p.mana >= SPELLS[id].cost * s.manaCostMult ? 1 : 0.4);
+      slot(3 + i, 0x2d3b2b, id ? p.cds[i] / p.cdMax[i] : 0, !!id && p.mana >= spellCost(w, i, id), !!id);
+      this.slotIcons[3 + i]?.setAlpha(id && p.cds[i] <= 0 && p.mana >= spellCost(w, i, id) ? 1 : 0.4);
     }
     const pet = w.pet;
-    slot(6, 0xb98452, pet ? pet.cd / COMPANIONS[pet.id].cooldown : 0, !!pet && pet.state !== 'down', !!pet);
+    slot(6, 0xb98452, pet ? pet.cd / (COMPANIONS[pet.id].cooldown * s.petCooldownMult) : 0, !!pet && pet.state !== 'down', !!pet);
+    /* Supremo: enche com a luta; cheio, pisca */
+    const full = p.supremo >= 100, sc = w.supremo ? Phaser.Display.Color.HexStringToColor(ELEMENTS[w.supremo].color).color : 0;
+    slot(7, full && Math.floor(this.clock * 6) % 2 ? 0xffffff : sc, w.supremo ? 1 - p.supremo / 100 : 0, full, !!w.supremo);
+    this.supIcon?.setAlpha(full ? 1 : 0.45);
+    if (w.supremo && full) g.lineStyle(4, 0xffd23f, 0.6 + 0.4 * Math.sin(this.clock * 8)).strokeRoundedRect(this.slotX(7) - 4, VIEW.h - 106, 64, 64, 10);
 
     /* cabeçalho: fase, salas e tempo */
     this.txtInfo.setText(`${this.stage.id} · ${this.stage.name}`);
@@ -795,18 +967,18 @@ export class StageScene extends Phaser.Scene {
     this.txtTime.setText(`${this.fmt(w.time)}   alvo ${this.fmt(this.stage.starTime).slice(0, 5)}`).setColor(late ? '#c9c4bd' : '#ffffff');
 
     /* barra de elite ou de chefão */
-    const boss = w.enemies.find((e) => (e.kind === 'curupira' && !e.fake) || e.kind === 'caipora') ?? w.enemies.find((e) => e.elite);
+    const boss = w.enemies.find((e) => isBoss(e) && !e.fake) ?? w.enemies.find((e) => e.elite);
     if (boss) {
-      const bw = 480, x = VIEW.w / 2 - bw / 2, y = 84, isBoss = boss.kind === 'curupira' || boss.kind === 'caipora';
+      const bw = 480, x = VIEW.w / 2 - bw / 2, y = 84, big = isBoss(boss);
       g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y - 4, bw + 8, 24, 6);
       g.fillStyle(0xd6402b, 1).fillRect(x, y, bw * Math.max(0, boss.hp / boss.maxHp), 16);
-      if (boss.kind === 'curupira') {
-        for (const f of ENEMY.curupira.phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
-        const P = ENEMY.curupira.posture;
+      if (boss.kind === 'curupira' || boss.kind === 'iara') {
+        for (const f of ENEMY[boss.kind].phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
+        const P = ENEMY[boss.kind].posture;
         g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y + 22, bw + 8, 14, 5);
         g.fillStyle(boss.state === 'downed' ? 0xffffff : 0xffd23f, 1).fillRect(x, y + 25, bw * (boss.state === 'downed' ? 1 - boss.stateT / P.downed : boss.posture / P.max), 8);
       }
-      this.txtBoss.setText(isBoss ? ENEMY_NAMES[boss.kind] : `${ENEMY_NAMES[boss.kind]} · elite`).setVisible(true);
+      this.txtBoss.setText(big ? ENEMY_NAMES[boss.kind] : `${ENEMY_NAMES[boss.kind]} · elite`).setVisible(true);
     } else this.txtBoss.setVisible(false);
     this.txtHelp.setAlpha(this.stage.number === 1 && w.room === 0 ? Math.max(0, 1 - Math.max(0, w.time - 12) / 3) : 0);
   }

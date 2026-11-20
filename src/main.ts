@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { BAKE, SHEETS, bakeAll } from './art/bake';
+import { BAKE, SHEETS, bakeAll, type Sheet } from './art/bake';
 import { VIEW } from './data/balance';
 import { StageScene } from './game/StageScene';
 import { session } from './game/session';
@@ -47,10 +47,11 @@ class CampScene extends Phaser.Scene {
     const hero = this.add.sprite(x, y, sheet.key, 'idle0').setOrigin(sheet.ox / sheet.cellW, sheet.oy / sheet.cellH).setScale(inv);
     this.time.addEvent({ delay: 218, loop: true, callback: () => hero.setFrame('idle' + (Math.floor(this.time.now / 218) % sheet.anims.idle)) });
     if (p?.companion) {
-      const s = SHEETS[p.companion];
+      const all = SHEETS as unknown as Record<string, Sheet>, s = all[p.companion] && this.textures.exists(p.companion) ? all[p.companion] : SHEETS.capivara;
+      const A = s.anims as Record<string, number>, anim = A.fly ? 'fly' : 'idle', n = A[anim], lift = A.fly ? 70 : 0;
       this.add.image(x - 66, y + 20, 'shadow').setScale(inv * 0.8);
-      const pet = this.add.sprite(x - 70, y + 18, s.key, 'idle0').setOrigin(s.ox / s.cellW, s.oy / s.cellH).setScale(inv);
-      this.time.addEvent({ delay: 330, loop: true, callback: () => pet.setFrame('idle' + (Math.floor(this.time.now / 330) % s.anims.idle)) });
+      const pet = this.add.sprite(x - 70, y + 18 - lift, s.key, anim + '0').setOrigin(s.ox / s.cellW, s.oy / s.cellH).setScale(inv);
+      this.time.addEvent({ delay: A.fly ? 90 : 330, loop: true, callback: () => pet.setFrame(anim + (Math.floor(this.time.now / (A.fly ? 90 : 330)) % n)) });
     }
     this.add.image(0, 0, 'canopy').setOrigin(0).setScale(inv);
     this.add.image(0, 0, 'rays').setOrigin(0).setScale(inv).setBlendMode(Phaser.BlendModes.ADD);

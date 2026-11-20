@@ -2,7 +2,8 @@
 import { ENEMY, MOD, PLAYER } from '../data/balance';
 import { SPELL_NUM } from '../data/content';
 import { updateCurupira } from './boss';
-import { clampArena, damageEnemy, emit, hurtPet, hurtPlayer, max0, rand, rayExit, setState, spawnEnemy, strike, targetOf } from './core';
+import { CH2_START, updateChapter2 } from './enemies2';
+import { clampArena, damageEnemy, emit, hurtPet, hurtPlayer, max0, rand, rayExit, setState, spawnEnemy, spellScale, strike, targetOf } from './core';
 import type { Enemy, World } from './types';
 
 export function moveToward(e: Enemy, tx: number, ty: number, speed: number, dt: number): number {
@@ -23,6 +24,15 @@ export function chargeContact(w: World, e: Enemy, damage: number, knock: number)
   if (pet && pet.state !== 'down' && e.count >= 0 && Math.hypot(pet.x - e.x, pet.y - e.y) < e.radius + 14 && pet.flash <= 0) hurtPet(w, damage * 0.6);
 }
 
+/** Projétil em arco com a marca do ponto de queda no chão. */
+export function lob(w: World, e: Enemy, kind: 'seed' | 'glob', tx: number, ty: number, flight: number, radius: number, damage: number): void {
+  w.projectiles.push({
+    id: w.nextId++, kind, x: e.x, y: e.y, vx: 0, vy: 0, dist: 0, range: 0, damage, pierce: false, hit: [], charged: false,
+    sx: e.x, sy: e.y, tx, ty, t: 0, dur: flight,
+    tele: { shape: 'circle', x: tx, y: ty, r: radius, t: 0, dur: flight }, owner: e.id,
+  });
+}
+
 export function updateEnemy(w: World, e: Enemy, dt: number): void {
   e.flash = max0(e.flash - dt); e.cd = max0(e.cd - dt); e.stateT += dt; e.moving = false; e.sinceHit += dt;
   e.aggroPet = max0(e.aggroPet - dt); e.slowT = max0(e.slowT - dt);
@@ -34,7 +44,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
     e.poisonT -= dt; e.poisonTick -= dt;
     if (e.poisonTick <= 0) {
       e.poisonTick += N.poisonEvery;
-      damageEnemy(w, e, N.poisonTick * w.stats.spellPower * (1 + 0.16 * (w.stats.level - 1)), 'poison', 0);
+      damageEnemy(w, e, N.poisonTick * spellScale(w) * w.stats.poisonMult, 'poison', 0);
       if (e.hp <= 0) return;
     }
   }
@@ -43,17 +53,20 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
   if (e.state === 'spawn') {
     if (e.stateT >= ENEMY.spawnTime) {
       if (e.kind === 'urutau') { e.hidden = true; setState(e, 'perched'); }
+      else if (e.kind === 'arraia') { e.hidden = true; setState(e, 'buried'); }
+      else if (CH2_START[e.kind]) setState(e, CH2_START[e.kind]!);
       else setState(e, e.kind === 'cuspidor' || e.kind === 'curupira' ? 'idle' : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : 'chase');
     }
     return;
   }
   if (e.kind === 'curupira') { updateCurupira(w, e, dt); return; }
+  if (w.current && !e.hidden && e.kind !== 'cuspidor' && e.kind !== 'jacare' && e.kind !== 'caramujo' && e.kind !== 'boto' && e.kind !== 'iara') e.x += w.current * 0.6 * dt;
 
   /* atordoado (aparada) ou preso (Cipó-Laço): não age */
   if (e.stunT > 0 || e.rootT > 0) {
     e.stunT = max0(e.stunT - dt); e.rootT = max0(e.rootT - dt);
     e.tele = null;
-    if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'spit') setState(e, e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : e.kind === 'cuspidor' ? 'idle' : e.kind === 'urutau' ? 'hover' : 'chase');
+    if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'spit' || e.state === 'sting' || e.state === 'tail' || e.state === 'hop') setState(e, CH2_START[e.kind] && e.kind !== 'arraia' ? CH2_START[e.kind]! : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : e.kind === 'cuspidor' ? 'idle' : e.kind === 'urutau' ? 'hover' : 'chase');
     clampArena(w, e, e.radius);
     return;
   }
@@ -63,28 +76,33 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
   const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1), wm = e.windupMult;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
 
+  if (updateChapter2(w, e, dt)) return;
   if (e.kind === 'sauva') {
     const S = ENEMY.sauva;
     if (e.state === 'chase') {
       face();
-      const a = e.id * 2.4;
-      moveToward(e, T.x + Math.cos(a) * 26, T.y + Math.sin(a) * 26, S.speed * sp, dt);
-      if (d < S.biteRange + (e.radius - S.radius)) {
-        setState(e, 'windup'); e.dirX = dx / d; e.dirY = dy / d;
-        e.tele = { shape: 'circle', x: e.x + e.dirX * S.biteOffset, y: e.y + e.dirY * S.biteOffset, r: S.biteRadius * (e.radius / S.radius), t: 0, dur: S.windup * wm };
+      /* cerca o herói: cada saúva chega por um lado diferente e mira onde ele vai estar */
+      const a = e.id * 2.4, pl = w.player, lead = T === pl ? 0.22 : 0;
+      moveToward(e, T.x + pl.vx * lead + Math.cos(a) * 30, T.y + pl.vy * lead + Math.sin(a) * 30, S.speed * sp, dt);
+      if (d < S.biteRange + (e.radius - S.radius) && e.cd <= 0) {
+        const lx = T.x + pl.vx * lead * 0.8 - e.x, ly = T.y + pl.vy * lead * 0.8 - e.y, ld = Math.hypot(lx, ly) || 1, reach = S.biteOffset + S.lunge;
+        setState(e, 'windup'); e.dirX = lx / ld; e.dirY = ly / ld;
+        e.tele = { shape: 'circle', x: e.x + e.dirX * reach, y: e.y + e.dirY * reach, r: S.biteRadius * (e.radius / S.radius), t: 0, dur: S.windup * wm };
         emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
       }
     } else if (e.state === 'windup' && e.tele) {
       e.tele.t = e.stateT;
+      /* o bote: avança no fim do aviso */
+      if (e.stateT >= e.tele.dur * 0.6) { const v = S.lunge / (e.tele.dur * 0.4); e.x += e.dirX * v * dt; e.y += e.dirY * v * dt; }
       if (e.stateT >= e.tele.dur) {
         emit(w, { type: 'bite', x: e.tele.x, y: e.tele.y });
         strike(w, e.tele, S.damage * e.dmg, 260, { src: e, melee: true });
         e.tele = null; setState(e, 'recover');
       }
     } else if (e.state === 'recover') {
-      if (e.stateT >= S.recover) setState(e, 'chase');
+      if (e.stateT >= S.recover) { setState(e, 'chase'); e.cd = 0.15 + rand(w) * 0.3; }
     } else if (e.state === 'stagger') {
-      if (e.stateT >= 0.28) setState(e, 'chase');
+      if (e.stateT >= 0.24) setState(e, 'chase');
     } else setState(e, 'chase');
     clampArena(w, e, e.radius);
   } else if (e.kind === 'queixada') {
@@ -107,7 +125,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       chargeContact(w, e, Q.damage * e.dmg, 520);
       if (clampArena(w, e, e.radius)) { setState(e, 'stunned'); emit(w, { type: 'crash', x: e.x, y: e.y, text: 'TONTA' }); }
     } else if (e.state === 'stunned') {
-      if (e.stateT >= Q.stun) { setState(e, 'roam'); e.cd = Q.cooldown; }
+      if (e.stateT >= Q.stun * Math.max(0.6, wm)) { setState(e, 'roam'); e.cd = Q.cooldown * wm; }
     } else setState(e, 'roam');
   } else if (e.kind === 'cuspidor') {
     const C = ENEMY.cuspidor;
@@ -117,14 +135,14 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
     } else if (e.state === 'spit') {
       if (!e.flag && e.stateT >= 0.25 * wm) {
         e.flag = true; e.cd = C.interval * wm;
-        const p = w.player, lead = T === p ? C.lead : 0;
-        const t = { x: T.x + p.vx * lead, y: T.y + p.vy * lead };
-        clampArena(w, t, PLAYER.radius);
-        w.projectiles.push({
-          id: w.nextId++, kind: 'seed', x: e.x, y: e.y, vx: 0, vy: 0, dist: 0, range: 0, damage: C.damage * e.dmg, pierce: false, hit: [], charged: false,
-          sx: e.x, sy: e.y, tx: t.x, ty: t.y, t: 0, dur: C.flight,
-          tele: { shape: 'circle', x: t.x, y: t.y, r: C.splash * (e.elite ? 1.3 : 1), t: 0, dur: C.flight }, owner: e.id,
-        });
+        const p = w.player, shots = w.cfg.level >= C.doubleFrom ? 2 : 1;
+        for (let i = 0; i < shots; i++) {
+          /* o primeiro vai onde o herói está indo; o segundo, onde ele está agora */
+          const lead = T === p ? (i === 0 ? C.flight * 0.85 : 0) : 0;
+          const t = { x: T.x + p.vx * lead, y: T.y + p.vy * lead };
+          clampArena(w, t, PLAYER.radius);
+          lob(w, e, 'seed', t.x, t.y, C.flight + i * 0.18, C.splash * (e.elite ? 1.3 : 1), C.damage * e.dmg);
+        }
         emit(w, { type: 'spit', x: e.x, y: e.y });
       }
       if (e.stateT >= 0.55) setState(e, 'idle');
@@ -247,7 +265,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
 /** Impede inimigos de ficarem um em cima do outro e do herói. */
 export function separate(w: World): void {
   const es = w.enemies;
-  const fixed = (e: Enemy) => e.kind === 'cuspidor' || e.state === 'charge' || e.state === 'dash' || e.state === 'spawn' || e.state === 'perched' || e.hidden || e.fake;
+  const fixed = (e: Enemy) => e.kind === 'cuspidor' || e.state === 'charge' || e.state === 'dash' || e.state === 'leap' || e.state === 'hop' || e.state === 'spawn' || e.state === 'perched' || e.hidden || e.fake;
   for (let i = 0; i < es.length; i++) {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i], b = es[j];
@@ -256,7 +274,7 @@ export function separate(w: World): void {
       const fa = fixed(a), fb = fixed(b);
       if (fa && fb) continue;
       const push = min - d, nx = dx / d, ny = dy / d;
-      const heavy = (e: Enemy) => e.kind === 'tronco' || e.kind === 'caipora' || e.kind === 'curupira';
+      const heavy = (e: Enemy) => e.kind === 'tronco' || e.kind === 'caipora' || e.kind === 'curupira' || e.kind === 'jacare' || e.kind === 'caramujo' || e.kind === 'boto' || e.kind === 'iara';
       const wa = fa ? 0 : fb ? 1 : heavy(a) ? 0.15 : heavy(b) ? 0.85 : 0.5;
       a.x -= nx * push * wa; a.y -= ny * push * wa;
       b.x += nx * push * (1 - wa); b.y += ny * push * (1 - wa);
@@ -265,7 +283,7 @@ export function separate(w: World): void {
   const p = w.player;
   if (p.state === 'dodge' || p.state === 'dead') return;
   for (const e of es) {
-    if (e.state === 'spawn' || e.state === 'charge' || e.state === 'dash' || e.hidden || e.fake) continue;
+    if (e.state === 'spawn' || e.state === 'charge' || e.state === 'dash' || e.state === 'leap' || e.state === 'hop' || e.hidden || e.fake) continue;
     const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 0.01, min = e.radius * 0.8 + PLAYER.radius;
     if (d >= min) continue;
     p.x += (dx / d) * (min - d); p.y += (dy / d) * (min - d);

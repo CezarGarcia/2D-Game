@@ -3,11 +3,11 @@
  * Não depende do Phaser nem do navegador: recebe comandos, avança um passo fixo e devolve eventos.
  * Isso permite testar as regras sem tela e, mais adiante, gravar partidas e conferi-las no servidor.
  */
-import { ARENA, PLAYER, WAVE_DELAY } from '../data/balance';
-import { BLESSING_ORDER, MAX_POTIONS, type BlessingId } from '../data/content';
+import { ARENA, ENEMY, PLAYER, WAVE_DELAY, WAVE_OVERLAP } from '../data/balance';
+import { BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, blessingCounts, type BlessingId } from '../data/content';
 import { levelCombatModifiers } from '../data/progression';
 import type { HeroStats } from '../meta/stats';
-import { clampArena, emit, healPlayer, rand, spawnEnemy } from './core';
+import { clampArena, emit, healPlayer, max0, rand, spawnEnemy, wet } from './core';
 import { separate, updateEnemy } from './enemies';
 import { makePet, updateHazards, updatePet, updatePlayer, updateProjectiles, updateZones } from './player';
 import type { Input, Player, StageConfig, World } from './types';
@@ -26,7 +26,8 @@ function newPlayer(stats: HeroStats): Player {
     bufAttack: 0, bufDodge: 0, bufSpell: [0, 0, 0],
     blockT: 0, charge: 0, shotCd: 0, contraT: 0, presaT: 0, cascaT: 0, slowT: 0,
     stacks: 0, stackT: 0, jabutiUsed: false,
-    potions: Math.min(MAX_POTIONS, stats.potions), potionCd: 0,
+    potions: stats.potions, potionCd: 0,
+    shield: stats.firstHitShield, novaT: 0, supremo: 0, inPuddle: false, surf: 0,
   };
 }
 
@@ -39,9 +40,10 @@ export function createWorld(cfg: StageConfig): World {
     wave: -1, waveTimer: 0, nextId: 1, rng: cfg.seed | 0,
     dealt: mods.dealt, taken: mods.taken,
     blessings: [], altar: null,
-    revives: PLAYER.revives, deaths: 0, deadT: 0,
+    revives: cfg.stats.revives, deaths: 0, deadT: 0,
     kills: 0, perfects: 0, hitsTaken: 0, roomsCleared: 0, bossTime: 0,
     spells: cfg.stats.loadout.slice(0, 3),
+    puddles: [], current: 0, supremo: cfg.stats.supremo, flooded: false,
   };
   w.pet = makePet(w);
   startRoom(w, 0);
@@ -59,6 +61,8 @@ function startRoom(w: World, index: number): void {
   w.arena = { ...ARENA };
   w.enemies = []; w.projectiles = []; w.hazards = []; w.zones = [];
   w.wave = -1; w.waveTimer = WAVE_DELAY - 0.5; w.bossTime = 0; w.altar = null;
+  w.puddles = room.puddles ?? []; w.current = room.current ?? 0; w.flooded = false;
+  p.shield = w.stats.firstHitShield; p.surf = 0;
   p.x = ARENA.x0 + 100; p.y = (ARENA.y0 + ARENA.y1) / 2;
   p.kx = p.ky = 0; p.state = 'idle'; p.stateT = 0; p.charge = 0; p.slowT = 0; p.iframes = 0; p.hurtInv = 0;
   const pet = w.pet;
@@ -67,12 +71,29 @@ function startRoom(w: World, index: number): void {
     pet.x = p.x - 50; pet.y = p.y + 18; pet.tauntT = 0;
   }
   if (room.type === 'altar') {
-    const pool = BLESSING_ORDER.filter((b) => !w.blessings.includes(b)), picks: BlessingId[] = [];
-    while (picks.length < 3 && pool.length) picks.push(pool.splice(Math.floor(rand(w) * pool.length), 1)[0]);
-    w.altar = picks; w.phase = 'altar';
+    w.altar = rollBlessings(w); w.phase = 'altar';
     emit(w, { type: 'altar', x: (ARENA.x0 + ARENA.x1) / 2, y: (ARENA.y0 + ARENA.y1) / 2 });
   } else w.phase = 'fight';
   emit(w, { type: 'roomStart', x: p.x, y: p.y, value: index, kind: room.type });
+}
+
+/** Sorteia as bênçãos do altar: as mais fortes saem menos, e nenhuma passa do limite de vezes. */
+function rollBlessings(w: World): BlessingId[] {
+  const have = blessingCounts(w.blessings), s = w.stats, picks: BlessingId[] = [];
+  const pool = BLESSING_ORDER.filter((b) => {
+    if ((have[b] ?? 0) >= BLESSINGS[b].max) return false;
+    if (b === 'parceria' && !s.companion) return false;
+    if (b === 'cura' && w.player.hp > s.maxHp * 0.8 && w.player.potions >= s.potions) return false;
+    return true;
+  });
+  while (picks.length < s.altarChoices && pool.length) {
+    let total = 0;
+    for (const b of pool) total += BLESSING_WEIGHT[BLESSINGS[b].tier];
+    let roll = rand(w) * total, at = 0;
+    for (let i = 0; i < pool.length; i++) { roll -= BLESSING_WEIGHT[BLESSINGS[pool[i]].tier]; if (roll <= 0) { at = i; break; } }
+    picks.push(pool.splice(at, 1)[0]);
+  }
+  return picks;
 }
 
 /**
@@ -85,7 +106,9 @@ export function chooseBlessing(w: World, index: number, restat: (blessings: Bles
   w.blessings.push(id);
   w.stats = restat(w.blessings);
   if (id === 'vigor') healPlayer(w, w.stats.maxHp - before, true);
-  if (id === 'cura') { healPlayer(w, w.stats.maxHp * 0.6, true); p.potions = MAX_POTIONS; }
+  if (id === 'cura') { healPlayer(w, w.stats.maxHp * 0.6, true); p.potions = w.cfg.stats.potions; }
+  if (id === 'amparo') p.shield = true;
+  if (id === 'folego') p.dodgeCharges = w.stats.dodgeCharges;
   p.hp = Math.min(p.hp, w.stats.maxHp); p.mana = Math.min(p.mana, w.stats.maxMana);
   w.altar = null; w.phase = 'cleared'; w.roomsCleared++;
   emit(w, { type: 'blessing', x: p.x, y: p.y, kind: id });
@@ -115,7 +138,15 @@ export function step(w: World, inp: Input, dt: number): void {
   updatePlayer(w, inp, dt);
   updatePet(w, inp, dt);
   if (w.phase === 'fight') {
-    for (const e of w.enemies) updateEnemy(w, e, dt);
+    /* quem está perto de um Caramujo-Concha fica protegido; quem pisa em poça fica Molhado */
+    const shells = w.enemies.filter((e) => e.kind === 'caramujo' && e.hp > 0 && e.state !== 'spawn');
+    const soak = w.tick % 15 === 0;
+    for (const e of w.enemies) {
+      e.wetT = max0(e.wetT - dt); e.markT = max0(e.markT - dt); e.bubbleT = max0(e.bubbleT - dt);
+      e.guarded = shells.some((c) => c !== e && Math.hypot(c.x - e.x, c.y - e.y) < ENEMY.caramujo.aura * (c.elite ? 1.3 : 1));
+      if (soak && !e.hidden && (w.flooded || w.puddles.some((q) => Math.hypot(e.x - q.x, e.y - q.y) < q.r) || w.zones.some((z) => z.kind === 'puddle' && Math.hypot(e.x - z.x, e.y - z.y) < z.r))) wet(w, e);
+      updateEnemy(w, e, dt);
+    }
     separate(w);
   }
   updateProjectiles(w, dt);
@@ -131,10 +162,13 @@ export function step(w: World, inp: Input, dt: number): void {
 }
 
 function updateWaves(w: World, dt: number): void {
-  if (w.enemies.some((e) => !e.fake)) return;
-  const room = w.cfg.rooms[w.room];
-  if (w.wave >= room.waves.length - 1) {
-    if (w.hazards.length) return;
+  const room = w.cfg.rooms[w.room], alive = w.enemies.filter((e) => !e.fake).length;
+  const lastWave = w.wave >= room.waves.length - 1;
+  /* a onda seguinte entra quando a atual está quase no fim, para não haver respiro */
+  const size = w.wave >= 0 ? room.waves[w.wave].length : 0;
+  if (alive > (lastWave ? 0 : Math.max(1, Math.round(size * WAVE_OVERLAP))) && !(w.wave < 0)) return;
+  if (lastWave) {
+    if (alive > 0 || w.hazards.length) return;
     w.projectiles = []; w.roomsCleared++;
     for (const e of w.enemies) e.hp = 0;
     w.enemies = [];

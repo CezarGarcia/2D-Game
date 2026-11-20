@@ -42,6 +42,8 @@ Em vez de três árvores separadas, os talentos formam **uma única teia radial*
 - **Pontas:** os Dons ficam nas extremidades dos ramos.
 - A regra de "pontos gastos por fileira" deixa de existir; a distância até o centro faz esse papel.
 
+**Estado atual (etapa 3):** a teia do jogo tem 78 nós e está em `src/data/talents.ts`, que é a fonte da verdade. Cada braço tem raiz, um tronco de cinco nós que termina num Dom, e dois galhos de dois nós; entre braços vizinhos há um elo e, depois dele, uma joia. Há talentos de XP (Sabedoria, no braço da Inteligência) e de ouro (Olho Vivo, no da Sorte). A lista abaixo é o desenho original e ficou como referência de ideias.
+
 Os nós listados abaixo são o conteúdo inicial e serão redistribuídos na teia: Bravura ocupa os setores de Força, Vitalidade e Agilidade; Mandinga, os de Inteligência e Espírito; Companheiro, o de Sorte. A teia nasce com esses 39 nós e cresce com mais nós por setor.
 
 Entra na etapa 2 da construção (Capítulo 1), começando pelos setores de Força, Vitalidade e Agilidade.

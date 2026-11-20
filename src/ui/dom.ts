@@ -2,7 +2,8 @@
  * Utilidades das telas de menu: criação de elementos, ícones em canvas e formatação de números.
  * Nada aqui conhece regra de jogo.
  */
-import { drawItemIcon, drawMiscIcon } from '../art/icons';
+import { drawItemIcon } from '../art/icons';
+import { drawUiIcon } from '../art/uiicons';
 
 export type Child = Node | string | number | null | undefined | false | Child[];
 export type Attrs = Record<string, unknown> | string | null;
@@ -44,61 +45,101 @@ export function s(tag: string, attrs?: Attrs, ...kids: Child[]): SVGElement {
   return el;
 }
 
-export interface BtnOpts {
-  kind?: 'primary' | 'danger' | 'quiet';
-  small?: boolean;
-  disabled?: boolean;
-  /** Chave para devolver o foco ao botão depois de redesenhar a tela. Por padrão, o próprio texto. */
-  fk?: string;
-  title?: string;
-  pressed?: boolean;
-  cls?: string;
-  label?: string;
-}
+/* ---------- ícones ---------- */
 
-export function btn(label: Child, onClick: () => void, o: BtnOpts = {}): HTMLButtonElement {
-  const cls = ['btn', o.kind, o.small && 'small', o.cls].filter(Boolean).join(' ');
-  return h('button', {
-    type: 'button', class: cls, disabled: o.disabled, title: o.title, 'aria-label': o.label,
-    'aria-pressed': o.pressed == null ? null : String(o.pressed),
-    'data-fk': o.fk ?? (typeof label === 'string' ? label : null),
-    onclick: onClick,
-  }, label);
-}
+/** Resolução interna dos ícones e retratos: o dobro, para continuarem nítidos com a tela ampliada. */
+export const HD = 2;
 
-/** Faz um grupo de SVG funcionar como botão: foco por Tab, Enter e Espaço ativam. */
-export function svgButton(el: SVGElement, label: string, fk: string, onActivate: () => void, pressed?: boolean): SVGElement {
-  apply(el, { tabindex: 0, role: 'button', 'aria-label': label, 'data-fk': fk, 'aria-pressed': pressed == null ? null : String(pressed) });
-  el.addEventListener('click', onActivate);
-  el.addEventListener('keydown', (e) => {
-    const k = (e as KeyboardEvent).key;
-    if (k === 'Enter' || k === ' ') { e.preventDefault(); onActivate(); }
-  });
-  return el;
-}
+const iconCache = new Map<string, HTMLCanvasElement>();
 
-/** Ícone desenhado por código, com o dobro da resolução para ficar nítido. */
-export function icon(kind: 'item' | 'misc', key: string, size: number): HTMLCanvasElement {
-  const cv = h('canvas', { class: 'ico', width: size * 2, height: size * 2, style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' });
-  const g = cv.getContext('2d');
-  if (g) {
-    g.scale(2, 2);
-    try { (kind === 'item' ? drawItemIcon : drawMiscIcon)(g, key, size); } catch { /* um ícone com defeito não pode derrubar o menu */ }
+function baked(kind: 'ui' | 'item', key: string, size: number): HTMLCanvasElement {
+  const id = `${kind}:${key}:${size}`;
+  let cv = iconCache.get(id);
+  if (!cv) {
+    cv = document.createElement('canvas');
+    cv.width = cv.height = size * HD;
+    const g = cv.getContext('2d');
+    if (g) {
+      g.scale(HD, HD);
+      try { (kind === 'item' ? drawItemIcon : drawUiIcon)(g, key, size); } catch { /* um ícone com defeito não pode derrubar o menu */ }
+    }
+    iconCache.set(id, cv);
   }
   return cv;
 }
 
-const STAR_PATH = 'M12 1.8l3.1 6.5 7.1.9-5.2 4.9 1.3 7.1L12 17.7l-6.3 3.5 1.3-7.1L1.8 9.2l7.1-.9z';
+function iconCanvas(kind: 'ui' | 'item', key: string, size: number, cls: string): HTMLCanvasElement {
+  const cv = h('canvas', { class: `ico ${cls}`.trim(), width: size * HD, height: size * HD, style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' });
+  cv.getContext('2d')?.drawImage(baked(kind, key, size), 0, 0);
+  return cv;
+}
+
+/** Ícone da interface (chaves de src/art/uiicons.ts). */
+export function ui(key: string, size = 24, cls = ''): HTMLCanvasElement {
+  return iconCanvas('ui', key, size, cls);
+}
+
+/** Ícone de um tipo de item. */
+export function itemIcon(type: string, size = 40, cls = ''): HTMLCanvasElement {
+  return iconCanvas('item', type, size, cls);
+}
+
+/** Canvas com o dobro da resolução, já escalado para desenhar em pixels lógicos. */
+export function hdCanvas(w: number, hgt: number, cls = ''): { cv: HTMLCanvasElement; g: CanvasRenderingContext2D | null } {
+  const cv = h('canvas', { class: cls, width: w * HD, height: hgt * HD, style: `width:${w}px;height:${hgt}px`, 'aria-hidden': 'true' });
+  const g = cv.getContext('2d');
+  g?.setTransform(HD, 0, 0, HD, 0, 0);
+  return { cv, g };
+}
+
+const backdropCache = new Map<string, HTMLCanvasElement>();
+
+/**
+ * Fundo pintado de uma tela. Pinta uma vez e reaproveita o mesmo canvas nas próximas vezes,
+ * porque a pintura pode ser cara e a tela é remontada a cada clique.
+ */
+export function backdrop(key: string, w: number, hgt: number, paint: (g: CanvasRenderingContext2D) => void, res = 1.5): HTMLCanvasElement {
+  let cv = backdropCache.get(key);
+  if (!cv) {
+    cv = h('canvas', { class: 'backdrop', width: Math.round(w * res), height: Math.round(hgt * res), style: `width:${w}px;height:${hgt}px`, 'aria-hidden': 'true' });
+    const g = cv.getContext('2d');
+    if (g) {
+      g.setTransform(res, 0, 0, res, 0, 0);
+      try { paint(g); } catch (err) { console.warn('Fundo do menu falhou:', err); }
+    }
+    backdropCache.set(key, cv);
+  }
+  return cv;
+}
+
+/* ---------- peças pequenas ---------- */
+
+const STAR_PATH = 'M12 1.6l3.2 6.6 7.2.9-5.3 5 1.4 7.2L12 17.8l-6.5 3.5 1.4-7.2-5.3-5 7.2-.9z';
 
 export function star(on: boolean, size = 18, extra = ''): SVGElement {
-  return s('svg', { class: `star ${on ? 'on' : 'off'} ${extra}`, viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': 'true' },
+  return s('svg', { class: `star ${on ? 'on' : 'off'} ${extra}`.trim(), viewBox: '0 0 24 24', width: size, height: size, 'aria-hidden': 'true' },
     s('path', { d: STAR_PATH }));
+}
+
+/** Ícone + número, a peça básica da interface. `tone` pinta o número (falta = vermelho). */
+export function stat(iconKey: string, value: Child, o: { size?: number; tone?: string; cls?: string } = {}): HTMLElement {
+  return h('span', `stat ${o.tone ?? ''} ${o.cls ?? ''}`.trim(), ui(iconKey, o.size ?? 22), h('b', null, value));
+}
+
+/** Tecla desenhada (Q, E, R, T, F). */
+export function keycap(k: string): HTMLElement {
+  return h('kbd', 'key', k);
 }
 
 /* ---------- formatação ---------- */
 
 export function num(n: number, digits = 0): string {
   return n.toLocaleString('pt-BR', { maximumFractionDigits: digits });
+}
+
+/** Número com sinal: "+12", "−3". */
+export function signed(n: number, digits = 0): string {
+  return `${n < 0 ? '−' : '+'}${num(Math.abs(n), digits)}`;
 }
 
 /** Fração (0,25) como porcentagem ("25%"). */
@@ -117,6 +158,9 @@ export function br(text: string): string {
   return text.replace(/(\d)\.(\d)/g, '$1,$2');
 }
 
-export function plural(n: number, one: string, many: string): string {
-  return `${num(n)} ${n === 1 ? one : many}`;
+/** Números grandes cabem no HUD: 12.345 vira "12,3 mil". */
+export function compact(n: number): string {
+  if (n >= 1_000_000) return `${num(n / 1_000_000, 1)} mi`;
+  if (n >= 100_000) return `${num(Math.floor(n / 1000))} mil`;
+  return num(n);
 }
