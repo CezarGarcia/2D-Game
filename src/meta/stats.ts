@@ -131,7 +131,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
   const sets = setCounts(items), set = (k: string, n: number) => (sets[k] ?? 0) >= n;
   const pet = (id: CompanionId) => companion === id;
   const chest = p.equipped.peito?.type;
-  const hasShield = !bow && p.equipped.mao?.type === 'escudo';
+  const hasShield = weapon === 'facao' && p.equipped.mao?.type === 'escudo';
   const quiver = bow && p.equipped.mao?.type === 'aljava';
   const companion = p.companion && p.companions[p.companion] ? p.companion : null;
   const pct = (k: AffixKey) => (a[k] || 0) / 100;

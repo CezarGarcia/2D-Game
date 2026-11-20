@@ -250,8 +250,8 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   p.curseT = max0(p.curseT - dt); p.crackT = max0(p.crackT - dt); p.confuseT = max0(p.confuseT - dt); p.wetT = max0(p.wetT - dt);
   p.stoneT = max0(p.stoneT - dt); p.wolfT = max0(p.wolfT - dt); p.dreamT = max0(p.dreamT - dt); p.frenzyT = max0(p.frenzyT - dt);
   for (let i = 0; i < 3; i++) if (p.erased[i] > 0 && p.erased[i] !== Infinity) p.erased[i] = max0(p.erased[i] - dt);
-  if (p.burnT > 0) { p.burnT -= dt; p.burnTick -= dt; if (p.burnTick <= 0) { p.burnTick += 0.5; hurtPlayer(w, s.maxHp * 0.012, p.x, p.y, 0, { soft: true, unblockable: true, element: null }); } }
-  if (p.poisonT > 0) { p.poisonT -= dt; p.poisonTick -= dt; if (p.poisonTick <= 0) { p.poisonTick += 0.5; hurtPlayer(w, s.maxHp * 0.008, p.x, p.y, 0, { soft: true, unblockable: true, element: null }); } }
+  if (p.burnT > 0) { p.burnT -= dt; p.burnTick -= dt; if (p.burnTick <= 0) { p.burnTick += 0.5; hurtPlayer(w, s.maxHp * 0.006, p.x, p.y, 0, { soft: true, unblockable: true, element: null }); } }
+  if (p.poisonT > 0) { p.poisonT -= dt; p.poisonTick -= dt; if (p.poisonTick <= 0) { p.poisonTick += 0.5; hurtPlayer(w, s.maxHp * 0.005, p.x, p.y, 0, { soft: true, unblockable: true, element: null }); } }
   if ((p.state as string) === 'dead') return;
   if (s.passives.frenzy && w.phase === 'fight' && w.enemies.length) { p.fightT += dt; if (p.fightT >= 20) { p.fightT = 0; p.frenzyT = 5; emit(w, { type: 'stack', x: p.x, y: p.y, value: 5, kind: 'furia' }); } }
   /* agarrado, dormindo ou arremessado: não age */

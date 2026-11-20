@@ -58,7 +58,7 @@ var HALOS = [], BASE = null, MARKS = {};
 function toCell(c, x, y) { var T = c.getTransform(), X = T.a * x + T.c * y + T.e, Y = T.b * x + T.d * y + T.f; return BASE ? [(X - BASE.e) / BASE.a, (Y - BASE.f) / BASE.a, Math.hypot(T.a, T.b) / BASE.a] : [x, y, 1]; }
 export function aeye(c, x, y, r, o) {
   o = o || {}; var sq = o.sq == null ? 1 : o.sq, rot = o.rot || 0, p = toCell(c, x, y);
-  HALOS.push({ x: p[0], y: p[1], r: r * p[2] * (o.halo || 3.4), a: o.a == null ? 1 : o.a });
+  HALOS.push({ x: p[0], y: p[1], r: r * p[2] * (o.halo || 3.4) * 1.2, a: o.a == null ? 1 : o.a });
   if (o.socket !== false) { c.beginPath(); c.ellipse(x, y, r * 1.35, r * 1.35 * Math.max(.55, sq), rot, 0, TAU); c.fillStyle = '#1a0c16'; c.fill(); }
   glow(c, x, y, r, r * sq, EYE, EYEG, o.blur || 8, rot);
   if (sq > .5) dot(c, x + r * .28, y - r * .3 * sq, r * .3, '#ffffff');
@@ -69,7 +69,7 @@ function paintHalos(c, list) {
   c.save(); c.globalCompositeOperation = 'lighter';
   list.forEach(function (h) {
     var rgb = h.rgb || '255,61,138', g = c.createRadialGradient(h.x, h.y, 0, h.x, h.y, h.r);
-    g.addColorStop(0, 'rgba(' + rgb + ',' + (.62 * h.a) + ')'); g.addColorStop(.35, 'rgba(' + rgb + ',' + (.26 * h.a) + ')'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
+    g.addColorStop(0, 'rgba(' + rgb + ',' + Math.min(1, .9 * h.a) + ')'); g.addColorStop(.3, 'rgba(' + rgb + ',' + (.4 * h.a) + ')'); g.addColorStop(1, 'rgba(' + rgb + ',0)');
     c.fillStyle = g; c.fillRect(h.x - h.r, h.y - h.r, h.r * 2, h.r * 2);
   });
   c.restore();

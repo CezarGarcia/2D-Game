@@ -4,7 +4,7 @@ import { deriveStats, powerOf, recommendedPower, referenceProfile } from '../src
 import { HUMAN, PERFECT, playStage } from './bot';
 
 declare const process: { argv: string[] };
-const from = Number(process.argv[2] ?? 0), to = Number(process.argv[3] ?? STAGES.length - 1), delta = Number(process.argv[4] ?? 0), N = 6;
+const from = Number(process.argv[2] ?? 0), to = Number(process.argv[3] ?? STAGES.length - 1), delta = Number(process.argv[4] ?? 0), N = Number(process.argv[5] ?? 6);
 for (let i = from; i <= to; i++) {
   const s = STAGES[i], level = Math.max(1, s.level + delta), prof = referenceProfile(level);
   let wins = 0, hp = 0, time = 0, deaths = 0, hits = 0;

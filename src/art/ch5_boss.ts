@@ -85,8 +85,12 @@ export function capelobo(c, anim, k) {
     c.fillStyle = 'rgba(200,214,206,.3)'; c.beginPath(); c.ellipse(lp(HIP[0], SH[0], .55) - pv[0] * 7, lp(HIP[1], SH[1], .55) - pv[1] * 7, 11, 5.4, la, 0, TAU); c.fill();
   } });
   /* juba de pelo pelas costas */
-  var BK = []; for (var i = 0; i <= 5; i++) { var u = i / 5, q = TB[Math.round(u * 8)]; BK.push([q[0] + pv[0] * (q[2] - 1), q[1] + pv[1] * (q[2] - 1)]); }
-  BK.reverse(); shag(c, BK.concat([[SH[0] + pv[0] * 6 + lv[0] * 6, SH[1] + pv[1] * 6 + lv[1] * 6]]), 9, G1, 41);
+  cel(c, function (c) {
+    var i, q, n = TB.length - 1;
+    for (i = 0; i <= n; i++) { q = TB[i]; c[i ? 'lineTo' : 'moveTo'](q[0] + pv[0] * (q[2] - 4), q[1] + pv[1] * (q[2] - 4)); }
+    for (i = n; i >= 0; i--) { q = TB[i]; var sp = (i % 2 ? 4.4 : 1.4) * (i > 0 && i < n ? 1 : .3), bk = i % 2 ? -2.6 : 0; c.lineTo(q[0] + pv[0] * (q[2] + sp) - lv[0] * bk, q[1] + pv[1] * (q[2] + sp) - lv[1] * bk); }
+    c.closePath();
+  }, G2, { k: 1.4, lw: 1.8, inn: function (c) { furStrokes(c, rng(41), Math.min(HIP[0], SH[0]) - 16, Math.min(HIP[1], SH[1]) - 16, Math.max(HIP[0], SH[0]) + 16, Math.max(HIP[1], SH[1]) + 16, 24, 'rgba(26,34,34,.3)', 3, la + PI, .7); } });
   leg(P.nf, false);
   /* cabeça com o focinho de anta */
   var HX = SH[0] + lv[0] * 7 + 3, HY = SH[1] + lv[1] * 7 - 3;
@@ -184,7 +188,7 @@ function drawMap(c, anim, k, fr) {
     if (!far) mark(c, 'hand', H[0] + Math.cos(a) * 8, H[1] + Math.sin(a) * 8);
   }
   arm(P.fh, true); leg(P.ff, true);
-  if (P.eu) arm(P.nh, false);
+  if (P.eu) { leg(P.nf, false); arm(P.nh, false); }
   c.save(); c.translate(0, HY); c.rotate(P.lean); c.translate(0, -HY);
   /* tronco enorme */
   function torso(c) { c.moveTo(-25, HY + 8); c.bezierCurveTo(-35, HY - 8, -36, HY - 42 + P.y * .2, -24, HY - 53); c.quadraticCurveTo(-2, HY - 64, 20, HY - 53); c.bezierCurveTo(33, HY - 42, 33, HY - 14, 25, HY + 6); c.quadraticCurveTo(0, HY + 17, -25, HY + 8); c.closePath(); }
@@ -247,7 +251,7 @@ function drawMap(c, anim, k, fr) {
   c.restore();
   /* ombreira de pedra do lado de cá */
   c.restore();
-  leg(P.nf, false);
+  if (!P.eu) leg(P.nf, false);
   c.save(); c.translate(0, HY); c.rotate(P.lean); c.translate(0, -HY);
   cel(c, function (c) { var R = rng(131); for (var j = 0; j < 8; j++) { var a = j * TAU / 8 - .3, rr = .85 + R() * .25; c[j ? 'lineTo' : 'moveTo'](23 + Math.cos(a) * 11 * rr, HY - 42 + P.y * .3 + Math.sin(a) * 8 * rr); } c.closePath(); }, C.st, { k: 2, lw: 2.2, inn: function (c) { ln(c, [15, HY - 44, 22, HY - 41, 29, HY - 46], 'rgba(14,18,18,.6)', 1.4); ln(c, [15, HY - 44, 22, HY - 41, 29, HY - 46], C.vein, .8); if (fr) { c.fillStyle = 'rgba(96,150,80,.85)'; c.beginPath(); c.ellipse(21, HY - 49, 7, 2.4, 0, 0, TAU); c.fill(); [[18, HY - 51], [24, HY - 51.4]].forEach(function (q) { dot(c, q[0], q[1], 1.6, '#ffd23f'); dot(c, q[0], q[1], .7, '#e4572e'); }); } } });
   c.restore();

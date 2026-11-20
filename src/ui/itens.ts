@@ -1,8 +1,12 @@
 /** Peças para mostrar itens: o quadradinho com moldura de raridade e o tooltip com comparação. */
-import { AFFIXES, ITEM_TYPES, RARITIES, SLOT_LABEL, UNIQUES, affixText, baseLabel, baseValue, sellValue, type AffixKey, type Item, type Slot } from '../data/items';
+import { ELEMENTS } from '../data/content';
+import {
+  AFFIXES, GEM_LEVEL_NAMES, ITEM_TYPES, RARITIES, SETS, SLOT_LABEL, UNIQUES, affixText, baseLabel, baseValue, canHoldGem, gemName, gemText, sellValue,
+  type AffixKey, type Gem, type Item, type Slot,
+} from '../data/items';
 import { equip, slotsFor, type Profile } from '../meta/profile';
-import { deriveStats, powerOf } from '../meta/stats';
-import { br, h, itemIcon, num, signed, ui } from './dom';
+import { activeItems, deriveStats, powerOf, setCounts } from '../meta/stats';
+import { br, gemIcon, h, itemIcon, num, signed, ui } from './dom';
 import { tip, type TipRow, type TipSpec } from './tip';
 
 /** Ícone de cada bônus de item. */
@@ -10,7 +14,25 @@ export const AFFIX_ICON: Record<AffixKey, string> = {
   forca: 'forca', agilidade: 'agilidade', inteligencia: 'inteligencia', vitalidade: 'vitalidade', espirito: 'espirito', sorte: 'sorte',
   vida: 'vida', mana: 'mana', dano: 'dano', critico: 'critico', danoCritico: 'danoCritico', velAtaque: 'velAtaque', defesa: 'defesa',
   resNatureza: 'resistencia', danoNatureza: 'natureza', recarga: 'recarga', ouro: 'ouro', rouboVida: 'roubo',
+  danoFeitico: 'magia', resTudo: 'resistencia', movimento: 'movimento',
 };
+
+/** Faixas de bônus dos conjuntos: peças equipadas para cada uma. */
+export const SET_STEPS = [2, 4, 6] as const;
+const SET_COLOR = '#5fe0b0';
+
+/** Gema com o nível no canto: na bolsa, no encaixe e no resultado. */
+export function gemTile(g: Gem, size = 44, cls = ''): HTMLElement {
+  return h('span', { class: `gem-tile ${cls}`.trim(), style: `--gc:${ELEMENTS[g.el].color};--gem:${size}px` },
+    gemIcon(g.el, Math.round(size * 0.82)), h('b', 'gem-lv', g.lvl));
+}
+
+/** Nome curto da gema com o nível ("Rubi Lapidada · Nv 3"). */
+export function gemLabel(g: Gem): string {
+  return `${gemName(g)} · Nv ${g.lvl}`;
+}
+
+export { GEM_LEVEL_NAMES };
 
 export function rarColor(item: Item): string {
   return RARITIES[item.rarity].color;
@@ -69,8 +91,10 @@ export function itemTile(item: Item, o: TileOpts = {}): HTMLElement {
     o.better && h('span', 'tile-up', '▲'),
     o.seal && h('span', 'tile-seal'),
     o.equipped && h('span', 'tile-eq', 'E'),
+    item.set && h('span', 'tile-set', ui('conjunto', Math.max(14, Math.round(size * 0.3)))),
+    item.gem && h('span', { class: 'tile-gem', style: `--gc:${ELEMENTS[item.gem.el].color}` }, gemIcon(item.gem.el, Math.max(14, Math.round(size * 0.3)))),
   ];
-  const label = `${fullName(item)}, ${RARITIES[item.rarity].label}, ${ITEM_TYPES[item.type].label}${item.locked ? ', travado' : ''}`;
+  const label = `${fullName(item)}, ${RARITIES[item.rarity].label}, ${ITEM_TYPES[item.type].label}${item.set ? `, conjunto ${SETS[item.set]?.name ?? ''}` : ''}${item.gem ? `, ${gemName(item.gem)}` : ''}${item.locked ? ', travado' : ''}`;
   const attrs: Record<string, unknown> = {
     class: `tile r${item.rarity}${item.unique ? ' named' : ''} ${o.cls ?? ''}`.trim(),
     style: `--rar:${rarColor(item)};--tile:${size}px`,
@@ -113,6 +137,18 @@ function compareRows(item: Item, other: Item): TipRow[] {
   return rows;
 }
 
+/** Nome do conjunto e as três faixas de bônus, acesas pelas peças equipadas agora. */
+function setRows(p: Profile, item: Item): TipRow[] {
+  const def = item.set ? SETS[item.set] : null;
+  if (!def) return [];
+  const have = setCounts(activeItems(p))[def.key] ?? 0;
+  return [
+    'sep',
+    { icon: 'conjunto', text: def.name, value: `${have}/${def.pieces.length}`, color: SET_COLOR },
+    ...SET_STEPS.map((n, i): TipRow => ({ icon: have >= n ? 'check' : 'cadeado', text: `${n}: ${def.bonus[i]}`, tone: have >= n ? 'ok' : 'dim' })),
+  ];
+}
+
 export interface ItemTipOpts {
   /** Onde o item está: muda a comparação e as dicas de clique. */
   where?: 'mochila' | 'equipado' | 'outro';
@@ -130,6 +166,9 @@ export function itemTip(p: Profile, item: Item, o: ItemTipOpts = {}): TipSpec {
   if (base) rows.push({ icon: def.base === 'dano' ? 'dano' : 'defesa', text: br(base), tone: 'hot' });
   for (const a of item.affixes) rows.push({ icon: AFFIX_ICON[a.k], text: affixText(a) });
   if (unique) rows.push({ icon: 'estrela', text: unique.effect, tone: 'gold' });
+  if (item.gem) rows.push({ node: gemTile(item.gem, 24), text: gemText(item), color: ELEMENTS[item.gem.el].color });
+  else if (canHoldGem(item)) rows.push({ node: h('span', 'gem-empty'), text: 'Encaixe vazio', tone: 'dim' });
+  rows.push(...setRows(p, item));
   if (def.note) rows.push({ text: def.note, tone: 'dim' });
   if ((item.pity ?? 0) > 0) rows.push({ icon: 'aprimorar', text: `+${num(item.pity ?? 0)}% na próxima forja`, tone: 'ok' });
 
@@ -147,7 +186,7 @@ export function itemTip(p: Profile, item: Item, o: ItemTipOpts = {}): TipSpec {
 
   return {
     title: fullName(item), color: rarColor(item),
-    sub: typeLine(item) + (unique ? ' · Item com nome' : ''), subColor: rarColor(item),
+    sub: typeLine(item) + (unique ? ' · Item com nome' : item.set ? ' · Conjunto' : ''), subColor: rarColor(item),
     icon: itemTile(item, { size: 44, level: false }),
     rows,
     foot: o.foot ?? (o.where === 'mochila' ? ['Clique: equipar', 'Botão direito: opções'] : o.where === 'equipado' ? [o.slot === 'arma' ? null : 'Clique: tirar', 'Botão direito: opções'] : []),

@@ -10,7 +10,7 @@ import { moveToward } from './enemies';
 import type { Enemy, World } from './types';
 
 const SWARM: Record<number, MonsterKind> = { 3: 'calango', 4: 'formiga', 5: 'morcego', 6: 'queroquero', 7: 'ariranha', 8: 'vulto' };
-const ECHOES: string[][] = [['investida', 'chuva'], ['onda', 'leque'], ['redemoinho', 'chute'], ['cuspe', 'anel'], ['pisao', 'patada'], ['salto', 'garras'], ['pocoes', 'ninar']];
+const ECHOES: string[][] = [['investida', 'chuva'], ['onda', 'leque'], ['chute', 'leque'], ['cuspe', 'anel'], ['pisao', 'patada'], ['salto', 'garras'], ['pocoes', 'ninar']];
 const ECHO_ELEMENT: ElementId[] = ['natureza', 'agua', 'tempestade', 'fogo', 'terra', 'sombra', 'encanto'];
 const TEX: Record<string, string> = { natureza: 'ethorn', agua: 'ejet', tempestade: 'e_espinho', fogo: 'e_pequi', terra: 'e_pedra', sombra: 'e_sombra', encanto: 'e_pocao', null: 'e_caco' };
 
@@ -76,7 +76,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
   const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
   switch (e.pattern) {
     case 'investida': {
-      const I = N.investida, aim = I.aim * (e.kind === 'teiniagua' ? 0.75 : 1);
+      const I = N.investida, aim = I.aim * (e.kind === 'teiniagua' ? 0.9 : 1);
       if (!e.flag) {
         if (t < aim * (I.lockAt / I.aim)) { e.dirX = dx / d; e.dirY = dy / d; if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; }
         const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius);
@@ -92,7 +92,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
       e.mem.trail = (e.mem.trail ?? 0) - dt;
       if (left < 12) {
         e.step++; e.flag = false; e.stateT = 0;
-        if (e.step >= I.count + (e.phase >= 1 ? 1 : 0)) { emit(w, { type: 'crash', x: e.x, y: e.y, text: 'TROPEÇOU' }); return 'exposed'; }
+        if (e.step >= I.count + (e.phase >= 1 && D.encantado ? 1 : 0)) { emit(w, { type: 'crash', x: e.x, y: e.y, text: 'TROPEÇOU' }); return 'exposed'; }
         emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
       }
       return;
@@ -160,7 +160,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
       }
       if (e.mem.hit) {
         if (p.heldT <= 0) return 'done';
-        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.004);
+        e.hp = Math.min(e.maxHp, e.hp + e.maxHp * 0.03 * dt);
         return;
       }
       const left = moveToward(e, e.ax, e.ay, G.speed, dt);
@@ -213,8 +213,9 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
     }
     case 'redemoinho': {
       const R = N.redemoinho;
-      moveToward(e, T.x, T.y, R.speed * (1 + 0.1 * e.phase), dt);
-      if ((e.mem.cd ?? 0) <= 0 && Math.hypot(p.x - e.x, p.y - e.y) < R.radius + 16) { e.mem.cd = 0.6; hurtPlayer(w, dmg(w, e, R.damage), e.x, e.y, 520, { src: e }); }
+      moveToward(e, T.x, T.y, R.speed * (1 + 0.08 * e.phase), dt);
+      e.tele = { shape: 'circle', x: e.x, y: e.y, r: R.radius + 10, t: 0.95, dur: 1 };
+      if ((e.mem.cd ?? 0) <= 0 && Math.hypot(p.x - e.x, p.y - e.y) < R.radius + 16) { e.mem.cd = 0.9; hurtPlayer(w, dmg(w, e, R.damage), e.x, e.y, 520, { src: e }); }
       e.mem.cd = (e.mem.cd ?? 0) - dt;
       if (t >= R.duration) {
         for (let i = 0; i < R.devils; i++) w.devils.push({ id: w.nextId++, x: e.x, y: e.y, vx: Math.cos(i * 3.1 + t) * 180, vy: Math.sin(i * 3.1 + t) * 140, r: 54, t: 0, dur: 8 });
@@ -348,7 +349,7 @@ export function updateBoss(w: World, e: Enemy, dt: number): void {
   if (e.kind === 'boitata') {
     const last = w.trail[w.trail.length - 1];
     if (!last || Math.hypot(last.x - e.x, last.y - e.y) > 6) { w.trail.push({ x: e.x, y: e.y }); if (w.trail.length > 600) w.trail.shift(); }
-    if (p.hurtInv <= 0 && p.iframes <= 0) for (const s of boitataBody(w, e).slice(1)) if (Math.hypot(p.x - s.x, p.y - s.y) < 34) { hurtPlayer(w, dmg(w, e, BOSS_NUM.serpente.damage), s.x, s.y, 360, { src: e }); break; }
+    if (p.hurtInv <= 0 && p.iframes <= 0) for (const s of boitataBody(w, e).slice(2)) if (Math.hypot(p.x - s.x, p.y - s.y) < 30) { hurtPlayer(w, dmg(w, e, BOSS_NUM.serpente.damage), s.x, s.y, 420, { src: e }); p.hurtInv = Math.max(p.hurtInv, 1.0); break; }
   }
   /* Lobisomem: a lua enche com o tempo; cheia o bastante, ele vira lobo */
   if (e.kind === 'lobisomem') {

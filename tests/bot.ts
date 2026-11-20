@@ -52,6 +52,7 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     for (const pr of w.projectiles) check(`p${pr.id}`, pr.tele);
     for (const h of w.hazards) check(`h${h.id}`, h.tele);
     for (const e of w.enemies) if ((e.state === 'charge' || e.state === 'dash' || e.state === 'leap') && Math.hypot(e.x - p.x, e.y - p.y) < 150 && aware(w, `c${e.id}${e.state}${e.count}${e.step}`)) danger = true;
+    for (const e of w.enemies) if (e.state === 'cast' && e.flag && ['investida', 'cruzar', 'agarrar'].includes(e.pattern) && Math.hypot(e.x - p.x, e.y - p.y) < 170 && aware(w, `b${e.id}${e.step}${e.count}`)) danger = true;
     for (const pr of w.projectiles) if ((pr.kind === 'ethorn' || pr.kind === 'sting' || pr.kind === 'stampede' || pr.kind === 'eproj' || pr.kind === 'spin') && Math.hypot(pr.x - p.x, pr.y - p.y) < 90 && aware(w, `s${pr.id}`)) danger = true;
 
     const dx = target.x - p.x, dy = target.y - p.y, d = Math.hypot(dx, dy) || 1;
@@ -62,9 +63,11 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     /* parede d'água: corre para a passagem */
     const wall = w.projectiles.find((pr) => pr.kind === 'wall' && !pr.hit.includes(-1) && aware(w, `w${pr.id}`));
     if (wall && Math.abs(p.y - wall.sx) > wall.sy - 26) { mx = 0; my = Math.sign(wall.sx - p.y); if (Math.abs(wall.x - p.x) < 70) danger = true; }
+    const devil = w.devils.find((d) => Math.hypot(p.x - d.x, p.y - d.y) < d.r + 70 && aware(w, `d${d.id}`));
+    if (devil && !av) { const ax = p.x - devil.x, ay = p.y - devil.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; if (Math.hypot(ax, ay) < devil.r + 20) danger = true; }
     const zone = w.zones.find((z) => (z.kind === 'whirl' || z.kind === 'cloud' || (z.hostile && (z.kind === 'fire' || z.kind === 'curse' || z.kind === 'void'))) && Math.hypot(p.x - z.x, p.y - z.y) < z.r + 30);
     if (zone && !av) { const ax = p.x - zone.x, ay = p.y - zone.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; }
-    const singer = w.enemies.find((e) => e.state === 'sing');
+    const singer = w.enemies.find((e) => e.state === 'sing' || (e.state === 'cast' && e.pattern === 'vazio'));
     if (singer) { const ax = p.x - singer.x, ay = p.y - singer.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; }
     return {
       mx, my, aimX: target.x, aimY: target.y,

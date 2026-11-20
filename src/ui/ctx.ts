@@ -2,7 +2,7 @@
  * Estado das telas (o que está selecionado, ordenação, avisos) e o contexto que cada tela recebe.
  * Nada disto é salvo no perfil: é só memória de interface.
  */
-import type { SpellId } from '../data/content';
+import type { ElementId, SpellId } from '../data/content';
 import type { Profile } from '../meta/profile';
 import type { CampTab, UiHost } from './host';
 
@@ -16,7 +16,9 @@ export const MAIN_W = VIEW_W - DOCK_W;
 export const MAIN_H = VIEW_H - HUD_H;
 
 export type InvSort = 'novo' | 'raridade' | 'nivel' | 'tipo';
-export type ForgeMode = 'aprimorar' | 'fundir' | 'encantar' | 'reforjar';
+export type ForgeMode = 'aprimorar' | 'fundir' | 'encantar' | 'reforjar' | 'gemas';
+/** Abas do acampamento: as do contrato com o jogo e a Torre, que só a interface conhece. */
+export type Tab = CampTab | 'torre';
 
 export interface CostLine { icon: string; amount: number; have: number }
 
@@ -43,7 +45,7 @@ export interface ItemMenu {
 export interface ForgeFx { ok: boolean; text: string; sub?: string; color?: string }
 
 export interface UiState {
-  tab: CampTab;
+  tab: Tab;
   chapter: number;
   mapSel: string | null;
   invSort: InvSort;
@@ -57,6 +59,12 @@ export interface UiState {
   /** Enquadramento da teia de talentos (nulo = teia inteira). */
   web: { z: number; x: number; y: number } | null;
   spellSel: SpellId | null;
+  /** Aba de elemento aberta na tela de feitiços (nulo = a do primeiro feitiço equipado). */
+  spellEl: ElementId | null;
+  /** Filtro de elemento na tela de companheiros (nulo = todos). */
+  compFilter: ElementId | null;
+  /** Cartão de história de capítulo aberto no mapa. */
+  story: number | null;
   options: boolean;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
@@ -66,7 +74,7 @@ export function newState(): UiState {
   return {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'novo', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
-    web: null, spellSel: null, options: false, confirm: null, toast: null,
+    web: null, spellSel: null, spellEl: null, compFilter: null, story: null, options: false, confirm: null, toast: null,
   };
 }
 
@@ -79,7 +87,7 @@ export interface Ctx {
   redraw(focus?: string): void;
   /** Salva o perfil e remonta a tela (mudou o perfil). */
   commit(focus?: string): void;
-  go(tab: CampTab): void;
+  go(tab: Tab): void;
   /** Mantém um canvas animado enquanto ele estiver na tela. */
   animate(canvas: HTMLCanvasElement, draw: (g: CanvasRenderingContext2D, t: number) => void): void;
   /** Aviso curto que some sozinho. */
@@ -102,11 +110,11 @@ export const MAT_ICON = { mata: 'resina', po: 'po', lagrima: 'lagrima', tomo: 't
 /* ---------- novidades já vistas (para a bolinha de aviso da barra de ícones) ---------- */
 
 const SEEN_KEY = 'encantados.ui.vistos.v1';
-export type SeenKind = 'feiticos' | 'companheiros' | 'supremos';
+export type SeenKind = 'feiticos' | 'companheiros' | 'supremos' | 'capitulos';
 type Seen = Record<SeenKind, string[]>;
 
 function readSeen(): Seen {
-  const base: Seen = { feiticos: ['dardo'], companheiros: [], supremos: [] };
+  const base: Seen = { feiticos: ['dardo'], companheiros: [], supremos: [], capitulos: [] };
   try {
     const raw = localStorage.getItem(SEEN_KEY);
     if (raw) { const v = JSON.parse(raw) as Partial<Seen>; for (const k of Object.keys(base) as SeenKind[]) if (Array.isArray(v[k])) base[k] = v[k]!.map(String); }

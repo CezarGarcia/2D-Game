@@ -11,7 +11,7 @@ import { drawAltar, drawCage, drawCaipora, drawCogumelo, drawOnca, drawUrutau } 
 import { drawArara, drawArraia, drawBoto, drawCaramujo, drawIara, drawJacare, drawPiranha, drawSapo } from './characters3';
 import { drawMiscIcon } from './icons';
 import { UI_ICON_KEYS, drawUiIcon } from './uiicons';
-import { CHAPTER_ART, CHAPTER_SHEETS } from './chapters';
+import { CHAPTER_ART, CHAPTER_SHEETS, SHEET_CHAPTER } from './chapters';
 import { bakeFx } from './fx';
 import { RAMP_ANIMS, type Kit, type Sheet } from './kit';
 import { TORRE } from './torre';
@@ -119,6 +119,18 @@ export function makeKit(scene: Phaser.Scene): Kit {
 }
 
 const bakedChapters = new Set<number>();
+/** Gera só os bichos de alguns capítulos (sem chão de arena): para companheiros e para o acampamento. */
+export function bakeChapterSprites(scene: Phaser.Scene, chapters: number[]): void {
+  const kit = makeKit(scene);
+  for (const n of chapters) {
+    const art = CHAPTER_ART[n];
+    if (!art || bakedChapters.has(n)) continue;
+    try { art.bake(kit); } catch (err) { console.error('arte do capítulo', n, err); }
+    bakedChapters.add(n);
+  }
+}
+/** Capítulo de onde vem a folha de sprites (0 se for dos capítulos 1 e 2). */
+export function sheetChapter(key: string): number { return SHEET_CHAPTER[key] ?? 0; }
 /**
  * Gera a arte de um capítulo de 3 a 8 na primeira vez que ela é pedida, e o chão das arenas dele.
  * Os chãos são texturas grandes: só fica na memória o do capítulo atual (e o da Torre, se for o caso).

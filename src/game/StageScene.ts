@@ -3,10 +3,13 @@
  * Nenhuma regra de combate mora aqui; a cena só mostra o que a simulação decidiu.
  */
 import Phaser from 'phaser';
-import { BAKE, SHEETS, type Sheet } from '../art/bake';
-import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase } from '../data/balance';
-import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, SUPREMOS, blessingCounts, type BlessingId } from '../data/content';
-import { ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
+import { ALL_SHEETS, BAKE, HERO_SHEET, SHEETS, ensureChapterArt, sheetChapter, type Sheet } from '../art/bake';
+import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase, isBossKind, isMonster } from '../data/balance';
+import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
+import { artChaptersOf, findStage, isTowerId } from '../data/tower';
+import { boitataBody } from '../sim/bosses';
+import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, REACTIONS, SPELLS, SUPREMOS, blessingCounts, type BlessingId, type ElementId } from '../data/content';
+import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { deriveStats } from '../meta/stats';
 import { isBoss } from '../sim/core';
 import { spellCost } from '../sim/player';
@@ -18,7 +21,10 @@ const FONT = '"Londrina Solid", Impact, "Arial Black", sans-serif';
 const INK = '#22100a';
 const INV = 1 / BAKE;
 /** Folhas de sprites por nome, para os bichos que podem ainda não ter arte. */
-const SH = SHEETS as unknown as Record<string, Sheet>;
+const SH = ALL_SHEETS;
+const COLOR = (el: ElementId | null | undefined): number => (el ? Phaser.Display.Color.HexStringToColor(ELEMENTS[el].color).color : 0xe9e4d8);
+/** O Eco dos Sete veste a folha de cada Encantado, em ordem. */
+const ECHO_SHEETS = ['curupira', 'iara', 'saci', 'boitata', 'mapinguari', 'lobisomem', 'cuca'];
 const WATER = 0x5cc8f0;
 
 interface Fx {
@@ -58,6 +64,10 @@ export class StageScene extends Phaser.Scene {
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private latch = { attack: false, dodge: false, spell: [false, false, false] as [boolean, boolean, boolean], pet: false, potion: false, supremo: false };
   private blessIcons: Phaser.GameObjects.GameObject[] = [];
+  /** Imagens de aliados, redemoinhos, capim, muralha e chamas em órbita, por chave. */
+  private extras = new Map<string, Phaser.GameObjects.Sprite>();
+  private segs: Phaser.GameObjects.Image[] = [];
+  private dark!: Phaser.GameObjects.Image;
   private blessShown = -1;
   private supIcon: Phaser.GameObjects.Image | null = null;
 
@@ -80,7 +90,7 @@ export class StageScene extends Phaser.Scene {
   constructor() { super('stage'); }
 
   init(data: { stageId?: string }): void {
-    this.stage = STAGE_BY_ID.get(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
+    this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
   }
 
   create(): void {
@@ -91,8 +101,21 @@ export class StageScene extends Phaser.Scene {
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
     this.blessIcons = []; this.blessShown = -1; this.supIcon = null;
 
+    const tower = isTowerId(this.stage.id);
+    const petChapter = session.profile?.companion ? sheetChapter(session.profile.companion) : 0;
+    ensureChapterArt(this, [...artChaptersOf(this.stage).filter((n) => n >= 3), ...(petChapter ? [petChapter] : []), ...(this.stage.chapter === 8 ? [3, 4, 5, 6, 7] : [])], tower ? 'torre' : this.stage.chapter);
+    this.extras.clear(); this.segs = [];
     this.bg = this.add.image(0, 0, 'bg0').setOrigin(0).setScale(INV).setDepth(-1000);
-    this.add.image(0, 0, this.stage.chapter === 2 && this.textures.exists('riocanopy') ? 'riocanopy' : 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
+    const canopy = tower ? 'torre_canopy' : this.stage.chapter >= 3 ? `ch${this.stage.chapter}_canopy` : this.stage.chapter === 2 ? 'riocanopy' : 'canopy';
+    this.add.image(0, 0, this.textures.exists(canopy) ? canopy : 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
+    if (!this.textures.exists('darkmask')) {
+      const cv = document.createElement('canvas'); cv.width = VIEW.w * 2; cv.height = VIEW.h * 2;
+      const c = cv.getContext('2d')!, g = c.createRadialGradient(VIEW.w, VIEW.h, 60, VIEW.w, VIEW.h, 330);
+      g.addColorStop(0, 'rgba(4,8,6,0)'); g.addColorStop(0.55, 'rgba(4,8,6,0.55)'); g.addColorStop(1, 'rgba(4,8,6,0.93)');
+      c.fillStyle = g; c.fillRect(0, 0, cv.width, cv.height);
+      this.textures.addCanvas('darkmask', cv);
+    }
+    this.dark = this.add.image(0, 0, 'darkmask').setDepth(8500).setVisible(false);
     const rays = this.add.image(0, 0, 'rays').setOrigin(0).setScale(INV).setDepth(9001).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: rays, alpha: { from: 0.65, to: 1 }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
@@ -101,7 +124,8 @@ export class StageScene extends Phaser.Scene {
     this.hudG = this.add.graphics().setDepth(10000);
     this.altar = this.add.image((ARENA.x0 + ARENA.x1) / 2, (ARENA.y0 + ARENA.y1) / 2 - 40, 'altar').setOrigin(0.5, 0.925).setScale(INV).setVisible(false);
     this.altar.setDepth(this.altar.y);
-    this.heroSheet = this.world.stats.weapon === 'arco' ? SHEETS.hero_arco : SHEETS.hero;
+    this.heroSheet = HERO_SHEET[this.world.stats.weapon] ?? SHEETS.hero;
+    if (!this.textures.exists(this.heroSheet.key)) this.heroSheet = SHEETS.hero;
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(INV * 0.95).setDepth(2);
     this.hero = this.makeSprite(this.heroSheet, 'idle0');
     if (this.world.pet) {
@@ -186,6 +210,7 @@ export class StageScene extends Phaser.Scene {
     this.syncPet();
     this.syncEnemies();
     this.syncShots();
+    this.syncExtras();
     this.drawGround();
     this.drawFx(this.paused ? 0 : real);
     this.drawHud();
@@ -266,7 +291,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'lose': this.finish(false, 500); break;
       case 'win':
-        this.banner(this.stage.id === '1-12' ? 'O CURUPIRA LEMBROU' : this.stage.id === '2-12' ? 'A IARA LEMBROU' : 'FASE VENCIDA', `Tempo ${this.fmt(w.time)}`, '#ffb238');
+        this.banner(this.winTitle(), `Tempo ${this.fmt(w.time)}`, '#ffb238');
         sfx.play('win');
         this.finish(true, 1900);
         break;
@@ -408,13 +433,62 @@ export class StageScene extends Phaser.Scene {
       case 'correnteza': this.fx.push({ kind: 'line', x: e.x, y: e.y - 30, x2: e.x + Math.cos(e.ang!) * 250, y2: e.y - 30 + Math.sin(e.ang!) * 250, t: 0, dur: 0.35, color: WATER, width: 26 }); sfx.play('dodge'); break;
       case 'pop': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.3, r0: 14, r1: e.value!, color: 0xffb070, width: 8 }); sfx.play('splat'); break;
       case 'freecast': this.number(e.x, e.y - 150, e.kind === 'eco' ? 'ECO' : 'FLUXO', '#8fe3ff', 22); break;
+      case 'reaction': {
+        const r = REACTIONS.find((x) => x.id === e.kind);
+        if (r) this.number(e.x, e.y - 130, r.name.toUpperCase() + '!', '#ffe9a8', 30, 1.1);
+        this.fx.push({ kind: 'ring', x: e.x, y: e.y - 30, t: 0, dur: 0.4, r0: 16, r1: 110, color: 0xffe9a8, width: 8 });
+        this.cameras.main.shake(120, 0.006); sfx.play('crit');
+        break;
+      }
+      case 'spark': case 'zap':
+        if (e.x2 != null) this.fx.push({ kind: 'line', x: e.x, y: e.y - 40, x2: e.x2, y2: (e.y2 ?? e.y) - 30, t: 0, dur: 0.18, color: 0xfff09a, width: 5 });
+        else this.fx.push({ kind: 'ring', x: e.x, y: e.y - 20, t: 0, dur: 0.3, r0: 10, r1: e.value ?? 60, color: 0xfff09a, width: 7 });
+        sfx.play('hit');
+        break;
+      case 'blink':
+        this.fx.push({ kind: 'puff', x: e.x, y: e.y - 30, t: 0, dur: 0.4, color: COLOR(e.kind as ElementId), n: 10, seed: w.tick });
+        this.fx.push({ kind: 'puff', x: e.x2 ?? e.x, y: (e.y2 ?? e.y) - 30, t: 0, dur: 0.4, color: COLOR(e.kind as ElementId), n: 10, seed: w.tick + 5 });
+        sfx.play('dodge');
+        break;
+      case 'erase': this.number(p.x, p.y - 150, `${SPELLS[w.spells[e.value ?? 0] ?? 'dardo'].name} apagado`, '#e9e4d8', 26, 1.4); sfx.play('armor'); break;
+      case 'restore': this.number(p.x, p.y - 150, 'Feitiço de volta!', '#9be7c0', 28, 1.2); sfx.play('perfect'); break;
+      case 'steal': this.number(p.x, p.y - 150, `O Saci roubou ${SPELLS[w.spells[e.value ?? 0] ?? 'dardo'].name}! Bata nele`, '#ff6b5a', 26, 1.8); sfx.play('armor'); break;
+      case 'dream': this.banner('SONHO', 'Os feitiços trocaram de tecla', '#ff9ae6'); this.time.delayedCall(1300, () => { if (!this.ended && !this.paused) { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); } }); sfx.play('perfect'); break;
+      case 'help': {
+        const name = SUPREMOS[e.kind as ElementId]?.name ?? '';
+        this.number(VIEW.w / 2, 260, `${name} veio ajudar!`, '#ffd23f', 40, 1.8);
+        sfx.play('win');
+        break;
+      }
+      case 'grab': this.number(e.x, e.y - 130, 'AGARRADO', '#ff6b5a', 28); this.cameras.main.shake(140, 0.008); sfx.play('hurt'); break;
+      case 'ignite': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 10, t: 0, dur: 0.4, color: 0xff8a2a, n: 6, seed: w.tick }); break;
+      case 'moon': if ((e.value ?? 0) >= 0.5) this.number(VIEW.w - 140, 120, (e.value ?? 0) >= 1 ? 'LUA CHEIA' : 'A lua cresce', '#c8a8ff', 26, 1.2); break;
+      case 'transform': this.number(e.x, e.y - 200, 'A LUA ENCHEU', '#c8a8ff', 40, 1.6); this.cameras.main.shake(400, 0.012); sfx.play('slam'); break;
+      case 'petAct': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 20, t: 0, dur: 0.4, r0: 20, r1: 160, color: 0xffd9a0, width: 6 }); if (e.kind === 'afanou') this.number(e.x, e.y - 90, 'AFANOU!', '#ffd23f', 26); sfx.play('perfect'); break;
+      case 'heavy': this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.35, r0: 20, r1: e.value ?? 130, color: 0xfff0cd, width: 10 }); this.fx.push({ kind: 'spikes', x: e.x, y: e.y, t: 0, dur: 0.4, r0: (e.value ?? 130) * 0.7 }); this.cameras.main.shake(200, 0.012); sfx.play('slam'); break;
+      case 'thrust': this.fx.push({ kind: 'line', x: e.x, y: e.y - 40, x2: e.x2, y2: (e.y2 ?? e.y) - 40, t: 0, dur: 0.2, color: 0xffffff, width: 12 }); this.cameras.main.shake(100, 0.005); sfx.play('swing'); break;
+      case 'devil': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 20, t: 0, dur: 0.5, color: 0xd9b98a, n: 10, seed: w.tick }); sfx.play('dodge'); break;
+      case 'roar': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 40, t: 0, dur: 0.5, r0: 30, r1: 260, color: e.kind === 'uivo' ? 0xb98cff : 0xfff0cd, width: 9 }); this.cameras.main.shake(260, 0.01); sfx.play('slam'); break;
+      case 'miss': this.number(p.x, p.y - 140, w.player.stolen === e.value ? 'ROUBADO' : 'APAGADO', '#c9c4bd', 22, 0.6); break;
+      case 'status': if (e.kind === 'dormindo') this.number(e.x, e.y - 130, 'Zz', '#c8d4ff', 30); else if (e.kind === 'erro') this.number(e.x, e.y - 60, 'errou', '#c9c4bd', 18, 0.5); break;
     }
+  }
+
+  private winTitle(): string {
+    if (isTowerId(this.stage.id)) return 'ANDARES VENCIDOS';
+    if (this.stage.number !== 12) return 'FASE VENCIDA';
+    if (this.stage.chapter === 8) return 'O ESQUECIMENTO SE DESFEZ';
+    const name = CHAPTERS[this.stage.chapter - 1]?.encantado ?? '';
+    const art = ['Iara', 'Cuca'].includes(name) ? 'A' : 'O';
+    return `${art} ${name.toUpperCase()} LEMBROU`;
   }
 
   private onRoomStart(index: number): void {
     const room = this.stage.rooms[index];
-    const rio = this.stage.chapter === 2 && this.textures.exists('rio' + room.bg);
-    this.bg.setTexture((rio ? 'rio' : 'bg') + room.bg);
+    const art = room.artChapter ?? this.stage.chapter, tower = isTowerId(this.stage.id);
+    const key = tower ? `torre_bg${room.bg}` : art >= 3 ? `ch${art}_bg${room.bg}` : art === 2 ? `rio${room.bg}` : `bg${room.bg}`;
+    this.bg.setTexture(this.textures.exists(key) ? key : `bg${room.bg}`);
+    this.dark.setVisible(!!room.dark).setAlpha(room.type === 'boss' ? 0.55 : 0.9);
     this.altar.setVisible(room.type === 'altar');
     for (const [, v] of this.views) { v.spr.destroy(); v.shadow.destroy(); v.label?.destroy(); }
     this.views.clear();
@@ -530,6 +604,7 @@ export class StageScene extends Phaser.Scene {
     const t = this.clock, cyc = (n: number, phase: number) => Math.floor((((phase / (Math.PI * 2)) % 1) + 1) % 1 * n) % n;
     const jit = Math.floor(t * 40) % 2 ? 1.5 : -1.5;
     let sheet: Sheet = SHEETS.sauva, frame = 'walk0', sx = 1, sy = 1, ox = 0, oy = 0, alpha = 1, rot = 0, lift = 0;
+    if (isMonster(e.kind) || isBossKind(e.kind)) return this.poseNew(e, jit);
     if (e.kind === 'sauva') {
       frame = 'walk' + cyc(SHEETS.sauva.anims.walk, e.walk);
       if (e.state === 'windup' && e.tele) { const k = e.stateT / e.tele.dur; sx = sy = 1 + 0.16 * k; ox = jit * k; }
@@ -626,6 +701,52 @@ export class StageScene extends Phaser.Scene {
     return { sheet, frame, sx, sy, ox, oy, alpha, rot, lift };
   }
 
+  /** Pose dos monstros e chefes dos capítulos 3 a 8, só pelos nomes padrão das animações (src/art/kit.ts). */
+  private poseNew(e: Enemy, jit: number): { sheet: Sheet; frame: string; sx: number; sy: number; ox: number; oy: number; alpha: number; rot: number; lift: number } {
+    const t = this.clock, boss = isBossKind(e.kind);
+    let key: string = e.kind;
+    if (e.kind === 'lobisomem' && e.phase === 0) key = 'lobisomem_h';
+    if (e.kind === 'ecos') key = ECHO_SHEETS[Math.min(6, e.phase)];
+    const has = !!SH[key] && this.textures.exists(key);
+    const sheet = has ? SH[key] : boss ? SHEETS.caipora : SHEETS.sauva;
+    const A = sheet.anims as Record<string, number>;
+    const cycle = (name: string, speed: number) => { const n = A[name] ? name : Object.keys(A)[0]; return n + (Math.floor(t * speed + e.id * 0.37) % A[n]); };
+    const ramp = (name: string, k: number) => { const n = A[name] ? name : A.atk ? 'atk' : Object.keys(A)[0]; return n + Math.min(A[n] - 1, Math.max(0, Math.floor(k * A[n]))); };
+    let frame = cycle(A.idle ? 'idle' : 'move', 6), sx = 1, sy = 1, ox = 0, oy = 0, alpha = 1, rot = 0, lift = 0;
+    const tk = e.tele ? Math.min(1, e.stateT / Math.max(0.05, e.tele.dur)) : Math.min(1, e.stateT / 0.6);
+    const fly = isMonster(e.kind) ? !!MONSTERS[e.kind].fly : false;
+    if (!has) {
+      frame = cycle(Object.keys(A)[0], 8);
+    } else if (!boss) {
+      const arch = MONSTERS[e.kind as keyof typeof MONSTERS].arch;
+      if (e.state === 'buried' || (e.hidden && A.hide)) { frame = 'hide0'; alpha = arch === 'emboscada' ? 0.45 : 0.25; }
+      else if (e.state === 'reveal' && A.hide) frame = ramp('hide', Math.min(0.99, e.stateT / 0.4));
+      else if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'cast') { frame = ramp('atk', tk * 0.75); ox = jit * tk * 0.6; if (arch === 'explosivo') sx = sy = 1 + 0.25 * tk; }
+      else if (e.state === 'charge' || e.state === 'dash') frame = 'atk' + (A.atk - 1);
+      else if (e.state === 'recover' && e.stateT < 0.2) frame = 'atk' + (A.atk - 1);
+      else if (e.state === 'stunned' || e.state === 'exposed') { frame = 'move0'; sy = 0.92; }
+      else frame = e.moving ? 'move' + (Math.floor((e.walk / (Math.PI * 2)) * A.move) % A.move + A.move) % A.move : cycle('move', 4);
+      if (fly) lift = 30 + Math.sin(t * 4 + e.id) * 5;
+    } else {
+      const physical = ['chute', 'facada', 'colherada', 'patada', 'varrer', 'garras', 'agarrar', 'salto', 'pisar', 'investida', 'brilho'];
+      if (e.hidden) alpha = 0;
+      if (e.state === 'downed' || e.state === 'exposed' || e.state === 'tired') frame = cycle('down', 3);
+      else if (e.state === 'roar') { frame = ramp('cast', 0.99); sx = sy = 1 + 0.06 * Math.sin(t * 30); }
+      else if (e.state === 'cast') {
+        const pat = e.pattern;
+        if (pat === 'redemoinho') frame = cycle(A.special ? 'special' : 'move', 12);
+        else if (pat === 'serpente' || pat === 'cruzar' || (pat === 'investida' && e.flag)) frame = cycle(A.special && e.kind === 'mula' ? 'special' : 'move', 14);
+        else if (pat === 'rugido') frame = ramp('cast', e.flag ? 0.99 : tk);
+        else if (pat === 'enterrar' && A.special && !e.hidden) frame = cycle('special', 8);
+        else if (physical.includes(pat)) { frame = ramp('atk', e.flag && pat !== 'garras' ? 0.99 : tk * 0.8); if (!e.flag) ox = jit * tk * 0.5; }
+        else frame = ramp('cast', Math.min(0.99, e.stateT / 0.6));
+        if (pat === 'salto' && e.flag) lift = Math.sin(Math.min(1, e.stateT / 0.45) * Math.PI) * 60;
+      } else if (e.moving) frame = cycle('move', 10);
+      if (e.kind === 'ecos') alpha *= 0.78;
+    }
+    return { sheet, frame, sx, sy, ox, oy, alpha, rot, lift };
+  }
+
   private syncEnemies(): void {
     const w = this.world;
     if (this.views.size > w.enemies.length) {
@@ -641,6 +762,12 @@ export class StageScene extends Phaser.Scene {
         this.views.set(e.id, v);
       }
       const spr = v.spr;
+      if (e.frogT > 0 && this.textures.exists('sapinho')) {
+        if (v.sheet !== 'sapinho') { spr.setTexture('sapinho').setOrigin(0.5, 0.9); v.sheet = 'sapinho'; }
+        spr.setPosition(e.x, e.y - Math.abs(Math.sin(this.clock * 6 + e.id)) * 8).setDepth(e.y).setScale(INV * e.facing, INV).setAlpha(1).setRotation(0).clearTint();
+        v.shadow.setPosition(e.x + 5, e.y + 2);
+        continue;
+      }
       if (v.sheet !== po.sheet.key) { spr.setTexture(po.sheet.key, po.frame).setOrigin(po.sheet.ox / po.sheet.cellW, po.sheet.oy / po.sheet.cellH); v.sheet = po.sheet.key; }
       const base = enemyBase(e.kind).radius, big = e.radius / base;
       const spawn = e.state === 'spawn' ? e.stateT / ENEMY.spawnTime : 1, grow = 0.6 + 0.4 * spawn;
@@ -649,10 +776,19 @@ export class StageScene extends Phaser.Scene {
       v.shadow.setPosition(e.x + 5, e.y + 2).setScale(INV * (e.radius / 20)).setAlpha(po.alpha * spawn);
       if (e.flash > 0) spr.setTintFill(0xffffff);
       else if (e.state === 'exposed' || e.state === 'tired' || e.state === 'downed' || e.stunT > 0) spr.setTint(0xffe9a8);
+      else if (e.illusion) spr.setTint(Math.floor(this.clock * 6 + e.id) % 2 ? 0xffc8f0 : 0xffffff).setAlpha(spr.alpha * 0.8);
+      else if (e.kind === 'ecos') spr.setTint(0xd8d4e8);
+      else if (e.sleepT > 0) spr.setTint(0x9aa4c8);
+      else if (e.charmT > 0) spr.setTint(0xff9ae6);
+      else if (e.burnT > 0) spr.setTint(0xffb27a);
       else if (e.bubbleT > 0) spr.setTint(0x9fe0ff);
       else if (e.rootT > 0 || e.slowT > 0) spr.setTint(0x9fd08a);
       else if (e.poisonT > 0) spr.setTint(0xa6e08a);
       else if (e.wetT > 0) spr.setTint(0xa8d4f0);
+      else if (e.curseT > 0) spr.setTint(0xc8a8ff);
+      else if (e.chargeT > 0) spr.setTint(Math.floor(this.clock * 12) % 2 ? 0xfff09a : 0xffffff);
+      else if (e.crackT > 0) spr.setTint(0xd8b890);
+      else if (e.confuseT > 0) spr.setTint(0xffb8e8);
       else if (e.champion) spr.setTint(0xffd0d8);
       else spr.clearTint();
       if (v.label) {
@@ -660,6 +796,72 @@ export class StageScene extends Phaser.Scene {
         v.label.setColor(open ? '#ffd23f' : '#c9c4bd').setPosition(e.x, e.y - po.sheet.oy * 0.8 * big).setDepth(e.y + 1).setAlpha(spawn);
       }
     }
+  }
+
+  /** Uma imagem reaproveitada por chave; `seen` guarda quem continua na tela neste quadro. */
+  private extra(key: string, tex: string, seen: Set<string>, frame?: string): Phaser.GameObjects.Sprite | null {
+    if (!this.textures.exists(tex)) return null;
+    seen.add(key);
+    let img = this.extras.get(key);
+    if (!img) { img = this.add.sprite(0, 0, tex, frame).setScale(INV); this.extras.set(key, img); }
+    else if (img.texture.key !== tex) img.setTexture(tex, frame);
+    else if (frame) img.setFrame(frame);
+    return img;
+  }
+
+  private syncExtras(): void {
+    const w = this.world, p = w.player, t = this.clock, seen = new Set<string>();
+    /* escuridão da Selva: luz só em volta do herói */
+    if (this.dark.visible) this.dark.setPosition(p.x, p.y - 30).setScale(INV * 2 * 1.0);
+    /* capim do Cerrado */
+    w.grass.forEach((g, i) => {
+      const img = this.extra('g' + i, 'capim', seen);
+      img?.setPosition(g.x, g.y).setDepth(0).setTint(g.burnt ? 0x4a3a2a : 0xffffff).setAlpha(g.burnt ? 0.7 : 1);
+      if (g.burnT > 0) {
+        const s = SH.chama, f = s && this.textures.exists('chama') ? 'move' + (Math.floor(t * 12 + i) % s.anims.move) : undefined;
+        const fl = f ? this.extra('gf' + i, 'chama', seen, f) : null;
+        if (fl && s) fl.setOrigin(s.ox / s.cellW, s.oy / s.cellH).setPosition(g.x, g.y + 10).setDepth(g.y + 5).setScale(INV * 0.9);
+      }
+    });
+    /* redemoinhos de poeira do Sertão */
+    for (const d of w.devils) {
+      const s = SH.poeira, f = s ? 'move' + (Math.floor(t * 14 + d.id) % s.anims.move) : undefined;
+      const img = s ? this.extra('d' + d.id, 'poeira', seen, f) : null;
+      if (img && s) img.setOrigin(s.ox / s.cellW, s.oy / s.cellH).setPosition(d.x, d.y + 20).setDepth(d.y + 20).setScale(INV * 1.1).setAlpha(0.9);
+      else this.fxG.fillStyle(0xd9b98a, 0.35).fillCircle(d.x, d.y, d.r);
+    }
+    /* muralha */
+    w.walls.forEach((b, i) => { this.extra('w' + i, 'muralha', seen)?.setOrigin(0.5, 0.85).setPosition(b.x, b.y + 12).setDepth(b.y).setAlpha(Math.min(1, b.t * 2)); });
+    /* chamas em órbita */
+    if (p.orbT > 0) for (let i = 0; i < 3; i++) { const a = w.time * 3.2 + (i / 3) * Math.PI * 2; this.extra('o' + i, 'orb_fatuo', seen)?.setPosition(p.x + Math.cos(a) * 72, p.y - 30 + Math.sin(a) * 58).setDepth(p.y + Math.sin(a) * 58 + 1); }
+    /* aliados */
+    for (const a of w.allies) {
+      const k = 'a' + a.id;
+      if (a.kind === 'cloud') this.extra(k, 'nuvem', seen)?.setPosition(a.x, a.y - 60 + Math.sin(t * 3) * 4).setDepth(9100).setAlpha(0.95);
+      else if (a.kind === 'turret') this.extra(k, 'estaca', seen)?.setOrigin(0.5, 0.92).setPosition(a.x, a.y).setDepth(a.y).setScale(INV * a.facing, INV);
+      else if (a.kind === 'decoy') {
+        const img = this.extra(k, this.heroSheet.key, seen, 'idle' + (Math.floor(t * 4.6) % this.heroSheet.anims.idle));
+        img?.setOrigin(this.heroSheet.ox / this.heroSheet.cellW, this.heroSheet.oy / this.heroSheet.cellH).setPosition(a.x, a.y).setDepth(a.y).setScale(INV * a.facing, INV).setAlpha(0.6 + 0.15 * Math.sin(t * 6)).setTint(0xffb8f0);
+      } else {
+        const s = SH.graxaim && this.textures.exists('graxaim') ? SH.graxaim : SHEETS.onca, A = s.anims as Record<string, number>;
+        const f = a.moving && A.walk ? 'walk' + (Math.floor((a.walk / (Math.PI * 2)) * A.walk) % A.walk) : 'idle' + (Math.floor(t * 4) % (A.idle ?? 1));
+        this.extra(k, s.key, seen, f)?.setOrigin(s.ox / s.cellW, s.oy / s.cellH).setPosition(a.x, a.y).setDepth(a.y).setScale(INV * a.facing * 1.15, INV * 1.15).setTint(0x7a5ab8).setAlpha(0.9);
+      }
+    }
+    /* corpo do Boitatá e caldeirão da Cuca */
+    const boi = w.enemies.find((e) => e.kind === 'boitata');
+    const body = boi ? boitataBody(w, boi) : [];
+    while (this.segs.length < body.length) this.segs.push(this.add.image(0, 0, this.textures.exists('boitata_seg') ? 'boitata_seg' : 'shadow').setScale(INV));
+    this.segs.forEach((img, i) => {
+      const sgm = body[i];
+      if (!sgm || i === 0) { img.setVisible(false); return; }
+      const last = i === body.length - 1;
+      if (last && this.textures.exists('boitata_cauda')) img.setTexture('boitata_cauda'); else if (this.textures.exists('boitata_seg')) img.setTexture('boitata_seg');
+      img.setVisible(true).setPosition(sgm.x, sgm.y - 24).setRotation(sgm.a + (last ? Math.PI : 0)).setDepth(sgm.y - 1).setScale(INV * (1 - i * 0.025));
+    });
+    const cuca = w.enemies.find((e) => e.kind === 'cuca' && e.state === 'cast' && (e.pattern === 'pocoes' || e.pattern === 'ninar' || e.pattern === 'sonho'));
+    if (cuca) this.extra('caldeirao', 'caldeirao', seen)?.setOrigin(0.5, 0.9).setPosition(cuca.x + cuca.facing * 62, cuca.y + 4).setDepth(cuca.y + 2);
+    for (const [k, img] of this.extras) if (!seen.has(k)) { img.destroy(); this.extras.delete(k); }
   }
 
   private syncShots(): void {
@@ -675,14 +877,16 @@ export class StageScene extends Phaser.Scene {
         g.lineStyle(4, 0xffd23f, 0.9).strokeRect(pr.x - w2 / 2 - 6, pr.sx - pr.sy, w2 + 12, pr.sy * 2);
         continue;
       }
-      const want = pr.kind === 'stampede' ? 'queixada' : pr.kind === 'cipo' ? 'thorn' : pr.kind === 'glob' ? 'spit' : pr.kind;
-      const tex = this.textures.exists(want) ? want : pr.kind === 'glob' ? 'seed' : pr.kind === 'sting' ? 'ethorn' : 'thorn';
+      const want = pr.tex ?? (pr.kind === 'staff' ? 'p_cajado' : pr.kind === 'stampede' ? 'queixada' : pr.kind === 'cipo' ? 'thorn' : pr.kind === 'glob' ? 'spit' : pr.kind);
+      const tex = this.textures.exists(want) ? want : pr.kind === 'glob' || pr.kind === 'elob' ? 'seed' : pr.kind === 'sting' || pr.kind === 'eproj' || pr.kind === 'spin' ? 'ethorn' : 'thorn';
       if (!img) {
         img = pr.kind === 'stampede' ? this.makeSprite(SHEETS.queixada, 'run0') : this.add.sprite(0, 0, tex).setScale(INV);
         this.shots.set(pr.id, img);
       }
       const ang = Math.atan2(pr.vy, pr.vx);
-      if (pr.kind === 'seed' || pr.kind === 'glob') {
+      if (pr.kind === 'staff') img.setTint(COLOR(pr.element));
+      if (pr.kind === 'spin') { img.setPosition(pr.x, pr.y - 40).setRotation(this.clock * 14).setDepth(pr.y); continue; }
+      if (pr.kind === 'seed' || pr.kind === 'glob' || pr.kind === 'elob') {
         const k = Math.min(1, pr.t / pr.dur);
         img.setPosition(pr.x, pr.y - 90 * (1 - k) - Math.sin(k * Math.PI) * 170).setRotation(this.clock * 9).setDepth(pr.y + 400).setScale(INV * (1.2 + Math.sin(k * Math.PI) * 0.7));
       } else if (pr.kind === 'stampede') {
@@ -740,7 +944,27 @@ export class StageScene extends Phaser.Scene {
       for (let i = 0; i < 14; i++) { const y = a.y0 + 20 + ((i * 37) % (a.y1 - a.y0 - 40)), span = a.x1 - a.x0, x = a.x0 + ((((i * 173 + t * Math.abs(w.current) * 2.2 * dir) % span) + span) % span); g.lineStyle(3, 0xdff6ff, 0.28).lineBetween(x, y, x - dir * 46, y); }
     }
     for (const z of w.zones) {
-      if (z.kind === 'pop') continue;
+      if (z.kind === 'pop' || z.kind === 'firelane') continue;
+      const life = 1 - z.t / z.dur;
+      if (z.kind === 'fire') {
+        g.fillStyle(0xff6a1a, 0.22 * Math.min(1, life * 3)).fillCircle(z.x, z.y, z.r);
+        for (let i = 0; i < 4; i++) { const a = i * 1.7 + t * 2, rr = z.r * 0.5; g.fillStyle(i % 2 ? 0xffb84a : 0xff7a2a, 0.55 * Math.min(1, life * 3)).fillTriangle(z.x + Math.cos(a) * rr - 8, z.y + Math.sin(a) * rr * 0.6, z.x + Math.cos(a) * rr + 8, z.y + Math.sin(a) * rr * 0.6, z.x + Math.cos(a) * rr, z.y + Math.sin(a) * rr * 0.6 - 26 - 8 * Math.sin(t * 9 + i)); }
+        if (z.hostile) g.lineStyle(2, 0xff4a2a, 0.5).strokeCircle(z.x, z.y, z.r);
+        continue;
+      }
+      if (z.kind === 'curse' || z.kind === 'void') { g.fillStyle(z.kind === 'void' ? 0x101018 : 0x6a3aa8, 0.3 * Math.min(1, life * 3)).fillCircle(z.x, z.y, z.r); g.lineStyle(3, z.kind === 'void' ? 0xffffff : 0xb98cff, 0.5).strokeCircle(z.x, z.y, z.r * (0.6 + 0.4 * Math.sin(t * 4))); continue; }
+      if (z.kind === 'redemoinho' || z.kind === 'tornado') {
+        g.fillStyle(0xffe08a, 0.12).fillCircle(z.x, z.y, z.r);
+        for (let i = 0; i < 3; i++) { g.lineStyle(4, 0xfff0b0, 0.55); g.beginPath(); g.arc(z.x, z.y, z.r * (0.3 + i * 0.3), t * 7 + i * 2, t * 7 + i * 2 + 3.4); g.strokePath(); }
+        continue;
+      }
+      if (z.kind === 'coivara') { g.lineStyle(z.r * 2, 0xff7a2a, 0.3 * Math.min(1, life * 3)).lineBetween(z.x, z.y, z.x2 ?? z.x, z.y2 ?? z.y); g.lineStyle(4, 0xffd27a, 0.6).lineBetween(z.x, z.y, z.x2 ?? z.x, z.y2 ?? z.y); continue; }
+      if (z.kind === 'vapor' || z.kind === 'dust') { for (let i = 0; i < 6; i++) { const a = i * 1.05 + t * 0.5; g.fillStyle(z.kind === 'vapor' ? 0xe8f4ff : 0xd9c08a, 0.22 * life).fillCircle(z.x + Math.cos(a) * z.r * 0.4, z.y + Math.sin(a) * z.r * 0.3, z.r * 0.55); } continue; }
+      if (z.kind === 'trovao' || z.kind === 'explosao' || z.kind === 'borbulhante') {
+        const col = z.kind === 'trovao' ? 0xffe066 : z.kind === 'explosao' ? 0xff7a2a : 0xff7ad9, k = Math.min(1, z.t / z.dur);
+        g.fillStyle(col, 0.12).fillCircle(z.x, z.y, z.r); g.lineStyle(3, col, 0.7).strokeCircle(z.x, z.y, z.r); g.fillStyle(col, 0.2).fillCircle(z.x, z.y, z.r * k);
+        continue;
+      }
       if (z.kind === 'chuva') {
         const k = 1 - z.t / z.dur;
         g.fillStyle(WATER, 0.12).fillCircle(z.x, z.y, z.r); g.lineStyle(3, 0xbfeaff, 0.3 + 0.4 * k).strokeCircle(z.x, z.y, z.r);
@@ -877,11 +1101,13 @@ export class StageScene extends Phaser.Scene {
       .setText(['WASD mover', 'clique atacar', bow ? 'botão direito carrega o tiro' : w.stats.hasShield ? 'botão direito defende' : '', 'Espaço esquiva', 'Q feitiço', '1 poção'].filter(Boolean).join('  ·  '));
     this.txtBanner = this.add.text(VIEW.w / 2, VIEW.h / 2 - 50, '', { fontFamily: FONT, fontStyle: '900', fontSize: '92px', color: '#ffb238', stroke: INK, strokeThickness: 12 }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     this.txtSub = this.add.text(VIEW.w / 2, VIEW.h / 2 + 50, '', { fontFamily: FONT, fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
-    const names = ['Clique', bow ? 'Dir.' : (w.stats.hasShield ? 'Dir.' : ''), 'Espaço', 'Q', 'E', 'R', 'F', 'T'];
+    const alt = bow || w.stats.hasShield || w.stats.weapon === 'borduna' || w.stats.weapon === 'zagaia';
+    const names = ['Clique', alt ? 'Dir.' : '', 'Espaço', 'Q', 'E', 'R', 'F', 'T'];
     this.slotKeys = names.map((s, i) => this.label(this.slotX(i) + 28, VIEW.h - 28, 15).setOrigin(0.5).setText(s));
     const icon = (i: number, key: string, scale = 0.8) => (this.textures.exists(key) ? this.add.image(this.slotX(i) + 28, VIEW.h - 74, key).setScale(INV * scale).setDepth(10001) : null);
     this.slotIcons = [
-      icon(0, bow ? 'ui_projetil' : 'ui_dano'), bow || w.stats.hasShield ? icon(1, bow ? 'ui_perfurar' : 'ui_defesa') : null, icon(2, 'ui_esquiva'),
+      icon(0, this.textures.exists('ui_' + w.stats.weapon) ? 'ui_' + w.stats.weapon : bow ? 'ui_projetil' : 'ui_dano'),
+      bow || w.stats.hasShield || w.stats.weapon === 'borduna' || w.stats.weapon === 'zagaia' ? icon(1, bow ? 'ui_perfurar' : w.stats.weapon === 'borduna' ? 'ui_tremor' : w.stats.weapon === 'zagaia' ? 'ui_perfurar' : 'ui_defesa') : null, icon(2, 'ui_esquiva'),
       ...w.spells.map((id, i) => (id ? icon(3 + i, this.textures.exists('ui_' + id) ? 'ui_' + id : 'ic_' + id, this.textures.exists('ui_' + id) ? 0.8 : 1.05) : null)),
       w.pet ? icon(6, 'ui_companheiro') : null, null,
     ];
@@ -937,12 +1163,15 @@ export class StageScene extends Phaser.Scene {
     };
     const bow = s.weapon === 'arco';
     slot(0, 0xe9e4d4, bow ? p.shotCd / PLAYER.bow.interval : 0, true);
-    slot(1, bow ? 0xfff0a8 : 0xc9a26b, 0, true, bow || s.hasShield);
+    slot(1, bow ? 0xfff0a8 : 0xc9a26b, 0, true, bow || s.hasShield || s.weapon === 'borduna' || s.weapon === 'zagaia');
     slot(2, 0x8fe3ff, p.dodgeCharges > 0 ? 0 : 1 - p.dodgeTimer / s.dodgeCooldown, p.dodgeCharges > 0);
     for (let i = 0; i < s.dodgeCharges; i++) g.fillStyle(i < p.dodgeCharges ? 0xffffff : 0x3a4a3a, 1).fillCircle(this.slotX(2) + 12 + i * 14, VIEW.h - 112, 4);
     for (let i = 0; i < 3; i++) {
       const id = w.spells[i];
-      slot(3 + i, 0x2d3b2b, id ? p.cds[i] / p.cdMax[i] : 0, !!id && p.mana >= spellCost(w, i, id), !!id);
+      const gone = !!id && (p.erased[i] > 0 || p.stolen === i);
+      slot(3 + i, gone ? 0x1a1a1a : 0x2d3b2b, id ? p.cds[i] / p.cdMax[i] : 0, !!id && !gone && p.mana >= spellCost(w, i, id), !!id);
+      if (gone) { const sx = this.slotX(3 + i), sy = VIEW.h - 102; g.lineStyle(5, p.stolen === i ? 0xff6b5a : 0xe9e4d8, 0.9).lineBetween(sx + 8, sy + 8, sx + 48, sy + 48).lineBetween(sx + 48, sy + 8, sx + 8, sy + 48); }
+      if (id && p.dreamT > 0) { const sx = this.slotX(3 + i); g.fillStyle(0xff9ae6, 0.3 + 0.2 * Math.sin(this.clock * 6 + i)).fillRoundedRect(sx, VIEW.h - 102, 56, 56, 8); }
       this.slotIcons[3 + i]?.setAlpha(id && p.cds[i] <= 0 && p.mana >= spellCost(w, i, id) ? 1 : 0.4);
     }
     const pet = w.pet;
@@ -966,13 +1195,29 @@ export class StageScene extends Phaser.Scene {
     const late = w.time > this.stage.starTime;
     this.txtTime.setText(`${this.fmt(w.time)}   alvo ${this.fmt(this.stage.starTime).slice(0, 5)}`).setColor(late ? '#c9c4bd' : '#ffffff');
 
+    /* lua do Pampa */
+    if (w.moon > 0) {
+      const mx = VIEW.w - 60, my = 90, r = 26;
+      g.fillStyle(0x1a1830, 0.85).fillCircle(mx, my, r + 4);
+      g.fillStyle(0xe8e0ff, 1).fillCircle(mx, my, r);
+      g.fillStyle(0x1a1830, 1).fillCircle(mx - r * 2 * w.moon, my, r);
+      g.lineStyle(3, 0xc8a8ff, 0.9).strokeCircle(mx, my, r + 4);
+    }
     /* barra de elite ou de chefão */
     const boss = w.enemies.find((e) => isBoss(e) && !e.fake) ?? w.enemies.find((e) => e.elite);
     if (boss) {
       const bw = 480, x = VIEW.w / 2 - bw / 2, y = 84, big = isBoss(boss);
       g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y - 4, bw + 8, 24, 6);
       g.fillStyle(0xd6402b, 1).fillRect(x, y, bw * Math.max(0, boss.hp / boss.maxHp), 16);
-      if (boss.kind === 'curupira' || boss.kind === 'iara') {
+      const nb = isBossKind(boss.kind) ? BOSSES[boss.kind as BossKind] : null;
+      if (nb) {
+        for (const f of nb.phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
+        if (nb.posture) {
+          const P = nb.posture;
+          g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y + 22, bw + 8, 14, 5);
+          g.fillStyle(boss.state === 'downed' ? 0xffffff : 0xffd23f, 1).fillRect(x, y + 25, bw * (boss.state === 'downed' ? Math.max(0, 1 - boss.stateT / P.downed) : boss.posture / P.max), 8);
+        }
+      } else if (boss.kind === 'curupira' || boss.kind === 'iara') {
         for (const f of ENEMY[boss.kind].phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
         const P = ENEMY[boss.kind].posture;
         g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y + 22, bw + 8, 14, 5);

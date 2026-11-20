@@ -8,9 +8,9 @@ import { damageEnemy, emit, hurtPlayer, isBoss, rand, spellScale } from './core'
 import { applyElement } from './status';
 import type { World } from './types';
 
-export const DEVIL = { r: 52, speed: 150, throw: 640, damage: 14, stun: 0.35 };
+export const DEVIL = { r: 52, speed: 105, throw: 520, damage: 9, stun: 0.3 };
 export const GRASS = { r: 46, burn: 4, spread: 130, spreadAt: 1.0, damage: 7 };
-export const MOON = { fill: 45 };
+export const MOON = { fill: 60 };
 export const ERASE = { every: 14 };
 
 export function startTerrain(w: World, room: RoomDef): void {

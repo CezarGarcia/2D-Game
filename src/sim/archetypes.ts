@@ -30,8 +30,8 @@ const KEEP: [number, number] = [240, 470];
 export function updateArchetype(w: World, e: Enemy, dt: number): void {
   const d = MONSTERS[e.kind as MonsterKind], T = targetOf(w, e), p = w.player;
   const dx = T.x - e.x, dy = T.y - e.y, dist = Math.hypot(dx, dy) || 1;
-  const moon = 1 + 0.25 * w.moon;
-  const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1) * moon, wm = e.windupMult / (1 + 0.15 * w.moon), scale = e.radius / d.radius;
+  const moon = 1 + 0.15 * w.moon;
+  const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1) * moon, wm = e.windupMult / (1 + 0.1 * w.moon), scale = e.radius / d.radius;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
   const lead = (k: number) => (T === p ? { x: T.x + p.vx * k, y: T.y + p.vy * k } : { x: T.x, y: T.y });
 

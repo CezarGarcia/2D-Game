@@ -374,7 +374,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   if (el === 'tempestade' && (p.wetT > 0 || p.inPuddle)) { dmg *= 1.5; emit(w, { type: 'zap', x: p.x, y: p.y }); }
   if (p.curseT > 0) dmg *= 1.15;
   if (p.stoneT > 0) dmg *= 1 - 0.4;
-  if (w.moon > 0) dmg *= 1 + 0.4 * w.moon;
+  if (w.moon > 0) dmg *= 1 + 0.25 * w.moon;
   if (src && (src.elite || isBoss(src)) && s.uniques.couroDoCapelobo) dmg *= 0.8;
   if (p.cascaT > 0) {
     if (src && src.hp > 0) damageEnemy(w, src, dmg * 0.5, 'reflect', 0);
@@ -401,7 +401,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   if (src && src.mods.includes('vampirico') && src.hp > 0) src.hp = Math.min(src.maxHp, src.hp + src.maxHp * MOD.vampirico.heal);
   const dx = p.x - fromX, dy = p.y - fromY, d = Math.hypot(dx, dy) || 1;
   p.kx = (dx / d) * knock; p.ky = (dy / d) * knock;
-  emit(w, { type: 'hurt', x: p.x, y: p.y, value: dmg, kind: o.soft ? 'soft' : undefined });
+  emit(w, { type: 'hurt', x: p.x, y: p.y, value: dmg, kind: o.soft ? 'soft' : undefined, text: src?.kind ?? (o.element ?? 'chao') });
   if (p.stoneT > 0) { p.kx *= 0.1; p.ky *= 0.1; }
   if (p.hp <= 0) {
     p.hp = 0; p.state = 'dead'; p.stateT = 0; p.charge = 0;

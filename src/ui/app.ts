@@ -7,24 +7,29 @@ import './ui.css';
 import { COMPANION_ORDER } from '../data/content';
 import { xpNeeded } from '../data/progression';
 import { ATTR_PER_LEVEL, MATERIAL_LABEL, MATERIAL_USE, knownSpells, talentFree, type Materials } from '../meta/profile';
-import { isForgeUnlocked, type StageRewards } from '../meta/rewards';
+import { isForgeUnlocked, isTowerUnlocked, type StageRewards } from '../meta/rewards';
 import { deriveStats, powerOf } from '../meta/stats';
 import { renderCompanheiros } from './companheiros';
-import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen, type ConfirmSpec, type Ctx } from './ctx';
+import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen, type ConfirmSpec, type Ctx, type Tab } from './ctx';
 import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
 import { renderFerreiro } from './ferreiro';
 import { renderHeroi, renderItemMenu } from './heroi';
-import type { CampTab, UiController, UiHost } from './host';
+import type { UiController, UiHost } from './host';
 import { defaultStage, renderMapa } from './mapa';
 import { renderResultado } from './resultado';
 import { renderTalentos } from './talentos';
+import { renderTorre } from './torre';
 import { mountTips, tip } from './tip';
 
-const TABS: { id: CampTab; label: string }[] = [
+/* a Torre fica por último para as teclas 1 a 6 continuarem como eram */
+const TABS: { id: Tab; label: string }[] = [
   { id: 'mapa', label: 'Mapa' }, { id: 'heroi', label: 'Herói' }, { id: 'ferreiro', label: 'Ferreiro' },
   { id: 'talentos', label: 'Talentos' }, { id: 'feiticos', label: 'Feitiços' }, { id: 'companheiros', label: 'Companheiros' },
+  { id: 'torre', label: 'Torre' },
 ];
+/* o que abre cada aba trancada */
+const TAB_LOCK: Partial<Record<Tab, string>> = { ferreiro: 'Abre ao vencer a fase 1-2', torre: 'Abre ao libertar o Curupira (fase 1-12)' };
 const TOAST_MS = 2200;
 
 type Draw = (g: CanvasRenderingContext2D, t: number) => void;
@@ -147,8 +152,8 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   }
 
   /* ---------- barra de ícones ---------- */
-  function badges(): Partial<Record<CampTab, { n: number | string; why: string }>> {
-    const p = host.getProfile(), free = talentFree(p), out: Partial<Record<CampTab, { n: number | string; why: string }>> = {};
+  function badges(): Partial<Record<Tab, { n: number | string; why: string }>> {
+    const p = host.getProfile(), free = talentFree(p), out: Partial<Record<Tab, { n: number | string; why: string }>> = {};
     if (p.attrPoints > 0) out.heroi = { n: p.attrPoints, why: `${p.attrPoints} ${p.attrPoints === 1 ? 'ponto de atributo' : 'pontos de atributo'} para gastar` };
     if (free > 0) out.talentos = { n: free, why: `${free} ${free === 1 ? 'ponto de talento' : 'pontos de talento'} para gastar` };
     const spells = unseen('feiticos', knownSpells(p)).length + unseen('supremos', p.supremos).length;
@@ -158,20 +163,21 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   }
 
   function dock(): HTMLElement {
-    const p = host.getProfile(), forge = isForgeUnlocked(p), bd = badges();
+    const p = host.getProfile(), bd = badges();
+    const shut: Partial<Record<Tab, boolean>> = { ferreiro: !isForgeUnlocked(p), torre: !isTowerUnlocked(p) };
     return h('nav', { class: 'dock', 'aria-label': 'Acampamento' }, TABS.map((t, i) => {
-      const b = bd[t.id], locked = t.id === 'ferreiro' && !forge, on = st.tab === t.id;
+      const b = bd[t.id], locked = !!shut[t.id], on = st.tab === t.id;
       return tip(h('button', {
         type: 'button', class: `dock-btn${on ? ' on' : ''}${locked ? ' locked' : ''}`, 'aria-current': on ? 'page' : null,
         'aria-label': t.label + (b ? `, ${b.why}` : ''), 'data-fk': `tab-${t.id}`, onclick: () => showCamp(t.id),
       },
-      h('span', 'dock-ico', ui(t.id, 46)),
+      h('span', 'dock-ico', ui(t.id, 42)),
       h('span', 'dock-label', t.label),
       b && !on && h('span', 'dock-badge', b.n),
       locked && h('span', 'dock-lock', ui('cadeado', 22))),
       () => ({
         title: t.label, tag: `Tecla ${i + 1}`,
-        rows: [b ? { icon: 'novo', text: b.why, tone: 'gold' } : null, locked ? { icon: 'cadeado', text: 'Abre ao vencer a fase 1-2', tone: 'bad' } : null],
+        rows: [b ? { icon: 'novo', text: b.why, tone: 'gold' } : null, locked ? { icon: 'cadeado', text: TAB_LOCK[t.id] ?? 'Trancado', tone: 'bad' } : null],
       }));
     }));
   }
@@ -183,6 +189,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       case 'talentos': return renderTalentos(ctx);
       case 'feiticos': return renderFeiticos(ctx);
       case 'companheiros': return renderCompanheiros(ctx);
+      case 'torre': return renderTorre(ctx);
       default: return renderMapa(ctx);
     }
   }
@@ -250,13 +257,13 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   }
 
   /** Ao sair de uma aba, o que era novidade nela passa a contar como visto. */
-  function seeTab(tab: CampTab): void {
+  function seeTab(tab: Tab): void {
     const p = host.getProfile();
     if (tab === 'feiticos') { markSeen('feiticos', knownSpells(p)); markSeen('supremos', p.supremos); }
     if (tab === 'companheiros') markSeen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id]));
   }
 
-  function showCamp(tab: CampTab = 'mapa'): void {
+  function showCamp(tab: Tab = 'mapa'): void {
     const opening = root.hidden || mode !== 'camp';
     if (!opening && st.tab !== tab) seeTab(st.tab);
     mode = 'camp'; results = null;
@@ -298,10 +305,11 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       if (st.menu) { st.menu = null; render(); e.preventDefault(); return; }
       if (mode !== 'camp') return;
       if (st.tab === 'ferreiro' && st.forgeSel != null) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; render(); e.preventDefault(); return; }
-      if (st.tab === 'feiticos' && st.spellSel) { st.spellSel = null; render(); e.preventDefault(); }
+      if (st.tab === 'feiticos' && st.spellSel) { st.spellSel = null; render(); e.preventDefault(); return; }
+      if (st.tab === 'mapa' && st.story != null) { st.story = null; render(); e.preventDefault(); }
       return;
     }
-    if (mode === 'camp' && !st.confirm && e.key.length === 1 && e.key >= '1' && e.key <= '6') {
+    if (mode === 'camp' && !st.confirm && e.key.length === 1 && e.key >= '1' && e.key <= String(TABS.length)) {
       showCamp(TABS[Number(e.key) - 1].id);
       e.preventDefault();
     }

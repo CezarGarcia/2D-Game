@@ -53,13 +53,13 @@ export interface MonsterDef {
 
 const M = (kind: MonsterKind, chapter: number, name: string, arch: Archetype, element: ElementId | null, n: Partial<MonsterDef>, hint: string): MonsterDef => {
   const base: Record<Archetype, Omit<MonsterDef, 'kind' | 'chapter' | 'name' | 'hint' | 'arch' | 'element'>> = {
-    enxame: { radius: 15, hp: 44, speed: 165, damage: 15, cost: 1, cap: 12, windup: 0.42, reach: 78, area: 44, recover: 0.5 },
-    bruto: { radius: 34, hp: 150, speed: 62, damage: 62, cost: 4, cap: 1, windup: 1.2, reach: 128, area: 108, recover: 2.1, armored: true },
-    atirador: { radius: 20, hp: 82, speed: 95, damage: 20, cost: 1.8, cap: 3, windup: 0.6, reach: 0, area: 0, recover: 2.2 },
-    investida: { radius: 27, hp: 175, speed: 95, damage: 38, cost: 2.6, cap: 2, windup: 1.0, reach: 0, area: 60, recover: 2.2 },
-    conjurador: { radius: 20, hp: 92, speed: 85, damage: 26, cost: 2.2, cap: 2, windup: 0.7, reach: 0, area: 0, recover: 3.2 },
+    enxame: { radius: 15, hp: 44, speed: 160, damage: 14, cost: 1, cap: 10, windup: 0.45, reach: 78, area: 44, recover: 0.55 },
+    bruto: { radius: 34, hp: 150, speed: 62, damage: 46, cost: 4, cap: 1, windup: 1.3, reach: 128, area: 108, recover: 2.1, armored: true },
+    atirador: { radius: 20, hp: 70, speed: 95, damage: 14, cost: 2.4, cap: 2, windup: 0.85, reach: 0, area: 0, recover: 2.9 },
+    investida: { radius: 27, hp: 175, speed: 95, damage: 32, cost: 3.6, cap: 1, windup: 1.1, reach: 0, area: 60, recover: 2.2 },
+    conjurador: { radius: 20, hp: 92, speed: 85, damage: 22, cost: 3, cap: 1, windup: 0.8, reach: 0, area: 0, recover: 3.4 },
     protetor: { radius: 23, hp: 190, speed: 52, damage: 22, cost: 2.4, cap: 1, windup: 0.95, reach: 115, area: 105, recover: 1.6, armored: true },
-    emboscada: { radius: 18, hp: 92, speed: 120, damage: 26, cost: 2, cap: 3, windup: 0.55, reach: 175, area: 44, recover: 0.9 },
+    emboscada: { radius: 18, hp: 92, speed: 120, damage: 22, cost: 2.2, cap: 2, windup: 0.65, reach: 175, area: 44, recover: 1.1 },
     explosivo: { radius: 15, hp: 34, speed: 140, damage: 28, cost: 1.4, cap: 4, windup: 0.8, reach: 80, area: 100, recover: 0 },
   };
   return { kind, chapter, name, hint, arch, element, ...base[arch], ...n };
@@ -72,7 +72,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   /* Capítulo 3 · Sertão (Tempestade) */
   calango: M('calango', 3, 'Calango-Cinza', 'enxame', 'tempestade', { speed: 185, radius: 14 }, 'Rápido e em bando. Morde de perto.'),
   cascavel: M('cascavel', 3, 'Cascavel', 'emboscada', 'tempestade', {}, 'Enterrada na areia. O chocalho avisa antes do bote.'),
-  mandacaru: M('mandacaru', 3, 'Mandacaru', 'atirador', 'tempestade', { speed: 55, hp: 96, shot: bolt('e_espinho', 520, 5, 0.22) }, 'Dispara um leque de espinhos.'),
+  mandacaru: M('mandacaru', 3, 'Mandacaru', 'atirador', 'tempestade', { speed: 55, hp: 96, shot: bolt('e_espinho', 470, 3, 0.26) }, 'Dispara um leque de espinhos.'),
   bode: M('bode', 3, 'Bode-Preto', 'investida', 'tempestade', {}, 'Marca uma linha e corre. Fica tonto se bater.'),
   urubu: M('urubu', 3, 'Urubu', 'conjurador', 'tempestade', { fly: true, circles: { count: 3, radius: 66, delay: 1.0, spread: 130, every: 3.0 } }, 'Voa em círculos e chama raios onde você está.'),
   /* Capítulo 4 · Cerrado (Fogo) */
@@ -102,7 +102,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   /* Capítulo 8 · Terra Sem Nome (sem elemento) */
   vulto: M('vulto', 8, 'Vulto', 'enxame', null, { speed: 180, hp: 50 }, 'Silhuetas que cercam você.'),
   vazio: M('vazio', 8, 'Vazio', 'explosivo', null, { leaves: 'vazio', speed: 150 }, 'Estoura e puxa tudo para dentro.'),
-  lembranca: M('lembranca', 8, 'Lembrança', 'atirador', null, { fly: true, shot: bolt('e_caco', 600, 3, 0.18) }, 'Retrato rasgado que atira cacos.'),
+  lembranca: M('lembranca', 8, 'Lembrança', 'atirador', null, { fly: true, shot: bolt('e_caco', 560, 2, 0.2) }, 'Retrato rasgado que atira cacos.'),
   esquecido: M('esquecido', 8, 'Esquecido', 'bruto', null, { hp: 190, radius: 36 }, 'Estátua sem rosto. Lenta e enorme.'),
   silencio: M('silencio', 8, 'Silêncio', 'conjurador', null, { circles: { count: 2, radius: 80, delay: 1.2, spread: 100, every: 3.6, silence: true }, hp: 100 }, 'Se a marca te pegar, um feitiço fica apagado por 5 s.'),
 };
@@ -125,7 +125,7 @@ const POSTURE = { max: 100, hit: 3.5, spell: 5, parry: 35, perfect: 14, downed: 
 
 const BS = (kind: BossKind, chapter: number, name: string, encantado: boolean, element: ElementId | null, n: Partial<BossDef>, hint: string): BossDef => ({
   kind, chapter, name, hint, element, encantado,
-  radius: encantado ? 28 : 30, hp: encantado ? 3600 : 1700, speed: 110, damage: 40,
+  radius: encantado ? 28 : 30, hp: encantado ? 3600 : 2800, speed: 110, damage: 40,
   phases: encantado ? [0.66, 0.33] : [0.5], patterns: [], idle: 0.9, enrageAt: encantado ? 270 : 200,
   ...(encantado ? { posture: POSTURE } : {}),
   ...n,
@@ -148,25 +148,25 @@ export const BOSSES: Record<BossKind, BossDef> = {
 
 /** Números dos padrões dos chefes (no valor do nível 1, multiplicados pelo dano do chefe). */
 export const BOSS_NUM = {
-  investida: { aim: 0.7, lockAt: 0.45, speed: 900, width: 64, damage: 1, count: 3, exposed: 2.4 },
+  investida: { aim: 0.85, lockAt: 0.5, speed: 800, width: 60, damage: 0.55, count: 2, exposed: 2.6 },
   leque: { cast: 0.5, lines: 5, spread: 0.32, delay: 0.85, width: 46, len: 700, damage: 0.9 },
   chuva: { cast: 0.6, count: 5, radius: 74, delay: 1.0, spread: 160, damage: 0.9 },
   anel: { cast: 0.6, count: 16, speed: 360, damage: 0.6, waves: 2 },
-  pisao: { cast: 0.4, rings: 3, step: 95, delay: 0.75, gap: 0.35, damage: 1 },
+  pisao: { cast: 0.5, rings: 3, step: 95, delay: 0.85, gap: 0.45, damage: 0.65 },
   salto: { aim: 0.75, radius: 110, damage: 1.2, air: 0.45 },
-  agarrar: { aim: 0.6, len: 300, width: 56, speed: 900, hold: 1.0, drain: 0.6 },
+  agarrar: { aim: 0.75, len: 300, width: 56, speed: 820, hold: 0.9, drain: 0.5 },
   enterrar: { under: 0.9, radius: 100, delay: 0.8, damage: 1 },
   chamado: { cast: 0.9, count: 4 },
   chute: { aim: 0.45, radius: 92, offset: 60, damage: 1 },
   roubo: { cast: 0.6, hits: 6 },
-  redemoinho: { duration: 4.2, speed: 330, radius: 70, damage: 0.8, devils: 2 },
+  redemoinho: { duration: 3.4, speed: 215, radius: 66, damage: 0.55, devils: 1 },
   sopro: { cast: 0.6, lines: 7, spread: 0.18, delay: 0.75, width: 50, len: 460, damage: 1 },
-  serpente: { duration: 5, speed: 300, segs: 14, gap: 40, damage: 0.7 },
-  cruzar: { aim: 0.9, speed: 1100, width: 110, damage: 1.2 },
+  serpente: { duration: 5, speed: 230, segs: 14, gap: 40, damage: 0.3 },
+  cruzar: { aim: 1.0, speed: 1000, width: 100, damage: 0.9 },
   cuspe: { cast: 0.5, count: 3, radius: 80, delay: 0.9, spread: 140, damage: 0.9 },
   patada: { aim: 0.8, radius: 150, offset: 90, damage: 1.3 },
   rugido: { cast: 0.5, open: 3, push: 420, damage: 0.4 },
-  brilho: { cast: 0.9, radius: 220, damage: 1.2 },
+  brilho: { cast: 1.1, radius: 200, damage: 0.8 },
   facada: { aim: 0.45, radius: 80, offset: 50, damage: 0.7 },
   garras: { aim: 0.4, radius: 100, offset: 60, damage: 0.8, count: 3, between: 0.25 },
   uivo: { cast: 0.8, summon: 4 },
@@ -177,9 +177,9 @@ export const BOSS_NUM = {
   ninar: { cast: 0.6, count: 3, radius: 90, delay: 1.1, sleep: 1.4 },
   sonho: { cast: 1.0, duration: 10 },
   onda: { cast: 0.5, delay: 1.2, width: 70, gap: 150, speed: 520, damage: 1, count: 2, between: 0.9 },
-  varrer: { aim: 0.8, radius: 260, arc: 1.2, damage: 1.2 },
+  varrer: { aim: 0.9, radius: 260, arc: 1.2, damage: 0.85 },
   apagar: { cast: 0.8, duration: 9 },
-  vazio: { cast: 0.6, duration: 3, pull: 240, ring: 18, damage: 0.6 },
+  vazio: { cast: 0.7, duration: 2.4, pull: 140, ring: 12, damage: 0.22 },
   eco: { every: 2.2 },
   /** Lobisomem: a lua enche com o tempo de luta; cheia em 90 s. */
   lua: { full: 90, transformAt: 0.25, speedMax: 0.6 },

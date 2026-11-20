@@ -2,7 +2,7 @@
  * Utilidades das telas de menu: criação de elementos, ícones em canvas e formatação de números.
  * Nada aqui conhece regra de jogo.
  */
-import { drawItemIcon } from '../art/icons';
+import { drawItemIcon, drawMiscIcon } from '../art/icons';
 import { drawUiIcon } from '../art/uiicons';
 
 export type Child = Node | string | number | null | undefined | false | Child[];
@@ -52,7 +52,10 @@ export const HD = 2;
 
 const iconCache = new Map<string, HTMLCanvasElement>();
 
-function baked(kind: 'ui' | 'item', key: string, size: number): HTMLCanvasElement {
+type IconKind = 'ui' | 'item' | 'misc';
+const DRAWERS: Record<IconKind, (g: CanvasRenderingContext2D, key: string, size: number) => void> = { ui: drawUiIcon, item: drawItemIcon, misc: drawMiscIcon };
+
+function baked(kind: IconKind, key: string, size: number): HTMLCanvasElement {
   const id = `${kind}:${key}:${size}`;
   let cv = iconCache.get(id);
   if (!cv) {
@@ -61,14 +64,14 @@ function baked(kind: 'ui' | 'item', key: string, size: number): HTMLCanvasElemen
     const g = cv.getContext('2d');
     if (g) {
       g.scale(HD, HD);
-      try { (kind === 'item' ? drawItemIcon : drawUiIcon)(g, key, size); } catch { /* um ícone com defeito não pode derrubar o menu */ }
+      try { DRAWERS[kind](g, key, size); } catch { /* um ícone com defeito não pode derrubar o menu */ }
     }
     iconCache.set(id, cv);
   }
   return cv;
 }
 
-function iconCanvas(kind: 'ui' | 'item', key: string, size: number, cls: string): HTMLCanvasElement {
+function iconCanvas(kind: IconKind, key: string, size: number, cls: string): HTMLCanvasElement {
   const cv = h('canvas', { class: `ico ${cls}`.trim(), width: size * HD, height: size * HD, style: `width:${size}px;height:${size}px`, 'aria-hidden': 'true' });
   cv.getContext('2d')?.drawImage(baked(kind, key, size), 0, 0);
   return cv;
@@ -82,6 +85,11 @@ export function ui(key: string, size = 24, cls = ''): HTMLCanvasElement {
 /** Ícone de um tipo de item. */
 export function itemIcon(type: string, size = 40, cls = ''): HTMLCanvasElement {
   return iconCanvas('item', type, size, cls);
+}
+
+/** Ícone de uma gema (só o elemento; o nível vai à parte). */
+export function gemIcon(el: string, size = 32, cls = ''): HTMLCanvasElement {
+  return iconCanvas('misc', `gema_${el}`, size, cls);
 }
 
 /** Canvas com o dobro da resolução, já escalado para desenhar em pixels lógicos. */
@@ -100,7 +108,8 @@ const backdropCache = new Map<string, HTMLCanvasElement>();
  */
 export function backdrop(key: string, w: number, hgt: number, paint: (g: CanvasRenderingContext2D) => void, res = 1.5): HTMLCanvasElement {
   let cv = backdropCache.get(key);
-  if (!cv) {
+  if (cv) { backdropCache.delete(key); backdropCache.set(key, cv); }
+  else {
     cv = h('canvas', { class: 'backdrop', width: Math.round(w * res), height: Math.round(hgt * res), style: `width:${w}px;height:${hgt}px`, 'aria-hidden': 'true' });
     const g = cv.getContext('2d');
     if (g) {
@@ -110,6 +119,15 @@ export function backdrop(key: string, w: number, hgt: number, paint: (g: CanvasR
     backdropCache.set(key, cv);
   }
   return cv;
+}
+
+/**
+ * Esquece os fundos mais antigos cuja chave começa com `prefix`, deixando só os `keep` usados por último.
+ * Os mapas dos capítulos são grandes: guardar os oito ocuparia memória à toa.
+ */
+export function trimBackdrops(prefix: string, keep: number): void {
+  const keys = [...backdropCache.keys()].filter((k) => k.startsWith(prefix));
+  for (const k of keys.slice(0, Math.max(0, keys.length - keep))) backdropCache.delete(k);
 }
 
 /* ---------- peças pequenas ---------- */

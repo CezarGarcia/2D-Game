@@ -200,5 +200,5 @@ export function enemySpeedMult(level: number): number {
   return 1 + Math.min(0.3, 0.02 * (level - 1));
 }
 export function enemyWindupMult(level: number): number {
-  return Math.max(0.7, 1 - 0.02 * (level - 1));
+  return Math.max(0.8, 1 - 0.02 * (level - 1));
 }
