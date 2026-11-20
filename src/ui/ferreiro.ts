@@ -1,22 +1,28 @@
-/** Ferreiro: quatro modos em ícones, a bigorna no meio e a grade de itens que acende o que dá para trabalhar. */
+/**
+ * Ferreiro: cinco modos em ícones, a bigorna no meio e a grade de itens que acende o que dá para trabalhar.
+ * O modo Gemas troca a bigorna pelo encaixe do item e mostra a bolsa de gemas à direita.
+ */
 import { drawAnvil, paintForgeBackdrop } from '../art/backdrops';
-import { ITEM_TYPES, MAX_RARITY, RARITIES, affixText, baseLabel, itemScore, type Item } from '../data/items';
+import { ELEMENTS } from '../data/content';
+import { GEM_MAX, ITEM_TYPES, MAX_RARITY, RARITIES, affixText, baseLabel, canHoldGem, gemName, gemText, itemScore, type Gem, type Item } from '../data/items';
 import {
-  allItems, enchantInfo, enchantItem, findItem, fuseCandidates, fuseInfo, fuseItems, reforgeInfo, reforgeItem, reforgedPreview,
-  upgradeInfo, upgradeItem, type Profile,
+  GEM_FUSE_COST, GEM_REMOVE_COST, GEM_SOCKET_COST, allItems, enchantInfo, enchantItem, findItem, fuseCandidates, fuseGems, fuseInfo, fuseItems, gemList,
+  reforgeInfo, reforgeItem, reforgedPreview, socketGem, unsocketGem, upgradeInfo, upgradeItem, type Profile,
 } from '../meta/profile';
 import { isForgeUnlocked } from '../meta/rewards';
 import { MAIN_H, MAIN_W, type CostLine, type Ctx, type ForgeMode } from './ctx';
 import { backdrop, br, h, hdCanvas, num, pct, s, stat, ui } from './dom';
-import { AFFIX_ICON, emptyTile, itemTile, itemTip, rarColor } from './itens';
+import { AFFIX_ICON, emptyTile, gemLabel, gemTile, itemTile, itemTip, rarColor } from './itens';
 import { tip, type TipRow } from './tip';
 
-const MODES: { id: ForgeMode; label: string; text: string }[] = [
-  { id: 'aprimorar', label: 'Aprimorar', text: 'Sobe o +N do item: mais dano ou defesa. Falhar não destrói.' },
-  { id: 'fundir', label: 'Fundir', text: 'Junta 3 itens da mesma raridade e espaço: o principal sobe de raridade e ganha um bônus.' },
-  { id: 'encantar', label: 'Encantar', text: 'Troca um bônus do item por outro, sorteado.' },
-  { id: 'reforjar', label: 'Reforjar', text: 'Traz um item antigo para o seu nível.' },
+const MODES: { id: ForgeMode; icon: string; label: string; text: string }[] = [
+  { id: 'aprimorar', icon: 'aprimorar', label: 'Aprimorar', text: 'Sobe o +N do item: mais dano ou defesa. Falhar não destrói.' },
+  { id: 'fundir', icon: 'fundir', label: 'Fundir', text: 'Junta 3 itens da mesma raridade e espaço: o principal sobe de raridade e ganha um bônus.' },
+  { id: 'encantar', icon: 'encantar', label: 'Encantar', text: 'Troca um bônus do item por outro, sorteado.' },
+  { id: 'reforjar', icon: 'reforjar', label: 'Reforjar', text: 'Traz um item antigo para o seu nível.' },
+  { id: 'gemas', icon: 'gema', label: 'Gemas', text: 'Encaixa uma gema na arma ou na armadura. Três gemas iguais viram uma mais forte.' },
 ];
+const NO_SOCKET = 'Anéis, amuletos e aljavas não têm encaixe.';
 
 interface Work { lit: boolean; can: boolean; why?: string }
 
@@ -33,6 +39,10 @@ function workOf(p: Profile, mode: ForgeMode, it: Item): Work {
     if (cands.length < 2) return { lit: true, can: false, why: `Faltam ${2 - cands.length === 1 ? '1 item' : '2 itens'} ${RARITIES[it.rarity].label} do mesmo espaço na mochila.` };
     const i = fuseInfo(p, it.id, [cands[0].id, cands[1].id]);
     return { lit: true, can: i.possible, why: i.reason };
+  }
+  if (mode === 'gemas') {
+    if (!canHoldGem(it)) return { lit: false, can: false, why: NO_SOCKET };
+    return { lit: true, can: gemList(p).length > 0 || !!it.gem };
   }
   if (mode === 'encantar') {
     const i = enchantInfo(p, it);

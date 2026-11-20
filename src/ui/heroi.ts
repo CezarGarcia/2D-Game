@@ -1,7 +1,8 @@
 /** Herói: o personagem no meio, o equipamento em volta, atributos e estatísticas dos lados, mochila embaixo. */
 import { paintHeroBackdrop } from '../art/backdrops';
 import { drawHero } from '../art/characters';
-import { ITEM_TYPES, SLOT_LABEL, itemScore, sellValue, type Item, type ItemType, type Slot } from '../data/items';
+import { ELEMENTS, ELEMENT_ORDER } from '../data/content';
+import { ITEM_TYPES, SLOT_LABEL, WEAPON_KINDS, itemScore, sellValue, type Item, type ItemType, type Slot } from '../data/items';
 import {
   ATTRS, ATTR_BASE, ATTR_PER_LEVEL, FREE_RESPEC_LEVEL, INVENTORY_SIZE, allocAttr, dismantleItem, dismantleYield, equip, findItem, inventoryFull, offhandWarning,
   resetAttrs, respecCost, sellItem, toggleLock, unequip, type AttrKey, type Profile,
@@ -10,7 +11,7 @@ import { BASE_MOVE_SPEED, attrEffects, damageReduction, deriveStats, powerOf, to
 import { MAIN_H, MAIN_W, VIEW_H, VIEW_W, type Ctx, type InvSort } from './ctx';
 import { backdrop, h, hdCanvas, num, pct, stat, ui } from './dom';
 import { emptyTile, fullName, itemTile, itemTip, powerDelta, rarColor } from './itens';
-import { drawCompanion } from './retratos';
+import { drawFigure } from './retratos';
 import { tip, type TipRow } from './tip';
 
 const LEFT: Slot[] = ['cabeca', 'peito', 'maos', 'pes'];
@@ -89,14 +90,17 @@ function attrsPanel(c: Ctx): HTMLElement {
 
 function statsPanel(p: Profile): HTMLElement {
   const st = deriveStats(p), dr = damageReduction(st.defense, p.level);
-  const list: { icon: string; label: string; value: string; extra?: string; text: string }[] = [
+  const list: { icon: string; label: string; value: string; extra?: string; text: string; more?: TipRow[] }[] = [
     { icon: 'vida', label: 'Vida', value: num(st.maxHp), text: 'Quanto dano você aguenta antes de cair.' },
     { icon: 'mana', label: 'Mana', value: num(st.maxMana), text: `Gasta para lançar feitiços. Volta ${num(st.manaRegen, 1)} por segundo.` },
     { icon: 'dano', label: 'Dano', value: num(st.weaponDamage * st.damageMult, 1), text: 'Dano de cada golpe da arma, antes do crítico.' },
     { icon: 'velAtaque', label: 'Vel. ataque', value: pct(st.attackSpeed), text: 'Rapidez dos golpes. 100% é o normal.' },
     { icon: 'critico', label: 'Crítico', value: pct(st.critChance, 1), text: 'Chance de um golpe sair crítico.' },
     { icon: 'danoCritico', label: 'Dano crítico', value: pct(st.critMult), text: 'Quanto o golpe crítico causa, comparado ao normal.' },
-    { icon: 'defesa', label: 'Defesa', value: num(st.defense, 1), extra: `−${pct(dr)}`, text: `Corta ${pct(dr)} do dano de monstros do seu nível.` },
+    {
+      icon: 'defesa', label: 'Defesa', value: num(st.defense, 1), extra: `−${pct(dr)}`, text: `Corta ${pct(dr)} do dano de monstros do seu nível.`,
+      more: [{ head: 'Resistência a elementos' }, ...ELEMENT_ORDER.map((el): TipRow => ({ icon: el, text: ELEMENTS[el].name, value: pct(st.res[el]), color: st.res[el] > 0 ? ELEMENTS[el].color : undefined, tone: st.res[el] > 0 ? undefined : 'dim' }))],
+    },
     { icon: 'movimento', label: 'Movimento', value: pct(st.moveSpeed / BASE_MOVE_SPEED), text: 'Rapidez para andar. 100% é o normal.' },
     { icon: 'magia', label: 'Poder mágico', value: pct(st.spellPower), text: 'Multiplica o dano e a cura dos feitiços.' },
     { icon: 'recarga', label: 'Recarga', value: `−${pct(1 - st.cooldownMult)}`, text: 'Quanto mais rápido os feitiços voltam.' },
@@ -106,7 +110,7 @@ function statsPanel(p: Profile): HTMLElement {
   return h('section', { class: 'panel stats', 'aria-label': 'Estatísticas' },
     h('div', 'stat-grid', list.map((s) => tip(
       h('div', { class: 'stat-cell', tabindex: 0 }, ui(s.icon, 34), h('span', 'stat-nums', h('b', null, s.value), h('span', 'stat-label', s.label, s.extra && h('i', null, ` ${s.extra}`)))),
-      { title: s.label, tag: s.extra ? `${s.value} (${s.extra})` : s.value, icon: ui(s.icon, 36), rows: [{ text: s.text }] }))));
+      { title: s.label, tag: s.extra ? `${s.value} (${s.extra})` : s.value, icon: ui(s.icon, 36), rows: [{ text: s.text }, ...(s.more ?? [])] }))));
 }
 
 /* ---------- boneco e equipamento ---------- */
@@ -134,13 +138,13 @@ function slotTile(c: Ctx, slot: Slot): HTMLElement {
 function doll(c: Ctx): HTMLElement {
   const p = c.p, W = 330, H = 430;
   const { cv } = hdCanvas(W, H, 'hero-cv');
-  const weapon = p.equipped.arma?.type === 'arco' ? 'arco' : 'facao', pet = p.companion && p.companions[p.companion] ? p.companion : null;
+  const wt = p.equipped.arma?.type, weapon = wt && (WEAPON_KINDS as string[]).includes(wt) ? wt : 'facao', pet = p.companion && p.companions[p.companion] ? p.companion : null;
   c.animate(cv, (g, t) => {
     g.clearRect(0, 0, W, H);
     const fx = W / 2, fy = H - 22;
     g.fillStyle = 'rgba(8,14,8,.42)';
     g.beginPath(); g.ellipse(fx, fy + 4, 96, 15, 0, 0, Math.PI * 2); g.fill();
-    if (pet) { g.save(); g.translate(fx - 108, fy + 14); g.scale(1.7, 1.7); drawCompanion(g, pet, t); g.restore(); }
+    if (pet) drawFigure(g, pet, { x: fx - 172, y: fy - 120, w: 130, h: 136 }, t, 0.9);
     g.save(); g.translate(fx - 4, fy); g.scale(3.5, 3.5); drawHero(g, t, { weapon }); g.restore();
   });
   return h('section', { class: 'doll', 'aria-label': 'Equipamento' },

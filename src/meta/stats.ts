@@ -296,6 +296,9 @@ const REFERENCE_TALENTS = [
   'raizForca', 'maoPesada', 'maoPesada', 'maoPesada', 'sedeDeBriga', 'golpeCerteiro', 'golpeCerteiro', 'golpeCerteiro',
   'raizVitalidade', 'couroCurtido', 'couroCurtido', 'couroCurtido', 'contragolpe', 'folego', 'folego', 'folego', 'execucao',
   'brutalidade', 'brutalidade', 'brutalidade', 'maoPesada', 'maoPesada', 'folego', 'folego', 'couroCurtido', 'couroCurtido',
+  'cascaDeJabuti', 'sangueBom', 'sangueBom', 'sangueBom', 'peleGrossa', 'peleGrossa', 'peleGrossa', 'quebraCasca', 'quebraCasca', 'quebraCasca',
+  'pocaoForte', 'pocaoForte', 'cantilCheio', 'segundoFolego', 'golpeCerteiro', 'golpeCerteiro', 'brutalidade', 'brutalidade', 'sangueBom', 'sangueBom',
+  'peleGrossa', 'peleGrossa', 'quebraCasca', 'quebraCasca', 'pesoDoGolpe', 'pesoDoGolpe', 'pesoDoGolpe', 'espinhoVivo', 'pocaoForte', 'pocaoForte',
 ];
 
 /** O personagem de referência usado para calibrar as fases: é dele o "poder recomendado". */
@@ -305,14 +308,17 @@ export function referenceProfile(level: number, bow = false, weapon: ItemType = 
   const pts = (level - 1) * 3;
   if (bow) p.attrs.agilidade = Math.ceil(pts / 2); else p.attrs.forca = Math.ceil(pts / 2);
   p.attrs.vitalidade = Math.floor(pts / 2);
-  const plus = Math.min(4, Math.floor(level / 2));
+  /* do Capítulo 3 em diante, quem chega lá já usou o ferreiro: itens Raros (e Épicos depois do 42) mais aprimorados */
+  const rarity = level >= 48 ? 3 : level >= 30 ? 2 : level > 1 ? 1 : 0;
+  const plus = level >= 24 ? Math.min(rarity === 3 ? 12 : rarity === 2 ? 9 : 6, Math.floor(level / 6)) : Math.min(4, Math.floor(level / 2));
   const set = (slot: 'arma' | 'mao' | 'cabeca' | 'peito' | 'maos' | 'pes', type: ItemType) => {
-    const it = makeItem(p.nextItemId++, rng, level, level > 1 ? 1 : 0, type);
+    const it = makeItem(p.nextItemId++, rng, level, rarity, type);
     it.affixes = []; it.plus = plus;
     p.equipped[slot] = it;
   };
   set('arma', weapon); set('cabeca', 'chapeu'); set('peito', 'gibao');
   if (level >= 2) { set('mao', bow ? 'aljava' : 'escudo'); set('maos', 'luvas'); set('pes', 'alpercatas'); }
+  if (level >= 30) p.equipped.arma!.gem = { el: 'fogo', lvl: 1 + Math.floor((level - 30) / 15) };
   /* talentos: um ponto por nível, num caminho simples de dano e vida */
   p.talentPoints = level - 1;
   for (const t of REFERENCE_TALENTS) addTalent(p, t);

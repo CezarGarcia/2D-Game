@@ -12,7 +12,7 @@ import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMEN
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { deriveStats } from '../meta/stats';
 import { isBoss } from '../sim/core';
-import { spellCost } from '../sim/player';
+import { comboOf, spellCost } from '../sim/player';
 import { chooseBlessing, createWorld, exitZone, step, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
 import { session } from './session';
 import { Sfx } from './sfx';
@@ -555,7 +555,7 @@ export class StageScene extends Phaser.Scene {
     const w = this.world, p = w.player, h = this.hero, A = this.heroSheet.anims, bow = w.stats.weapon === 'arco';
     let frame: string, sy = 1, rot = 0;
     if (p.state === 'attack') {
-      const a = PLAYER.combo[p.combo];
+      const combo = comboOf(w.stats.weapon), a = combo[Math.min(p.combo, combo.length - 1)];
       frame = 'atk' + Math.min(A.atk - 1, Math.floor((p.stateT / (a.total * 0.8)) * A.atk));
     } else if (p.state === 'charge') frame = 'atk' + Math.min(A.atk - 2, Math.round(p.charge * (A.atk - 2) * 0.6));
     else if (bow && p.shotCd > 0.1 && p.state === 'idle') frame = 'atk' + Math.min(A.atk - 1, Math.max(0, A.atk - 1 - Math.floor(p.shotCd * 10)));
@@ -1183,7 +1183,8 @@ export class StageScene extends Phaser.Scene {
     if (w.supremo && full) g.lineStyle(4, 0xffd23f, 0.6 + 0.4 * Math.sin(this.clock * 8)).strokeRoundedRect(this.slotX(7) - 4, VIEW.h - 106, 64, 64, 10);
 
     /* cabeçalho: fase, salas e tempo */
-    this.txtInfo.setText(`${this.stage.id} · ${this.stage.name}`);
+    const fl = this.stage.rooms[w.room]?.floor;
+    this.txtInfo.setText(isTowerId(this.stage.id) ? `Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}` : `${this.stage.id} · ${this.stage.name}`);
     const x0 = 28, y0 = 58;
     this.stage.rooms.forEach((r, i) => {
       const x = x0 + i * 26, done = i < w.room || (i === w.room && (w.phase === 'cleared' || w.phase === 'won')), cur = i === w.room;

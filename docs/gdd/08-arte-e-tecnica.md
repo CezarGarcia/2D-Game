@@ -53,7 +53,7 @@ O código Java antigo não é reaproveitado. Está em `legacy/java`.
 |---|---|---|
 | 1 · Sensação (**feita, em avaliação**) | Uma sala com três ondas: herói com movimento, sequência de três golpes, esquiva com esquiva perfeita e Dardo de Espinho; Saúva-Cinza, Queixada Sombria, Cuspidor e o elite Tronco-Oco | Controlar o herói é gostoso |
 | 2 · Fatia vertical (**feita, em avaliação**) | Capítulo 1 completo: 12 fases, Caipora e Curupira, facão com escudo e arco, 5 feitiços de Natureza, capivara e onça, loot, inventário, ferreiro (aprimorar e fundir), atributos e a teia de talentos | Alguém de fora joga 1 hora sem pedir ajuda |
-| 3 · Campanha (**em andamento: Capítulo 2 feito, em avaliação**) | Capítulos 2 a 8, todas as armas, elementos, talentos, conjuntos, únicos, Torre | Créditos alcançáveis, curva de dificuldade ajustada |
+| 3 · Campanha (**feita, em avaliação**) | Capítulos 2 a 8, todas as armas, elementos, talentos, conjuntos, únicos, Torre | Créditos alcançáveis, curva de dificuldade ajustada |
 | 4 · Online | Contas, save na nuvem, servidor decidindo drops, rankings | Rankings confiáveis |
 | 5 · Mercado | Compra e venda com ouro | Economia estável |
 | 6 · Loja e temporadas | Loja direta, passe, primeira temporada | — |
@@ -98,4 +98,28 @@ Veio depois do primeiro teste de quem jogou a etapa 2. O retorno foi: o jogo est
 **Interface.** Refeita com cara de jogo: ícones no lugar de frases, um só tipo de dica ao passar o mouse, mapa ilustrado sem barra lateral, herói no centro com os itens em volta e a mochila embaixo, ferreiro que acende o que dá para trabalhar, e a teia de talentos em tela cheia com arrastar e zoom.
 
 Ainda fora: capítulos 3 a 8, gemas, conjuntos, salas secretas, formas dos companheiros, aparência do herói mudando com a armadura, controle por toque, Torre e missões, e tudo o que é online.
+
+## Etapa 3, segunda parte: o resto da campanha
+
+Entrou tudo o que a etapa 3 pedia: capítulos 3 a 8 com créditos no fim, as seis armas, os sete elementos, conjuntos, únicos e a Torre. Decisões tomadas, a revisar com quem jogar:
+
+**Monstros por arquétipo.** Os 30 monstros novos (5 por capítulo) usam um código só por arquétipo (`src/sim/archetypes.ts`), com números próprios em `src/data/bestiary.ts`. Os dos capítulos 1 e 2 continuam com código próprio.
+
+**Chefes.** Os 12 chefes novos usam um motor comum (`src/sim/bosses.ts`): fases por vida, padrões de ataque em ordem, postura nos Encantados, fúria por tempo e janela de punição. O truque de cada lenda está nos padrões: o Saci rouba um feitiço até apanhar seis vezes e corre dentro do redemoinho; o corpo do Boitatá segue o rastro da cabeça e só a cabeça sente golpe; o Mapinguari recebe 20% do dano até rugir e abrir a boca da barriga; a lua enche durante a luta com o Lobisomem e ele vira lobo na metade dela; a Cuca põe você para sonhar e troca os feitiços de tecla; a Pisadeira pisa em quem fica parado; os Ecos dos Sete mudam de Encantado a cada sétimo da vida; o Esquecimento apaga feitiços e, a cada fase, um Encantado libertado aparece para devolver um.
+
+**Terreno.** Sertão: redemoinhos de poeira que arremessam. Cerrado: touceiras de capim que pegam fogo e espalham. Selva: escuro, só há luz em volta do herói (menos escuro na sala do chefe). Pampa: a lua enche em 60 s em cada sala e deixa os monstros até 25% mais fortes. Pantanal: ilusões em cada onda, que somem com um golpe. Terra Sem Nome: a cada 14 s um feitiço é apagado até a sala acabar.
+
+**Elementos.** Cada elemento deixa o seu efeito; um segundo elemento num inimigo com efeito causa a reação da tabela de `03-combate-e-feiticos.md` (a ordem não importa). Os monstros também têm elemento: fogo queima o herói, sombra amaldiçoa, terra racha a defesa, encanto às vezes inverte os comandos por um instante, tempestade fere mais quem está molhado.
+
+**Armas.** Borduna (dois golpes lentos e largos; o golpe carregado racha a armadura), peixeiras (cinco cortes rápidos; crítico depois da esquiva perfeita), zagaia (alcance longo; estocada que atravessa a fila), cajado (disparo com o elemento do último feitiço; feitiços 20% mais rápidos). As armas novas só caem a partir do capítulo em que aparecem; as quatro vêm garantidas nas primeiras fases dos capítulos 3 e 4.
+
+**Itens.** Um conjunto por capítulo e dois da Torre, com bônus de 2, 4 e 6 peças. Gemas de 7 elementos e 6 níveis, uma por item de arma ou armadura; três iguais fundem numa do nível seguinte. Doze itens com nome a mais.
+
+**Companheiros.** Os 16 da lista, cada um com uma habilidade própria.
+
+**Torre dos Cem Andares.** Abre depois do Curupira. Cada subida tem 10 andares e um altar no meio, com chefe no décimo; vencer move o marco de partida. Os andares passam pelos capítulos em ordem e vão do nível 4 ao 60. O ranking semanal por enquanto é só local (a semana atual e o recorde ficam no save); fica online na etapa 4. O mico-leão-dourado é resgatado no andar 50.
+
+**Calibração.** Igual à primeira parte: o jogador automático que erra como gente joga cada fase com o personagem de referência no nível dela. A partir do Capítulo 3 o personagem de referência usa itens Raros (Épicos a partir do nível 42) aprimorados e uma gema na arma e no peito: o jogo espera que quem chega ali use o ferreiro. Por isso o poder recomendado sobe mais rápido nessas fases.
+
+Ficou para depois: formas dos companheiros, salas secretas, runas, a Torre online e as dificuldades Heroica e Mítica.
 

@@ -63,8 +63,6 @@ export interface UiState {
   spellEl: ElementId | null;
   /** Filtro de elemento na tela de companheiros (nulo = todos). */
   compFilter: ElementId | null;
-  /** Cartão de história de capítulo aberto no mapa. */
-  story: number | null;
   options: boolean;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
@@ -74,7 +72,7 @@ export function newState(): UiState {
   return {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'novo', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
-    web: null, spellSel: null, spellEl: null, compFilter: null, story: null, options: false, confirm: null, toast: null,
+    web: null, spellSel: null, spellEl: null, compFilter: null, options: false, confirm: null, toast: null,
   };
 }
 

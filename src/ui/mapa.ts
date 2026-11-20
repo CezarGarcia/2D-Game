@@ -1,16 +1,55 @@
 /** Mapa: o capítulo ilustrado em tela inteira, uma medalha por fase. Tudo o mais aparece no tooltip. */
 import { paintChapterMap } from '../art/backdrops';
-import { COMPANIONS } from '../data/content';
+import { COMPANIONS, ELEMENTS } from '../data/content';
 import { ITEM_TYPES, RARITIES, UNIQUES } from '../data/items';
 import { stageGold, stageXp } from '../data/progression';
-import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGES, stagesOf, type StageDef } from '../data/stages';
+import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGES, stagesOf, type ChapterDef, type StageDef } from '../data/stages';
 import type { Profile } from '../meta/profile';
 import { STAR_CHESTS, isChapterOpen, stageInfo, totalStars, type StageInfo, type StageTag } from '../meta/rewards';
-import { MAIN_H, MAIN_W, type Ctx } from './ctx';
-import { backdrop, clock, h, num, pct, star, ui } from './dom';
+import { MAIN_H, MAIN_W, markSeen, unseen, type Ctx } from './ctx';
+import { backdrop, clock, h, num, pct, star, trimBackdrops, ui } from './dom';
 import { tip, type TipRow, type TipSpec } from './tip';
 
 const TAG_COLOR: Record<StageTag, string> = { verde: '#5fcb6a', amarela: '#f2c14e', cinza: '#9aa39a', vermelha: '#ff6b55' };
+/* a Terra Sem Nome não tem elemento: usa a cor do papel apagado e o livro das histórias */
+const NAMELESS = { icon: 'credito', color: '#e9e1f2' };
+
+function chapterIcon(ch: ChapterDef): string { return ch.element ?? NAMELESS.icon; }
+function chapterColor(ch: ChapterDef): string { return ch.element ? ELEMENTS[ch.element].color : NAMELESS.color; }
+
+/* ---------- cartão de história: aparece uma vez quando um capítulo abre ---------- */
+
+/** Capítulo aberto cuja história o jogador ainda não viu (o mais adiantado), ou nulo. */
+export function pendingStory(p: Profile): ChapterDef | null {
+  const open = CHAPTERS.filter((ch) => isChapterOpen(p, ch.id));
+  const fresh = unseen('capitulos', open.map((ch) => String(ch.id)));
+  if (!fresh.length) return null;
+  return CHAPTERS.find((ch) => ch.id === Number(fresh[fresh.length - 1])) ?? null;
+}
+
+/** Fecha o cartão: todos os capítulos abertos contam como vistos. */
+export function dismissStory(p: Profile): void {
+  markSeen('capitulos', CHAPTERS.filter((ch) => isChapterOpen(p, ch.id)).map((ch) => String(ch.id)));
+}
+
+function storyCard(c: Ctx, ch: ChapterDef): HTMLElement {
+  const color = chapterColor(ch);
+  const close = () => {
+    dismissStory(c.p);
+    const first = stagesOf(ch.id).map((s) => stageInfo(c.p, s)).find((i) => i.unlocked && !i.record.cleared);
+    c.st.chapter = ch.id; c.st.mapSel = first?.stage.id ?? c.st.mapSel;
+    c.redraw('jogar');
+  };
+  return h('div', { class: 'story-back', onclick: (e: Event) => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'story', style: `--ec:${color}`, role: 'dialog', 'aria-modal': 'true', 'aria-label': `Capítulo ${ch.id}: ${ch.name}` },
+      h('div', 'story-medal', ui(chapterIcon(ch), 92)),
+      h('div', 'story-num', `Capítulo ${ch.id}`),
+      h('h1', 'story-name', ch.name),
+      h('div', 'story-who', ui('supremo', 26), ch.encantado),
+      h('p', 'story-text', ch.story),
+      h('div', 'story-terrain', ui('mapa', 24), ch.terrain),
+      h('button', { type: 'button', class: 'btn primary big', 'data-fk': 'story-ok', onclick: close }, ui('seta', 30), 'Vamos')));
+}
 
 /** Primeira fase liberada que ainda não foi vencida; se todas foram, a última. */
 export function defaultStage(p: Profile): StageDef {
@@ -131,24 +170,29 @@ export function renderMapa(c: Ctx): HTMLElement {
     const to = CHAPTERS[idx + dir];
     return h('button', { type: 'button', class: `round-btn chap-arrow${dir < 0 ? ' prev' : ''}`, disabled: !to, 'aria-label': dir < 0 ? 'Capítulo anterior' : 'Próximo capítulo', onclick: () => to && goChapter(to.id) }, ui('seta', 26));
   };
+  /* oito capítulos não cabem com nome: só o escolhido mostra nome e estrelas, os outros são medalhas */
   const chapters = h('div', 'chap-bar',
     arrow(-1),
     CHAPTERS.map((ch) => {
-      const open = isChapterOpen(p, ch.id), max = stagesOf(ch.id).length * 3, got = totalStars(p, ch.id);
-      const prev = stagesOf(ch.id - 1);
+      const open = isChapterOpen(p, ch.id), max = stagesOf(ch.id).length * 3, got = totalStars(p, ch.id), on = ch.id === chapter.id;
+      const prev = stagesOf(ch.id - 1), done = open && stagesOf(ch.id).every((s) => stageInfo(p, s).record.cleared);
       return tip(h('button', {
-        type: 'button', class: `chap${ch.id === chapter.id ? ' on' : ''}${open ? '' : ' locked'}`, 'aria-pressed': String(ch.id === chapter.id),
-        'data-fk': `cap-${ch.id}`, onclick: () => goChapter(ch.id),
+        type: 'button', class: `chap${on ? ' on' : ''}${open ? '' : ' locked'}${done ? ' done' : ''}`, style: `--ec:${chapterColor(ch)}`, 'aria-pressed': String(on),
+        'aria-label': `Capítulo ${ch.id}, ${ch.name}${open ? '' : ', trancado'}`, 'data-fk': `cap-${ch.id}`, onclick: () => goChapter(ch.id),
       },
-      ui(open ? ch.element : 'cadeado', 30),
-      h('span', 'chap-name', ch.name),
-      open && h('span', 'chap-stars', star(true, 14), `${got}/${max}`)),
+      h('span', 'chap-ico', ui(open ? chapterIcon(ch) : 'cadeado', on ? 30 : 28), !on && h('b', 'chap-n', ch.id)),
+      on && h('span', 'chap-name', ch.name),
+      on && open && h('span', 'chap-stars', star(true, 14), `${got}/${max}`)),
       () => ({
-        title: `Capítulo ${ch.id} · ${ch.name}`, sub: open ? `Encantado: ${ch.encantado}` : 'Trancado', subColor: open ? undefined : '#ff7b6b',
+        title: `Capítulo ${ch.id} · ${ch.name}`, color: open ? chapterColor(ch) : undefined, icon: ui(chapterIcon(ch), 36),
+        sub: open ? `Encantado: ${ch.encantado}` : 'Trancado', subColor: open ? undefined : '#ff7b6b',
         rows: [
-          open ? { node: star(true, 18), text: 'Estrelas', value: `${got} / ${max}` } : null,
+          { icon: 'mapa', text: ch.terrain },
+          'sep',
+          open ? { node: star(true, 18), text: 'Estrelas', value: `${got} / ${max}`, tone: got === max ? 'gold' : undefined } : null,
           !open && prev.length ? { icon: 'cadeado', text: `Vença a fase ${prev[prev.length - 1].id}`, tone: 'bad' } : null,
         ],
+        foot: [open && !on ? 'Clique: ver o capítulo' : null],
       }));
     }),
     arrow(1));
@@ -169,10 +213,14 @@ export function renderMapa(c: Ctx): HTMLElement {
     ],
   }));
 
+  const bg = backdrop(`mapa-${chapter.id}`, MAIN_W, MAIN_H, (g) => paintChapterMap(g, MAIN_W, MAIN_H, chapter.id, points), 2);
+  trimBackdrops('mapa-', 3);
+  const story = pendingStory(p);
   return h('div', 'mapa',
-    backdrop(`mapa-${chapter.id}`, MAIN_W, MAIN_H, (g) => paintChapterMap(g, MAIN_W, MAIN_H, chapter.id, points), 2),
+    bg,
     nodes,
     playPop,
     chapters,
-    chest);
+    chest,
+    story && storyCard(c, story));
 }

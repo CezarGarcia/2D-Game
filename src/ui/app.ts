@@ -16,7 +16,7 @@ import { renderFeiticos } from './feiticos';
 import { renderFerreiro } from './ferreiro';
 import { renderHeroi, renderItemMenu } from './heroi';
 import type { UiController, UiHost } from './host';
-import { defaultStage, renderMapa } from './mapa';
+import { defaultStage, dismissStory, pendingStory, renderMapa } from './mapa';
 import { renderResultado } from './resultado';
 import { renderTalentos } from './talentos';
 import { renderTorre } from './torre';
@@ -306,7 +306,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       if (mode !== 'camp') return;
       if (st.tab === 'ferreiro' && st.forgeSel != null) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; render(); e.preventDefault(); return; }
       if (st.tab === 'feiticos' && st.spellSel) { st.spellSel = null; render(); e.preventDefault(); return; }
-      if (st.tab === 'mapa' && st.story != null) { st.story = null; render(); e.preventDefault(); }
+      if (st.tab === 'mapa' && pendingStory(host.getProfile()) != null) { dismissStory(host.getProfile()); render(); e.preventDefault(); }
       return;
     }
     if (mode === 'camp' && !st.confirm && e.key.length === 1 && e.key >= '1' && e.key <= String(TABS.length)) {
