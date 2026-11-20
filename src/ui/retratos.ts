@@ -9,7 +9,6 @@ import { drawOnca } from '../art/characters2';
 import { drawArara, drawIara } from '../art/characters3';
 import { CHAPTER_ART } from '../art/chapters';
 import type { Kit, Sheet } from '../art/kit';
-import type { CompanionId } from '../data/content';
 
 type G = CanvasRenderingContext2D;
 type SheetDraw = (c: G, anim: string, k: number) => void;
@@ -79,16 +78,6 @@ export function drawFigure(c: G, key: string, box: { x: number; y: number; w: nu
   c.lineCap = 'round'; c.lineJoin = 'round';
   try { f.draw(c, t); } catch (err) { console.warn('Retrato falhou:', key, err); }
   c.restore();
-}
-
-/** Desenha o companheiro com os pés na origem, virado para a direita, no tamanho do jogo (pequeno). */
-export function drawCompanion(c: G, id: CompanionId, t: number): void {
-  const f = figure(id);
-  if (!f) return;
-  if (OLD[id]) { f.draw(c, t); return; }
-  /* folhas novas: mesma altura aproximada dos companheiros antigos */
-  const fr = f.frame, k = Math.min(1.2, 52 / (fr.oy / fr.scale)) / 1;
-  c.save(); c.scale(k, k); f.draw(c, t); c.restore();
 }
 
 /** Encantados libertados, coloridos, para a tela do final (na ordem dos capítulos). */
