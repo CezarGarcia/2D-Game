@@ -190,10 +190,10 @@ export const MOD = {
 
 /** Multiplicadores de vida e dano dos monstros pelo nível da fase (nível 1 = 1). */
 export function enemyHpMult(level: number): number {
-  return ((1 + 0.5 * level + 0.025 * level * level) / 1.525) * (1 + 0.015 * Math.max(0, level - 30));
+  return ((1 + 0.5 * level + 0.025 * level * level) / 1.525) * (1 + 0.02 * Math.max(0, level - 30));
 }
 export function enemyDamageMult(level: number): number {
-  return ((1 + 0.26 * level) / 1.26) * (1 + 0.012 * Math.max(0, level - 30));
+  return ((1 + 0.26 * level) / 1.26) * (1 + 0.04 * Math.max(0, level - 30));
 }
 /** Monstros de fases mais altas andam mais rápido e avisam por menos tempo. */
 export function enemySpeedMult(level: number): number {

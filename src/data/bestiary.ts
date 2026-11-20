@@ -74,7 +74,7 @@ export const MONSTERS: Record<MonsterKind, MonsterDef> = {
   cascavel: M('cascavel', 3, 'Cascavel', 'emboscada', 'tempestade', {}, 'Enterrada na areia. O chocalho avisa antes do bote.'),
   mandacaru: M('mandacaru', 3, 'Mandacaru', 'atirador', 'tempestade', { speed: 55, hp: 96, shot: bolt('e_espinho', 470, 3, 0.26) }, 'Dispara um leque de espinhos.'),
   bode: M('bode', 3, 'Bode-Preto', 'investida', 'tempestade', {}, 'Marca uma linha e corre. Fica tonto se bater.'),
-  urubu: M('urubu', 3, 'Urubu', 'conjurador', 'tempestade', { fly: true, circles: { count: 3, radius: 66, delay: 1.0, spread: 130, every: 3.0 } }, 'Voa em círculos e chama raios onde você está.'),
+  urubu: M('urubu', 3, 'Urubu', 'conjurador', 'tempestade', { fly: true, circles: { count: 2, radius: 66, delay: 1.1, spread: 130, every: 3.4 } }, 'Voa em círculos e chama raios onde você está.'),
   /* Capítulo 4 · Cerrado (Fogo) */
   formiga: M('formiga', 4, 'Formiga-de-Fogo', 'enxame', 'fogo', { radius: 12, hp: 34, cost: 0.8, speed: 175 }, 'Muitas, pequenas e queimam.'),
   seriema: M('seriema', 4, 'Seriema', 'investida', 'fogo', { speed: 120, hp: 150 }, 'Corre em linha reta e chuta.'),
