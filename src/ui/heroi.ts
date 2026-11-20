@@ -3,7 +3,7 @@ import { paintHeroBackdrop } from '../art/backdrops';
 import { drawHero } from '../art/characters';
 import { ITEM_TYPES, SLOT_LABEL, itemScore, sellValue, type Item, type ItemType, type Slot } from '../data/items';
 import {
-  ATTRS, FREE_RESPEC_LEVEL, INVENTORY_SIZE, allocAttr, dismantleItem, dismantleYield, equip, findItem, inventoryFull, offhandWarning,
+  ATTRS, ATTR_BASE, ATTR_PER_LEVEL, FREE_RESPEC_LEVEL, INVENTORY_SIZE, allocAttr, dismantleItem, dismantleYield, equip, findItem, inventoryFull, offhandWarning,
   resetAttrs, respecCost, sellItem, toggleLock, unequip, type AttrKey, type Profile,
 } from '../meta/profile';
 import { BASE_MOVE_SPEED, attrEffects, damageReduction, deriveStats, powerOf, totalAttrs } from '../meta/stats';
@@ -44,7 +44,7 @@ function attrsPanel(c: Ctx): HTMLElement {
     h('div', 'panel-top',
       tip(h('span', `points${pts > 0 ? ' hot' : ''}`, ui('mais', 24), h('b', null, pts)), {
         title: 'Pontos de atributo', tag: String(pts),
-        rows: [{ text: 'Você ganha 3 a cada nível. Gaste nos atributos abaixo.', tone: 'dim' }],
+        rows: [{ text: `Você ganha ${ATTR_PER_LEVEL} a cada nível. Gaste nos atributos abaixo.`, tone: 'dim' }],
       }),
       tip(h('button', {
         type: 'button', class: 'round-btn', disabled: spent === 0, 'aria-label': 'Redistribuir atributos', 'data-fk': 'attr-reset',
@@ -69,7 +69,8 @@ function attrsPanel(c: Ctx): HTMLElement {
         ...a.perPoint.split(', ').map((t): TipRow => ({ icon: 'mais', text: t })),
         'sep',
         { text: 'Seus pontos', value: num(p.attrs[a.key]), tone: 'dim' },
-        total[a.key] - 5 - p.attrs[a.key] !== 0 ? { text: 'Itens e talentos', value: `+${num(total[a.key] - 5 - p.attrs[a.key])}`, tone: 'dim' } : null,
+        { text: 'Base', value: num(ATTR_BASE), tone: 'dim' },
+        total[a.key] - ATTR_BASE - p.attrs[a.key] !== 0 ? { text: 'Itens e talentos', value: `+${num(total[a.key] - ATTR_BASE - p.attrs[a.key])}`, tone: 'dim' } : null,
       ];
       const kids = [
         ui(a.key, 50),

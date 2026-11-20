@@ -260,7 +260,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     const opening = root.hidden || mode !== 'camp';
     if (!opening && st.tab !== tab) seeTab(st.tab);
     mode = 'camp'; results = null;
-    if (st.tab !== tab || opening) { st.menu = null; st.options = false; st.confirm = null; st.forgeFx = null; st.spellSel = null; }
+    if (st.tab !== tab || opening) { st.menu = null; st.options = false; st.confirm = null; st.forgeFx = null; st.spellSel = null; st.toast = null; }
     st.tab = tab;
     if (tab === 'mapa' && (opening || !st.mapSel)) {
       const def = defaultStage(host.getProfile());

@@ -874,7 +874,7 @@ export class StageScene extends Phaser.Scene {
     this.txtBoss = this.label(VIEW.w / 2, 62, 24, '#ffb238').setOrigin(0.5);
     this.txtExit = this.label(0, 0, 26, '#ffb238').setOrigin(1, 0.5).setText('Siga em frente').setVisible(false);
     this.txtHelp = this.label(VIEW.w / 2, VIEW.h - 132, 19, '#f1ebd8').setOrigin(0.5)
-      .setText(`WASD mover · clique atacar · botão direito ${bow ? 'carregar tiro' : 'defender'} · Espaço esquivar · Q E R feitiços · F companheiro · T Encantado · 1 poção · Esc pausa`);
+      .setText(['WASD mover', 'clique atacar', bow ? 'botão direito carrega o tiro' : w.stats.hasShield ? 'botão direito defende' : '', 'Espaço esquiva', 'Q feitiço', '1 poção'].filter(Boolean).join('  ·  '));
     this.txtBanner = this.add.text(VIEW.w / 2, VIEW.h / 2 - 50, '', { fontFamily: FONT, fontStyle: '900', fontSize: '92px', color: '#ffb238', stroke: INK, strokeThickness: 12 }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     this.txtSub = this.add.text(VIEW.w / 2, VIEW.h / 2 + 50, '', { fontFamily: FONT, fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     const names = ['Clique', bow ? 'Dir.' : (w.stats.hasShield ? 'Dir.' : ''), 'Espaço', 'Q', 'E', 'R', 'F', 'T'];
