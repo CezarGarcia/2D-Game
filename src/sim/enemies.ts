@@ -48,7 +48,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       if (e.hp <= 0) return;
     }
   }
-  if (e.mods.includes('regenerador') && e.sinceHit > MOD.regenerador.after && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * MOD.regenerador.perSecond * dt);
+  if (e.mods.includes('regenerador') && e.hp > 0 && e.sinceHit > MOD.regenerador.after && e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.maxHp * MOD.regenerador.perSecond * dt);
 
   if (e.state === 'spawn') {
     if (e.stateT >= ENEMY.spawnTime) {
