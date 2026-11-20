@@ -237,7 +237,7 @@ function bakeRio(scene: Phaser.Scene): void {
   const jet = (c: Ctx, body: string, light: string, out: string, trail: string) => {
     c.fillStyle = trail; c.beginPath(); c.moveTo(1, 7); c.quadraticCurveTo(14, 3.6, 26, 4.4); c.lineTo(26, 9.6); c.quadraticCurveTo(14, 10.4, 1, 7); c.fill();
     cel(c, (p: Ctx) => { p.moveTo(8, 7); p.bezierCurveTo(20, 5.4, 28, 1.6, 36, 1.8); p.bezierCurveTo(44.6, 2.2, 44.6, 11.8, 36, 12.2); p.bezierCurveTo(28, 12.4, 20, 8.6, 8, 7); p.closePath(); }, body, {
-      k: 1.1, lw: 1.8, out, hi: 'rgba(255,255,255,.4)', inn: (p: Ctx) => {
+      k: 1.1, lw: 1.5, out, hi: 'rgba(255,255,255,.4)', inn: (p: Ctx) => {
         p.fillStyle = light; p.beginPath(); p.ellipse(35, 5, 4.4, 1.7, -0.1, 0, TAU); p.fill();
         p.strokeStyle = light; p.lineWidth = 1; p.lineCap = 'round'; p.beginPath(); p.moveTo(14, 6.8); p.quadraticCurveTo(22, 5.4, 29, 4.6); p.stroke();
       },
@@ -257,7 +257,7 @@ function bakeRio(scene: Phaser.Scene): void {
   });
   simple(scene, 'sting', 30, 8, (c) => {
     c.fillStyle = 'rgba(255,90,140,.4)'; c.fillRect(0, 2.8, 14, 2.4);
-    cel(c, (p: Ctx) => poly(p, [7, 1.6, 20, 1.2, 29, 4, 20, 6.8, 7, 6.4, 10, 4]), '#a29fa9', { k: 0.6, lw: 1.5, inn: (p: Ctx) => { p.fillStyle = '#ff5c9a'; p.beginPath(); poly(p, [21, 0, 30, 4, 21, 8]); p.fill(); } });
+    cel(c, (p: Ctx) => poly(p, [7, 1.6, 20, 1.2, 29, 4, 20, 6.8, 7, 6.4, 10, 4]), '#a29fa9', { k: 0.6, lw: 1.3, inn: (p: Ctx) => { p.fillStyle = '#ff5c9a'; p.beginPath(); poly(p, [21, 0, 30, 4, 21, 8]); p.fill(); } });
   });
   simple(scene, 'spit', 22, 22, (c) => {
     cel(c, (p: Ctx) => { el(p, 11, 11.4, 7.8, 7.2, 0); el(p, 4.6, 15.6, 2.6, 2.3, 0); el(p, 16.8, 5.4, 2.2, 2, 0); }, '#8c9a7c', {

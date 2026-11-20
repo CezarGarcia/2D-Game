@@ -154,12 +154,12 @@ function doll(c: Ctx): HTMLElement {
 function bag(c: Ctx): HTMLElement {
   const p = c.p, items = sorted(p.inventory, c.st.invSort);
   const cells: HTMLElement[] = items.map((it) => itemTile(it, {
-    size: 52, fk: `item-${it.id}`, better: powerDelta(p, it) > 0,
+    size: 50, fk: `item-${it.id}`, better: powerDelta(p, it) > 0,
     onClick: () => { if (equip(c.p, it.id)) c.commit(); },
     onMenu: (e) => { const pt = c.point(e); c.st.menu = { id: it.id, x: pt.x, y: pt.y }; c.redraw('menu-0'); },
     tipSpec: () => itemTip(c.p, it, { where: 'mochila' }),
   }));
-  for (let i = items.length; i < INVENTORY_SIZE; i++) cells.push(emptyTile(null, 52));
+  for (let i = items.length; i < INVENTORY_SIZE; i++) cells.push(emptyTile(null, 50));
   return h('section', { class: 'panel bag', 'aria-label': 'Mochila' },
     h('div', 'bag-top',
       tip(h('span', `bag-count${p.inventory.length >= INVENTORY_SIZE ? ' full' : ''}`, ui('item', 24), h('b', null, `${p.inventory.length}/${INVENTORY_SIZE}`)), {

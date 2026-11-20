@@ -110,9 +110,9 @@ export function renderMapa(c: Ctx): HTMLElement {
       onkeydown: (e: KeyboardEvent) => { if (e.key === 'Enter' && sel?.stage.id === st.id) { e.preventDefault(); play(st.id); } },
     },
     h('span', 'node-face',
-      !info.unlocked ? ui('cadeado', boss ? 40 : 32) : boss ? ui('caveira', 52) : h('b', null, st.number)),
+      boss ? ui('caveira', 52) : !info.unlocked ? ui('cadeado', 32) : h('b', null, st.number)),
     st.final === 'elite' && h('span', 'node-badge tr', ui('elite', 26)),
-    boss && info.unlocked && h('span', 'node-badge tr num', st.number),
+    boss && h('span', 'node-badge tr num', info.unlocked ? st.number : ui('cadeado', 22)),
     cage && h('span', 'node-badge tl', ui('gaiola', 28)),
     info.unlocked && h('span', 'node-stars', info.record.stars.map((on) => star(on, 17)))),
     () => stageTip(p, info));

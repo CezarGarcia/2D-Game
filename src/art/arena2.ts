@@ -106,13 +106,14 @@ function root(g, R, x, y, ang, len, w) {
 }
 /* tronco de pé com sapopemas (raízes em tábua), sobe para fora da tela */
 function trunk(g, R, x, y, s, wet) {
+  const T = Math.max(230 * s, y + 30); /* sempre sai pelo alto da tela, para não aparecer o topo cortado */
   g.beginPath(); g.ellipse(x + 30 * s, y + 4 * s, 64 * s, 16 * s, 0.08, 0, TAU); g.fillStyle = 'rgba(6,16,14,.36)'; g.fill();
   cel(g, function (c) {
-    c.moveTo(x - 34 * s, y + 1 * s); c.quadraticCurveTo(x - 16 * s, y - 6 * s, x - 13 * s, y - 46 * s); c.lineTo(x - 12 * s, y - 230 * s); c.lineTo(x + 12 * s, y - 230 * s); c.lineTo(x + 13 * s, y - 44 * s);
+    c.moveTo(x - 34 * s, y + 1 * s); c.quadraticCurveTo(x - 16 * s, y - 6 * s, x - 13 * s, y - 46 * s); c.lineTo(x - 12 * s, y - T); c.lineTo(x + 12 * s, y - T); c.lineTo(x + 13 * s, y - 44 * s);
     c.quadraticCurveTo(x + 17 * s, y - 8 * s, x + 36 * s, y); c.quadraticCurveTo(x + 18 * s, y + 6 * s, x + 7 * s, y - 2 * s); c.quadraticCurveTo(x + 1 * s, y + 9 * s, x - 6 * s, y - 1 * s); c.quadraticCurveTo(x - 16 * s, y + 7 * s, x - 34 * s, y + 1 * s); c.closePath();
   }, '#4a3a2c', {
     k: 3, lw: 2.8, inn: function (c) {
-      [-8, -3, 3, 8].forEach(function (d) { c.beginPath(); c.moveTo(x + d * s, y - 228 * s); c.bezierCurveTo(x + (d + 2) * s, y - 140 * s, x + (d - 2) * s, y - 60 * s, x + (d * 2.4) * s, y - 2 * s); c.strokeStyle = 'rgba(18,10,8,.5)'; c.lineWidth = 1.2; c.stroke(); });
+      [-8, -3, 3, 8].forEach(function (d) { c.beginPath(); c.moveTo(x + d * s, y - T + 2); c.bezierCurveTo(x + (d + 2) * s, y - 140 * s, x + (d - 2) * s, y - 60 * s, x + (d * 2.4) * s, y - 2 * s); c.strokeStyle = 'rgba(18,10,8,.5)'; c.lineWidth = 1.2; c.stroke(); });
       c.fillStyle = 'rgba(70,128,84,.85)'; c.beginPath(); c.ellipse(x - 16 * s, y - 8 * s, 10 * s, 6 * s, 0, 0, TAU); c.fill(); c.beginPath(); c.ellipse(x + 9 * s, y - 70 * s, 5 * s, 13 * s, 0, 0, TAU); c.fill();
       /* marca da cheia */
       c.fillStyle = 'rgba(14,26,24,.38)'; c.fillRect(x - 40 * s, y - 26 * s, 80 * s, 40 * s); c.fillStyle = 'rgba(210,200,160,.16)'; c.fillRect(x - 40 * s, y - 29 * s, 80 * s, 3 * s);
@@ -159,7 +160,7 @@ export function paintRiverGround(g, W, H, a, seed) {
     for (let j = 0; j < n; j++) {
       const side = Math.floor(R() * 4); let x, y;
       if (side === 0) { x = A.x0 + R() * aw; y = A.y0 - 18 - R() * 50; }
-      else if (side === 1) { x = A.x0 + R() * aw; y = A.y1 + 40 + R() * 36; }
+      else if (side === 1) { x = A.x0 + R() * aw; y = A.y1 + 50 + R() * 28; }
       else if (side === 2) { x = A.x0 - 24 - R() * 60; y = A.y0 + R() * ah; }
       else { x = A.x1 + 24 + R() * 60; y = A.y0 + R() * ah; }
       const s = sMin + R() * (sMax - sMin);
@@ -213,7 +214,7 @@ export function paintRiverGround(g, W, H, a, seed) {
       else if (side === 1) { x = A.x0 + R() * aw; y = A.y1 + 46 + R() * 20; an = -1.2 - R() * 0.8; }
       else if (side === 2) { x = A.x0 - 50 - R() * 30; y = A.y0 + R() * ah; an = (R() - 0.5) * 0.9; }
       else { x = A.x1 + 50 + R() * 30; y = A.y0 + R() * ah; an = Math.PI + (R() - 0.5) * 0.9; }
-      const l = 80 + R() * 80, w = 7 + R() * 5; items.push({ y: -900 + j, d: function () { root(g, R, x, y, an, l, w); } });
+      const l = side < 2 ? 56 + R() * 44 : 80 + R() * 70, w = 7 + R() * 5; items.push({ y: -900 + j, d: function () { root(g, R, x, y, an, l, w); } });
     }
     edge(8, function (x, y, s) { reed(g, x, y, s, R); }, 0.9, 1.2); edge(5, function (x, y, s) { rock(g, x, y, s, '#5e6460'); }, 0.9, 1.3);
     edge(13, function (x, y, s) { pad(g, x, y, s, R() < 0.3, R); }, 0.75, 1.2);
