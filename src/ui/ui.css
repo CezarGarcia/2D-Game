@@ -155,8 +155,8 @@
 }
 .enc-ui .pop.options { right: 10px; top: 52px; }
 .enc-ui .pop-btn {
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 76px; height: 76px; padding: 2px;
-  font-size: 14.5px; background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 86px; height: 78px; padding: 2px;
+  font-size: 15px; background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 10px;
 }
 .enc-ui .pop-btn:hover:not(:disabled) { background: rgba(255, 220, 150, .2); }
 .enc-ui .pop-btn:disabled { opacity: .4; }
@@ -173,7 +173,7 @@
   background: repeating-linear-gradient(180deg, rgba(0, 0, 0, .08) 0 2px, transparent 2px 46px), linear-gradient(90deg, #47281500, #00000030), #4a2a16;
   border-right: 3px solid var(--ink); box-shadow: inset -3px 0 0 rgba(0, 0, 0, .22), 3px 0 0 rgba(0, 0, 0, .3);
 }
-.enc-ui .dock-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 80px; padding: 0; background: none; border: 0; }
+.enc-ui .dock-btn { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 80px; padding: 2px 0; background: none; border: 0; border-radius: 16px; }
 .enc-ui .dock-ico {
   display: grid; place-items: center; width: 64px; height: 64px;
   background: radial-gradient(circle at 50% 30%, #86542f, #54301a 75%); border: 3px solid var(--ink); border-radius: 18px;
@@ -306,13 +306,14 @@
 .enc-ui .stat-nums { display: flex; flex-direction: column; min-width: 0; }
 .enc-ui .stat-cell { min-width: 0; overflow: hidden; }
 .enc-ui .stat-nums b { font-weight: 900; font-size: 22px; line-height: 1; font-variant-numeric: tabular-nums; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); white-space: nowrap; }
-.enc-ui .stat-nums b i { margin-left: 5px; font-style: normal; font-size: 15px; color: var(--ok); }
+.enc-ui .stat-label i { font-style: normal; font-weight: 900; color: var(--ok); }
 .enc-ui .stat-label { font-size: 13.5px; color: var(--cream2); white-space: nowrap; }
 .enc-ui .doll { position: absolute; left: 316px !important; top: 12px !important; right: auto !important; bottom: auto !important; width: 564px; height: 474px; display: grid; grid-template-columns: 80px 1fr 80px; align-items: center; justify-items: center; gap: 16px; padding: 0 20px; }
 .enc-ui .doll-col { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; }
 .enc-ui .doll-col:last-child { gap: 12px; }
 .enc-ui .doll-mid { position: relative; display: flex; flex-direction: column; align-items: center; height: 100%; }
-.enc-ui .doll-mid .plate { position: absolute; bottom: 14px; font-size: 24px; }
+.enc-ui .doll-mid .plate { position: absolute; top: 0; font-size: 24px; }
+.enc-ui .hero-cv { margin-top: 30px; }
 .enc-ui .doll-mid .plate .stat b { font-size: 24px; }
 .enc-ui .slot { position: relative; display: grid; }
 .enc-ui .slot-warn { position: absolute; right: -8px; top: -8px; display: grid; place-items: center; width: 24px; height: 24px; font-weight: 900; color: #fff; background: #d32f1c; border: 3px solid var(--ink); border-radius: 50%; }
@@ -335,8 +336,10 @@
 .enc-ui .mode-btn:hover { filter: brightness(1.15); transform: translateY(-1px); }
 .enc-ui .mode-btn.on { color: var(--ink); font-weight: 900; background: linear-gradient(#ffe9a8, #f2b83c); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .6), 0 0 0 3px rgba(255, 210, 63, .35), 0 4px 0 rgba(0, 0, 0, .45); }
 .enc-ui .forge-bench { position: absolute; left: 128px !important; top: 0 !important; right: auto !important; bottom: auto !important; width: 560px; height: 674px; }
-.enc-ui .anvil { position: absolute; left: 0; top: 132px; }
-.enc-ui .forge-slots { position: absolute; left: 0; right: 0; top: 34px; height: 104px; display: flex; align-items: center; justify-content: center; gap: 14px; }
+.enc-ui .ferreiro { background: linear-gradient(#0b0f1a, #1a1620 50%, #170f0c); }
+.enc-ui .ferreiro:not(.locked) > .backdrop { left: -190px; }
+.enc-ui .anvil { position: absolute; left: 0; top: 258px; }
+.enc-ui .forge-slots { position: absolute; left: 0; right: 0; top: 10px; height: 104px; display: flex; align-items: center; justify-content: center; gap: 14px; }
 .enc-ui .forge-slots .plus { font-weight: 900; font-size: 40px; text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
 .enc-ui .forge-slots .auto { position: absolute; right: 6px; top: 36px; }
 .enc-ui .tile.wait { border-style: dashed; border-color: var(--gold); animation: enc-wait 1.2s ease-in-out infinite; }
@@ -344,11 +347,12 @@
 .enc-ui .tile.on-anvil { box-shadow: 0 0 0 2px var(--ink), 0 6px 0 2px rgba(0, 0, 0, .4), 0 0 24px 2px color-mix(in srgb, var(--rar) 55%, transparent); }
 .enc-ui .tile.fodder { outline: 3px dashed #ff8a4c; outline-offset: 3px; }
 .enc-ui .forge-info {
-  position: absolute; left: 60px; right: 60px; top: 384px; min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px;
+  position: absolute; left: 60px; right: 60px; top: 124px; min-height: 96px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 8px 14px;
   background: rgba(20, 12, 8, .72); border: 3px solid var(--ink); border-radius: 14px; box-shadow: inset 0 0 0 2px rgba(255, 214, 150, .14);
 }
 .enc-ui .big-line { display: flex; align-items: center; gap: 12px; font-size: 38px; line-height: 1; text-shadow: 0 3px 0 rgba(0, 0, 0, .55); }
 .enc-ui .big-line b { font-weight: 900; }
+.enc-ui .max-tag { padding: 2px 14px; font-weight: 900; font-size: 22px; color: var(--ink); background: linear-gradient(#ffe9a8, #f2b83c); border: 3px solid var(--ink); border-radius: 99px; text-shadow: none; }
 .enc-ui .sub-line { display: flex; align-items: center; gap: 8px; font-size: 21px; }
 .enc-ui .sub-line.wrap { flex-wrap: wrap; justify-content: center; gap: 4px 16px; }
 .enc-ui .sub-line b { font-weight: 900; }
@@ -358,7 +362,7 @@
 .enc-ui .affix:hover { background: rgba(255, 220, 150, .16); }
 .enc-ui .affix.on { color: var(--ink); font-weight: 900; background: linear-gradient(#ffe9a8, #f2b83c); }
 .enc-ui .affix .swap { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; font-size: 22px; }
-.enc-ui .forge-act { position: absolute; left: 0; right: 0; top: 548px; height: 110px; display: flex; align-items: center; justify-content: center; gap: 22px; }
+.enc-ui .forge-act { position: absolute; left: 0; right: 0; top: 552px; height: 110px; display: flex; align-items: center; justify-content: center; gap: 22px; }
 .enc-ui .costs { display: flex; flex-direction: column; gap: 4px; min-width: 104px; padding: 8px 16px; background: rgba(20, 12, 8, .72); border: 3px solid var(--ink); border-radius: 14px; }
 .enc-ui .costs .stat b { font-size: 24px; }
 .enc-ui .gauge { position: relative; display: grid; place-items: center; width: 104px; height: 104px; flex: none; }
@@ -369,14 +373,14 @@
 .enc-ui .gauge .g-pity { stroke: #7fd4ff; }
 .enc-ui .gauge b { position: relative; font-weight: 900; font-size: 26px; color: var(--gc); text-shadow: 0 2px 0 rgba(0, 0, 0, .6); }
 .enc-ui .btn.hammer { min-height: 76px; min-width: 210px; padding: 6px 22px; font-size: 30px; }
-.enc-ui .forge-hint { position: absolute; left: 0; right: 0; top: 400px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 26px; color: var(--cream2); text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
+.enc-ui .forge-hint { position: absolute; left: 0; right: 0; top: 152px; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 26px; color: var(--cream2); text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
 .enc-ui .forge-hint .ico { animation: enc-nudge 1s ease-in-out infinite; }
 @keyframes enc-nudge { 50% { transform: translateX(8px); } }
 .enc-ui .panel.forge-grid { left: 700px; top: 12px; width: 484px; height: 650px; display: grid; grid-template-columns: repeat(7, 58px); grid-auto-rows: 58px; gap: 8px; align-content: start; justify-content: center; padding: 14px 10px; }
 .enc-ui .forge-grid .tile.dim { filter: grayscale(.85) brightness(.42); }
 .enc-ui .forge-grid .tile.dim:hover { filter: grayscale(.6) brightness(.6); }
-.enc-ui .forge-grid .tile.main { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px #fff, 0 0 0 7px var(--ink); z-index: 1; }
-.enc-ui .forge-fx { position: absolute; left: 0; right: 0; top: 150px; z-index: 6; display: flex; flex-direction: column; align-items: center; pointer-events: none; animation: enc-fx 1.5s ease-out both; }
+.enc-ui .forge-grid .tile.picked { box-shadow: 0 0 0 2px var(--ink), 0 0 0 5px #fff, 0 0 0 7px var(--ink); z-index: 1; }
+.enc-ui .forge-fx { position: absolute; left: 0; right: 0; top: 236px; z-index: 6; display: flex; flex-direction: column; align-items: center; pointer-events: none; animation: enc-fx 1.5s ease-out both; }
 .enc-ui .forge-fx b { position: relative; font-weight: 900; font-size: 64px; line-height: 1; color: var(--fxc, #ffe27a); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink); }
 .enc-ui .forge-fx span { position: relative; padding: 2px 14px; font-weight: 900; font-size: 22px; background: var(--ink); border-radius: 99px; }
 .enc-ui .forge-fx.fail b { color: #cfc6b8; }
@@ -385,7 +389,7 @@
 @keyframes enc-fx { 0% { transform: scale(.4); opacity: 0; } 14% { transform: scale(1.18); opacity: 1; } 24% { transform: scale(1); } 78% { opacity: 1; transform: translateY(0); } 100% { opacity: 0; transform: translateY(-26px); } }
 @keyframes enc-flash { 0% { transform: scale(.3); opacity: 1; } 100% { transform: scale(1.6); opacity: 0; } }
 .enc-ui .ferreiro.locked .forge-off { position: absolute; inset: 0; filter: grayscale(1) brightness(.45); }
-.enc-ui .ferreiro.locked .anvil { left: 318px; top: 232px; }
+.enc-ui .ferreiro.locked .anvil { left: 318px; top: 262px; }
 .enc-ui .ferreiro.locked .backdrop { filter: grayscale(.9) brightness(.5); }
 .enc-ui .big-lock { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; }
 .enc-ui .big-lock .plate { font-size: 30px; padding: 6px 26px; }

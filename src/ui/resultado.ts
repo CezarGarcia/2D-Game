@@ -109,7 +109,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     news.length > 0 && h('div', 'res-news', news.slice(0, 7)),
     h('div', 'res-actions',
       h('button', { type: 'button', class: 'btn big', 'data-fk': 'res-mapa', onclick: () => c.go('mapa') }, ui('mapa', 30), 'Mapa'),
-      h('button', { type: 'button', class: `btn big${nextOpen ? '' : ' primary'}`, 'data-fk': nextOpen ? 'res-de-novo' : 'res-principal', onclick: again }, ui('reforjar', 30), r.won ? 'Jogar de novo' : 'Tentar de novo'),
+      h('button', { type: 'button', class: `btn big${nextOpen ? '' : ' primary'}`, 'data-fk': nextOpen ? 'res-de-novo' : 'res-principal', onclick: again }, ui('dano', 30), r.won ? 'Jogar de novo' : 'Tentar de novo'),
       nextOpen && next && tip(h('button', { type: 'button', class: 'btn big primary', 'data-fk': 'res-principal', onclick: () => c.host.startStage(next.id) }, 'Próxima fase', ui('seta', 30)),
         { title: `${next.id} · ${next.name}`, tag: `Nv ${next.level}` })));
 }

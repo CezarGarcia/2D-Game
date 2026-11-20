@@ -119,7 +119,7 @@ function leaf(c, x, y, rot, s, col) { c.save(); c.translate(x, y); c.rotate(rot)
 function facao(c, x, y, rot, s, ghost) {
   var col = typeof ghost === 'string' ? ghost : STEEL;
   c.save(); c.translate(x, y); c.rotate(rot); c.scale(s, s);
-  P(c, function (c) { c.moveTo(-3.3, -2); c.lineTo(-4.4, -20); c.quadraticCurveTo(-2.4, -28, 2.6, -31.5); c.quadraticCurveTo(8.4, -25, 6.4, -18); c.lineTo(3.6, -2); c.closePath(); }, col, { k: 1.5, lw: 2 / s, sh: COLD, inn: function (c) { ln(c, [-1, -4, -1.6, -21], 'rgba(110,120,145,.7)', 1.1); ln(c, [4.4, -17, 5.6, -24], 'rgba(255,255,255,.7)', 1.1); } });
+  P(c, function (c) { c.moveTo(-3.3, -2); c.lineTo(-4.4, -20); c.quadraticCurveTo(-2.4, -28, 2.6, -31.5); c.quadraticCurveTo(8.4, -25, 6.4, -18); c.lineTo(3.6, -2); c.closePath(); }, col, { k: 1.5, lw: (ghost ? 1.5 : 2) / s, out: ghost ? '#2c3550' : OUT, sh: COLD, inn: function (c) { ln(c, [-1, -4, -1.6, -21], 'rgba(110,120,145,.7)', 1.1); ln(c, [4.4, -17, 5.6, -24], 'rgba(255,255,255,.7)', 1.1); } });
   if (!ghost) {
     P(c, function (c) { poly(c, [-6.8, -3.9, 7.2, -3.9, 7.2, -.5, -6.8, -.5]); }, GOLD, { k: .6, lw: 1.7 / s });
     P(c, function (c) { cap(c, 0, .6, 0, 7.4, 2.9); }, '#5a3218', { k: 1, lw: 1.9 / s }); dot(c, 0, 2.2, .9, GOLD); dot(c, 0, 6, .9, GOLD);
@@ -251,8 +251,8 @@ var I = {
     facao(c, 12.4, 28, .8, .88);
   },
   velAtaque: function (c) {
-    facao(c, 8.4, 33.4, .04, .9, '#77839c'); facao(c, 8.4, 33.4, .5, .9, '#b3bccd');
-    c.beginPath(); c.arc(8.4, 33.4, 31.4, -1.5, -.66); c.strokeStyle = 'rgba(255,246,207,.95)'; c.lineWidth = 1.8; c.lineCap = 'round'; c.stroke();
+    facao(c, 8.4, 33.4, -.02, .8, '#7f8ba6'); facao(c, 8.4, 33.4, .47, .87, '#b9c2d3');
+    c.beginPath(); c.arc(8.4, 33.4, 31.4, -1.34, -.66); c.strokeStyle = 'rgba(255,246,207,.95)'; c.lineWidth = 1.8; c.lineCap = 'round'; c.stroke();
     facao(c, 8.4, 33.4, .98, .92);
   },
   movimento: function (c) {
@@ -695,8 +695,8 @@ var I = {
     rope(c, function (c) { c.moveTo(20, 28.6); c.quadraticCurveTo(18.6, 22, 20.4, 15.6); }, '#4f9a45', 2.1);
     P(c, function (c) { c.moveTo(20.4, 17); c.quadraticCurveTo(9, 18.2, 5.6, 8); c.quadraticCurveTo(17.4, 5, 20.4, 17); c.closePath(); }, GR, { k: 1.5, lw: 2.1, sh: LEAFSH, hi: 'rgba(240,255,190,.45)', inn: function (c) { ln(c, [19.4, 15.6, 9, 9.6], GR2, 1.1); } });
     P(c, function (c) { c.moveTo(20.4, 16); c.quadraticCurveTo(22, 3, 34.4, 3.8); c.quadraticCurveTo(34.2, 15.8, 20.4, 16); c.closePath(); }, '#7fdc6c', { k: 1.6, lw: 2.1, sh: LEAFSH, hi: 'rgba(240,255,190,.45)', inn: function (c) { ln(c, [21.4, 14.6, 31, 6.4], GR2, 1.1); } });
-    P(c, function (c) { poly(c, [30, 19, 33.2, 19, 33.2, 22, 36.2, 22, 36.2, 25.2, 33.2, 25.2, 33.2, 28.2, 30, 28.2, 30, 25.2, 27, 25.2, 27, 22, 30, 22]); }, '#eaffd6', { k: 0, lw: 1.8, out: '#1d4a22' });
-    P(c, function (c) { poly(c, [6.6, 19.6, 8.8, 19.6, 8.8, 21.6, 10.8, 21.6, 10.8, 23.8, 8.8, 23.8, 8.8, 25.8, 6.6, 25.8, 6.6, 23.8, 4.6, 23.8, 4.6, 21.6, 6.6, 21.6]); }, '#eaffd6', { k: 0, lw: 1.6, out: '#1d4a22' });
+    P(c, function (c) { poly(c, [29.4, 17.6, 33.4, 17.6, 33.4, 21.4, 37.2, 21.4, 37.2, 25.4, 33.4, 25.4, 33.4, 29.2, 29.4, 29.2, 29.4, 25.4, 25.6, 25.4, 25.6, 21.4, 29.4, 21.4]); }, '#f2ffe0', { k: 0, lw: 1.9, out: '#1d4a22' });
+    P(c, function (c) { poly(c, [5.8, 18.6, 8.6, 18.6, 8.6, 21.2, 11.2, 21.2, 11.2, 24, 8.6, 24, 8.6, 26.6, 5.8, 26.6, 5.8, 24, 3.2, 24, 3.2, 21.2, 5.8, 21.2]); }, '#f2ffe0', { k: 0, lw: 1.7, out: '#1d4a22' });
   },
   jato: function (c) {
     odot(c, 36, 5, 1.7, WAT2, WOUT); odot(c, 37, 17.6, 1.4, WAT2, WOUT); odot(c, 23.6, 3.4, 1.4, WAT2, WOUT);

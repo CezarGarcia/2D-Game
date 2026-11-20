@@ -43,7 +43,7 @@ function stageTip(p: Profile, info: StageInfo): TipSpec {
   const rows: TipRow[] = [
     { text: st.intro, tone: 'dim' },
     'sep',
-    { icon: 'poder', text: 'Poder pedido', value: [h('span', strong ? 'ok' : 'bad', num(info.power)), ` / ${num(info.recommended)}`] },
+    { icon: 'poder', text: 'Poder: seu / pedido', value: [h('span', strong ? 'ok' : 'bad', num(info.power)), ` / ${num(info.recommended)}`] },
     { head: 'Monstros' },
     { icon: 'dano', text: common.join(', ') },
     foe && st.final === 'elite' && { icon: 'elite', text: `Elite: ${foe.name}${foe.mods ? ` (${foe.mods})` : ''}`, tone: 'warn' },

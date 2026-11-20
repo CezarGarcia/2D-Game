@@ -44,15 +44,15 @@ export const SHEETS = {
   capivara: { key: 'capivara', cellW: 110, cellH: 84, ox: 46, oy: 72, scale: 1.45, anims: { idle: 4, walk: 8 } },
   onca: { key: 'onca', cellW: 136, cellH: 90, ox: 62, oy: 76, scale: 1.45, anims: { idle: 4, walk: 8, pounce: 3 } },
   /* capítulo 2: Rios do Norte */
-  piranha: { key: 'piranha', cellW: 100, cellH: 80, ox: 46, oy: 64, scale: 1.45, anims: { swim: 6, leap: 3 } },
-  sapo: { key: 'sapo', cellW: 130, cellH: 90, ox: 66, oy: 70, scale: 1.45, anims: { idle: 4, hop: 4, spit: 4 } },
-  arraia: { key: 'arraia', cellW: 140, cellH: 100, ox: 80, oy: 84, scale: 1.5, anims: { reveal: 4, swim: 6, sting: 3 } },
-  caramujo: { key: 'caramujo', cellW: 140, cellH: 110, ox: 64, oy: 92, scale: 1.45, anims: { walk: 6 } },
-  jacare: { key: 'jacare', cellW: 260, cellH: 130, ox: 124, oy: 112, scale: 1.7, anims: { walk: 8, bite: 4, tail: 4 } },
-  boto: { key: 'boto', cellW: 190, cellH: 220, ox: 90, oy: 180, scale: 1.75, anims: { idle: 6, cast: 3, dive: 4, tired: 2 } },
-  iara: { key: 'iara', cellW: 260, cellH: 250, ox: 120, oy: 220, scale: 1.74, anims: { idle: 8, cast: 3, sing: 4, dive: 4, down: 2 } },
-  iara_free: { key: 'iara_free', cellW: 260, cellH: 250, ox: 120, oy: 220, scale: 1.74, anims: { idle: 6 } },
-  arara: { key: 'arara', cellW: 120, cellH: 110, ox: 64, oy: 92, scale: 1.5, anims: { fly: 6, caged: 1 } },
+  piranha: { key: 'piranha', cellW: 76, cellH: 64, ox: 42, oy: 50, scale: 1.3, anims: { swim: 6, leap: 3 } },
+  sapo: { key: 'sapo', cellW: 108, cellH: 76, ox: 58, oy: 56, scale: 1.25, anims: { idle: 4, hop: 4, spit: 4 } },
+  arraia: { key: 'arraia', cellW: 120, cellH: 92, ox: 68, oy: 76, scale: 1.45, anims: { reveal: 4, swim: 6, sting: 3 } },
+  caramujo: { key: 'caramujo', cellW: 106, cellH: 100, ox: 56, oy: 76, scale: 1.25, anims: { walk: 6 } },
+  jacare: { key: 'jacare', cellW: 200, cellH: 96, ox: 112, oy: 80, scale: 1.55, anims: { walk: 8, bite: 4, tail: 4 } },
+  boto: { key: 'boto', cellW: 150, cellH: 196, ox: 68, oy: 172, scale: 1.6, anims: { idle: 6, cast: 3, dive: 4, tired: 2 } },
+  iara: { key: 'iara', cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66, anims: { idle: 8, cast: 3, sing: 4, dive: 4, down: 2 } },
+  iara_free: { key: 'iara_free', cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66, anims: { idle: 6 } },
+  arara: { key: 'arara', cellW: 72, cellH: 72, ox: 40, oy: 58, scale: 1.15, anims: { fly: 6, caged: 1 } },
 } satisfies Record<string, Sheet>;
 
 function canvas(w: number, h: number): [HTMLCanvasElement, Ctx] {

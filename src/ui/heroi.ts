@@ -104,7 +104,7 @@ function statsPanel(p: Profile): HTMLElement {
   ];
   return h('section', { class: 'panel stats', 'aria-label': 'Estatísticas' },
     h('div', 'stat-grid', list.map((s) => tip(
-      h('div', { class: 'stat-cell', tabindex: 0 }, ui(s.icon, 34), h('span', 'stat-nums', h('b', null, s.value, s.extra && h('i', null, s.extra)), h('span', 'stat-label', s.label))),
+      h('div', { class: 'stat-cell', tabindex: 0 }, ui(s.icon, 34), h('span', 'stat-nums', h('b', null, s.value), h('span', 'stat-label', s.label, s.extra && h('i', null, ` ${s.extra}`)))),
       { title: s.label, tag: s.extra ? `${s.value} (${s.extra})` : s.value, icon: ui(s.icon, 36), rows: [{ text: s.text }] }))));
 }
 
@@ -136,7 +136,7 @@ function doll(c: Ctx): HTMLElement {
   const weapon = p.equipped.arma?.type === 'arco' ? 'arco' : 'facao', pet = p.companion && p.companions[p.companion] ? p.companion : null;
   c.animate(cv, (g, t) => {
     g.clearRect(0, 0, W, H);
-    const fx = W / 2, fy = H - 96;
+    const fx = W / 2, fy = H - 22;
     g.fillStyle = 'rgba(8,14,8,.42)';
     g.beginPath(); g.ellipse(fx, fy + 4, 96, 15, 0, 0, Math.PI * 2); g.fill();
     if (pet) { g.save(); g.translate(fx - 108, fy + 14); g.scale(1.7, 1.7); drawCompanion(g, pet, t); g.restore(); }
@@ -144,8 +144,8 @@ function doll(c: Ctx): HTMLElement {
   });
   return h('section', { class: 'doll', 'aria-label': 'Equipamento' },
     h('div', 'doll-col', LEFT.map((s) => slotTile(c, s))),
-    h('div', 'doll-mid', cv,
-      tip(h('div', 'plate', stat('poder', num(powerOf(deriveStats(p))), { size: 30 })), { title: 'Poder', icon: ui('poder', 36), rows: [{ text: 'Resume o dano e a resistência do herói.' }] })),
+    h('div', 'doll-mid',
+      tip(h('div', 'plate', stat('poder', num(powerOf(deriveStats(p))), { size: 30 })), { title: 'Poder', icon: ui('poder', 36), rows: [{ text: 'Resume o dano e a resistência do herói.' }] }), cv),
     h('div', 'doll-col', RIGHT.map((s) => slotTile(c, s))));
 }
 
@@ -206,7 +206,7 @@ export function renderItemMenu(c: Ctx): HTMLElement | null {
       run: guard('desmontar', () => { const got = dismantleItem(c.p, it.id); if (got) c.toast(`+${num(got.mata)} de resina${got.po ? `, +${num(got.po)} de pó` : ''}`); c.commit(); }),
     });
   }
-  const w = acts.length * 82 + 16, left = Math.max(8, Math.min(VIEW_W - w - 8, m.x - 40)), top = m.y > 150 ? m.y - 118 : Math.min(VIEW_H - 110, m.y + 18);
+  const w = acts.length * 92 + 16, left = Math.max(8, Math.min(VIEW_W - w - 8, m.x - 40)), top = m.y > 150 ? m.y - 118 : Math.min(VIEW_H - 110, m.y + 18);
   return h('div', 'menu-layer',
     h('div', { class: 'pop-back', onclick: () => { close(); c.redraw(); }, oncontextmenu: (e: Event) => { e.preventDefault(); close(); c.redraw(); } }),
     h('div', { class: 'pop item-menu', role: 'menu', 'aria-label': fullName(it), style: `left:${Math.round(left)}px;top:${Math.round(top)}px;--rar:${rarColor(it)}` },

@@ -74,9 +74,9 @@ function arrow(): HTMLElement {
 export function renderFerreiro(c: Ctx): HTMLElement {
   const p = c.p, st = c.st;
   const bg = backdrop('ferreiro', MAIN_W, MAIN_H, (g) => paintForgeBackdrop(g, MAIN_W, MAIN_H));
-  const AW = 560, AH = 250;
+  const AW = 560, AH = 260;
   const { cv: anvil } = hdCanvas(AW, AH, 'anvil');
-  const paintAnvil = (g: CanvasRenderingContext2D, t: number) => { g.clearRect(0, 0, AW, AH); g.save(); g.translate(AW / 2, AH / 2 + 10); g.scale(1.5, 1.5); drawAnvil(g, t); g.restore(); };
+  const paintAnvil = (g: CanvasRenderingContext2D, t: number) => { g.clearRect(0, 0, AW, AH); g.save(); g.translate(AW / 2, AH / 2); g.scale(1.15, 1.15); drawAnvil(g, t); g.restore(); };
 
   if (!isForgeUnlocked(p)) {
     const g = anvil.getContext('2d');
@@ -90,7 +90,8 @@ export function renderFerreiro(c: Ctx): HTMLElement {
   /* a seleção pode ter sumido (vendida, consumida) ou não valer mais para o modo */
   const mode = st.forgeMode;
   let main = st.forgeSel != null ? findItem(p, st.forgeSel)?.item ?? null : null;
-  if (main && !workOf(p, mode, main).lit) main = null;
+  /* fundir e encantar não aceitam qualquer item; aprimorar e reforjar mostram "no máximo" e seguem com ele na bigorna */
+  if (main && (mode === 'fundir' || mode === 'encantar') && !workOf(p, mode, main).lit) main = null;
   if (!main) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; }
   const cands = main && mode === 'fundir' ? fuseCandidates(p, main.id) : [];
   st.forgeFodder = mode === 'fundir' ? st.forgeFodder.filter((id) => cands.some((i) => i.id === id)).slice(0, 2) : [];
@@ -122,7 +123,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
     else if (w.why) extra.push({ icon: mode, text: w.why, tone: 'bad' });
     return itemTile(it, {
       size: 58, fk: `forja-${it.id}`, onClick: click,
-      cls: `${lit ? 'lit' : 'dim'}${isMain ? ' main' : ''}${isFodder ? ' fodder' : ''}`,
+      cls: `${lit ? 'lit' : 'dim'}${isMain ? ' picked' : ''}${isFodder ? ' fodder' : ''}`,
       seal: lit && !isCand && w.can, equipped: equippedIds.has(it.id),
       tipSpec: () => itemTip(c.p, it, { where: 'outro', noSell: true, extra, foot: [isMain ? 'Clique: tirar da bigorna' : isCand ? (isFodder ? 'Clique: não consumir' : 'Clique: consumir') : w.lit ? 'Clique: pôr na bigorna' : null] }),
     });
@@ -174,12 +175,17 @@ export function renderFerreiro(c: Ctx): HTMLElement {
     slots = h('div', 'forge-slots', mainSlot(96));
     if (main && mode === 'aprimorar') {
       const i = upgradeInfo(p, main), after = { ...main, plus: main.plus + 1 }, base = ITEM_TYPES[main.type].base;
-      info = h('div', 'forge-info',
-        h('div', 'big-line', h('b', null, `+${main.plus}`), arrow(), h('b', 'ok', `+${after.plus}`)),
-        base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])));
+      const capped = main.plus >= RARITIES[main.rarity].maxPlus;
+      info = capped
+        ? h('div', 'forge-info',
+          h('div', 'big-line', h('b', null, `+${main.plus}`), h('span', 'max-tag', 'Máximo')),
+          main.rarity < MAX_RARITY && !main.unique && h('div', 'sub-line', ui('fundir', 24), h('span', null, 'Funda para ir além'), h('b', { style: `color:${RARITIES[main.rarity + 1].color}` }, `+${RARITIES[main.rarity + 1].maxPlus}`)))
+        : h('div', 'forge-info',
+          h('div', 'big-line', h('b', null, `+${main.plus}`), arrow(), h('b', 'ok', `+${after.plus}`)),
+          base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])));
       action = h('div', 'forge-act',
-        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
-        gauge(i.chance, main.pity ?? 0, 'Falhar gasta o custo, nunca destrói o item, e soma 5% à próxima tentativa.'),
+        !capped && costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
+        !capped && gauge(i.chance, main.pity ?? 0, 'Falhar gasta o custo, nunca destrói o item, e soma 5% à próxima tentativa.'),
         hammer(i.possible, i.reason, () => {
           const r = upgradeItem(c.p, main!.id);
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
@@ -203,14 +209,16 @@ export function renderFerreiro(c: Ctx): HTMLElement {
           c.commit('martelo');
         }, 'Encantar'));
     } else if (main && mode === 'reforjar') {
-      const i = reforgeInfo(p, main), after = reforgedPreview(main, i.toLevel), base = ITEM_TYPES[main.type].base;
+      const i = reforgeInfo(p, main), level = main.ilvl >= i.toLevel, after = reforgedPreview(main, Math.max(main.ilvl, i.toLevel)), base = ITEM_TYPES[main.type].base;
       const changed = main.affixes.map((a, k) => ({ a, b: after.affixes[k] })).filter((x) => x.b && x.b.v !== x.a.v);
-      info = h('div', 'forge-info',
-        h('div', 'big-line', h('b', null, `Nv ${main.ilvl}`), arrow(), h('b', 'ok', `Nv ${after.ilvl}`)),
-        base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])),
-        changed.length > 0 && h('div', 'sub-line wrap', changed.slice(0, 4).map((x) => stat(AFFIX_ICON[x.a.k], `${x.a.v} → ${x.b.v}`, { size: 22, tone: 'ok' }))));
+      info = level
+        ? h('div', 'forge-info', h('div', 'big-line', h('b', null, `Nv ${main.ilvl}`), h('span', 'max-tag', 'No seu nível')))
+        : h('div', 'forge-info',
+          h('div', 'big-line', h('b', null, `Nv ${main.ilvl}`), arrow(), h('b', 'ok', `Nv ${after.ilvl}`)),
+          base !== 'nenhum' && h('div', 'sub-line', ui(base === 'dano' ? 'dano' : 'defesa', 24), h('span', null, br(baseLabel(main)).split(' ')[0]), arrow(), h('b', 'ok', br(baseLabel(after)).split(' ')[0])),
+          changed.length > 0 && h('div', 'sub-line wrap', changed.slice(0, 4).map((x) => stat(AFFIX_ICON[x.a.k], `${x.a.v} → ${x.b.v}`, { size: 22, tone: 'ok' }))));
       action = h('div', 'forge-act',
-        costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
+        !level && costs([{ icon: 'ouro', amount: i.gold, have: p.gold }, { icon: 'resina', amount: i.mata, have: p.materials.mata }]),
         hammer(i.possible, i.reason, () => {
           const r = reforgeItem(c.p, main!.id);
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }

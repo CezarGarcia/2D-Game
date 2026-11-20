@@ -54,7 +54,7 @@ export function renderCompanheiros(c: Ctx): HTMLElement {
     own && fresh.has(id) && h('span', 'new-tag', 'Novo'));
     return tip(el, () => ({
       title: def.name, color: active ? '#f2c14e' : undefined,
-      sub: own ? (active ? 'Vai com você' : 'Fica no acampamento') : 'Ainda preso', subColor: own ? (active ? '#f2c14e' : undefined) : '#ff7b6b',
+      sub: own ? (active ? 'Vai com você' : 'Fica no acampamento') : 'Na gaiola', subColor: own ? (active ? '#f2c14e' : undefined) : '#ff7b6b',
       rows: [
         !own && { icon: 'gaiola', text: `Resgate: ${def.where}`, tone: 'gold' as const },
         { head: 'Sempre' },
