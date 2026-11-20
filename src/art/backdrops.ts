@@ -6,6 +6,12 @@
  * assim as proporções dos objetos não mudam com o tamanho do canvas. Tudo é determinístico
  * (semente fixa, sem Math.random).
  */
+import { CHAPTER_ART } from './chapters';
+import { TORRE } from './torre';
+
+/** Fundo da tela da Torre dos Cem Andares. */
+export function paintTowerBackdrop(c, w, h) { c.save(); TORRE.backdrop(c, w, h); c.restore(); }
+
 import { OUT, TAU, el, cap, poly, cel, ln, dot } from './characters';
 
 /* ---------------- ajudantes ---------------- */
@@ -322,6 +328,7 @@ function mapRios(c, W, H, P) {
 
 /** Mapa ilustrado de um capítulo, visto de cima. `points` são as fases em pixels do canvas, na ordem; a trilha passa por elas. */
 export function paintChapterMap(c, w, h, chapter, points) {
+  if (chapter >= 3 && CHAPTER_ART[chapter]) { c.save(); CHAPTER_ART[chapter].map(c, w, h, points || []); c.restore(); return; }
   var v = enter(c, w, h), P = (points || []).map(function (p) { return { x: p.x / v.u, y: p.y / v.u }; });
   if (chapter === 2) mapRios(c, v.W, v.H, P); else mapMata(c, v.W, v.H, P);
   c.restore();

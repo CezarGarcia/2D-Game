@@ -11,27 +11,27 @@ import { drawAltar, drawCage, drawCaipora, drawCogumelo, drawOnca, drawUrutau } 
 import { drawArara, drawArraia, drawBoto, drawCaramujo, drawIara, drawJacare, drawPiranha, drawSapo } from './characters3';
 import { drawMiscIcon } from './icons';
 import { UI_ICON_KEYS, drawUiIcon } from './uiicons';
+import { CHAPTER_ART, CHAPTER_SHEETS } from './chapters';
+import { bakeFx } from './fx';
+import { RAMP_ANIMS, type Kit, type Sheet } from './kit';
+import { TORRE } from './torre';
 
 /** As texturas são geradas com o dobro da resolução lógica, para continuarem nítidas em tela cheia. */
 export const BAKE = 2;
 
 type Ctx = CanvasRenderingContext2D;
 type Draw = (c: Ctx) => void;
-
-export interface Sheet {
-  key: string;
-  cellW: number; cellH: number;
-  /** Posição dos pés dentro da célula. */
-  ox: number; oy: number;
-  scale: number;
-  anims: Record<string, number>;
-}
+export type { Sheet } from './kit';
 
 const TAU = Math.PI * 2;
 
 export const SHEETS = {
   hero: { key: 'hero', cellW: 200, cellH: 200, ox: 80, oy: 182, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
   hero_arco: { key: 'hero_arco', cellW: 200, cellH: 200, ox: 80, oy: 182, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
+  hero_borduna: { key: 'hero_borduna', cellW: 200, cellH: 200, ox: 80, oy: 182, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
+  hero_peixeiras: { key: 'hero_peixeiras', cellW: 200, cellH: 200, ox: 80, oy: 182, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
+  hero_zagaia: { key: 'hero_zagaia', cellW: 220, cellH: 200, ox: 90, oy: 182, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
+  hero_cajado: { key: 'hero_cajado', cellW: 200, cellH: 210, ox: 80, oy: 192, scale: 1.5, anims: { idle: 12, walk: 10, atk: 7 } },
   sauva: { key: 'sauva', cellW: 112, cellH: 88, ox: 46, oy: 76, scale: 1.45, anims: { walk: 8 } },
   queixada: { key: 'queixada', cellW: 172, cellH: 114, ox: 68, oy: 102, scale: 1.9, anims: { idle: 4, run: 8 } },
   tronco: { key: 'tronco', cellW: 204, cellH: 214, ox: 102, oy: 200, scale: 2.1, anims: { raise: 7 } },
@@ -96,9 +96,55 @@ function simple(scene: Phaser.Scene, key: string, w: number, h: number, draw: (c
 
 export const ICON_KEYS = ['dardo', 'sementes', 'cipo', 'casca', 'broto', 'pocao', 'ouro', 'xp'] as const;
 
+/** Folha do herói para cada arma. */
+export const HERO_SHEET: Record<string, Sheet> = {
+  facao: SHEETS.hero, arco: SHEETS.hero_arco, borduna: SHEETS.hero_borduna, peixeiras: SHEETS.hero_peixeiras, zagaia: SHEETS.hero_zagaia, cajado: SHEETS.hero_cajado,
+};
+
+/** Todas as folhas de sprites, dos capítulos 1 e 2 e dos arquivos de capítulo. */
+export const ALL_SHEETS: Record<string, Sheet> = { ...(SHEETS as unknown as Record<string, Sheet>), ...CHAPTER_SHEETS };
+
+export function makeKit(scene: Phaser.Scene): Kit {
+  return {
+    creature(s, draw) {
+      const frames: [string, Draw][] = [];
+      for (const [name, n] of Object.entries(s.anims)) {
+        const r = RAMP_ANIMS.includes(name);
+        for (let i = 0; i < n; i++) { const k = r ? (n > 1 ? i / (n - 1) : 1) : i / n; frames.push([name + i, (c) => draw(c, name, k)]); }
+      }
+      if (!scene.textures.exists(s.key)) bakeSheet(scene, s, frames);
+    },
+    image(key, w, h, draw) { if (!scene.textures.exists(key)) simple(scene, key, w, h, draw); },
+  };
+}
+
+const bakedChapters = new Set<number>();
+/**
+ * Gera a arte de um capítulo de 3 a 8 na primeira vez que ela é pedida, e o chão das arenas dele.
+ * Os chãos são texturas grandes: só fica na memória o do capítulo atual (e o da Torre, se for o caso).
+ */
+export function ensureChapterArt(scene: Phaser.Scene, chapters: number[], arenaOf: number | 'torre'): void {
+  const kit = makeKit(scene);
+  for (const n of chapters) {
+    const art = CHAPTER_ART[n];
+    if (!art || bakedChapters.has(n)) continue;
+    try { art.bake(kit); } catch (err) { console.error('arte do capítulo', n, err); }
+    bakedChapters.add(n);
+  }
+  for (const key of scene.textures.getTextureKeys()) {
+    const m = /^(ch\d|torre)_(bg\d|canopy)$/.exec(key);
+    if (m && m[1] !== (arenaOf === 'torre' ? 'torre' : 'ch' + arenaOf)) scene.textures.remove(key);
+  }
+  const src = arenaOf === 'torre' ? TORRE : CHAPTER_ART[arenaOf];
+  if (!src) return;
+  const pre = arenaOf === 'torre' ? 'torre' : 'ch' + arenaOf;
+  for (let i = 0; i < 3; i++) kit.image(`${pre}_bg${i}`, VIEW.w, VIEW.h, (c) => src.ground(c, VIEW.w, VIEW.h, i, 31 + i * 17));
+  kit.image(`${pre}_canopy`, VIEW.w, VIEW.h, (c) => src.canopy(c, VIEW.w, VIEW.h, 77));
+}
+
 export function bakeAll(scene: Phaser.Scene): void {
-  for (const weapon of ['facao', 'arco'] as const) {
-    const s = weapon === 'arco' ? SHEETS.hero_arco : SHEETS.hero, A = s.anims;
+  for (const weapon of ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'] as const) {
+    const s = HERO_SHEET[weapon], A = s.anims;
     bakeSheet(scene, s, [
       ...cycle(A.idle, 'idle', (c, k) => drawHero(c, k * 2.618, { weapon })),
       ...cycle(A.walk, 'walk', (c, k) => drawHero(c, k * 2.618, { weapon, walk: k * TAU })),
@@ -185,6 +231,7 @@ export function bakeAll(scene: Phaser.Scene): void {
   simple(scene, 'rays', VIEW.w, VIEW.h, (c) => paintRays(c, VIEW.w, VIEW.h));
 
   bakeRio(scene);
+  bakeFx(makeKit(scene));
   for (const k of UI_ICON_KEYS) simple(scene, 'ui_' + k, 64, 64, (c) => drawUiIcon(c, k, 64));
 }
 
