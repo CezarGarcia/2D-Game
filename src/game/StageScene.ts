@@ -14,8 +14,10 @@ import { deriveStats } from '../meta/stats';
 import { isBoss } from '../sim/core';
 import { comboOf, spellCost } from '../sim/player';
 import { chooseBlessing, createWorld, exitZone, step, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
+import { music, unlockAudio } from './music';
 import { session } from './session';
-import { Sfx } from './sfx';
+import { sfx } from './sfx';
+import { trackFor } from './tracks';
 
 const FONT = '"Londrina Solid", Impact, "Arial Black", sans-serif';
 const INK = '#22100a';
@@ -33,8 +35,6 @@ interface Fx {
   r0?: number; r1?: number; color?: number; ang?: number; width?: number; n?: number; seed?: number; x2?: number; y2?: number;
 }
 interface EnemyView { spr: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Image; sheet: string; label?: Phaser.GameObjects.Text }
-
-export const sfx = new Sfx();
 
 export class StageScene extends Phaser.Scene {
   private stage!: StageDef;
@@ -139,6 +139,7 @@ export class StageScene extends Phaser.Scene {
 
     this.buildHud();
     this.bindInput();
+    music.play(trackFor(this.stage));
     this.handleEvents();
     (window as unknown as { __enc?: StageScene }).__enc = this;
   }
@@ -151,7 +152,7 @@ export class StageScene extends Phaser.Scene {
     kb.addCapture('SPACE,UP,DOWN,LEFT,RIGHT');
     // ao sair da fase, devolve essas teclas para os menus
     this.events.once('shutdown', () => { kb.removeCapture('SPACE,UP,DOWN,LEFT,RIGHT'); kb.removeAllListeners(); this.input.removeAllListeners(); });
-    kb.on('keydown', () => sfx.unlock());
+    kb.on('keydown', () => unlockAudio());
     kb.on('keydown-SPACE', () => { this.latch.dodge = true; });
     kb.on('keydown-SHIFT', () => { this.latch.dodge = true; });
     (['Q', 'E', 'R'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { this.latch.spell[i] = true; }));
@@ -159,12 +160,12 @@ export class StageScene extends Phaser.Scene {
     kb.on('keydown-T', () => { this.latch.supremo = true; });
     kb.on('keydown-C', () => { this.latch.potion = true; });
     (['ONE', 'TWO', 'THREE', 'FOUR'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar') this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
-    kb.on('keydown-M', () => { sfx.muted = !sfx.muted; });
+    kb.on('keydown-M', () => { sfx.muted = !sfx.muted; music.muted = sfx.muted; });
     kb.on('keydown-ESC', () => { if (!this.ended) this.setPaused(!this.paused); });
     kb.on('keydown-X', () => { if (this.paused) { this.setPaused(false); this.finish(false, 0); } });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
-      sfx.unlock();
+      unlockAudio();
       if (!p.rightButtonDown()) this.latch.attack = true;
     });
   }
@@ -184,6 +185,7 @@ export class StageScene extends Phaser.Scene {
 
   private setPaused(v: boolean): void {
     this.paused = v;
+    music.duck(v);
     if (v) this.banner('PAUSADO', 'Esc continua  ·  X abandona a fase', '#f1ebd8');
     else { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); }
   }
@@ -289,10 +291,11 @@ export class StageScene extends Phaser.Scene {
         this.number(p.x, p.y - 130, 'SEGUNDA CHANCE', '#ffd23f', 34, 1.4);
         sfx.play('wave');
         break;
-      case 'lose': this.finish(false, 500); break;
+      case 'lose': music.sting('derrota'); this.finish(false, 500); break;
       case 'win':
         this.banner(this.winTitle(), `Tempo ${this.fmt(w.time)}`, '#ffb238');
         sfx.play('win');
+        music.sting('vitoria');
         this.finish(true, 1900);
         break;
       case 'roomStart': this.onRoomStart(e.value!); break;
@@ -490,6 +493,7 @@ export class StageScene extends Phaser.Scene {
     this.bg.setTexture(this.textures.exists(key) ? key : `bg${room.bg}`);
     this.dark.setVisible(!!room.dark).setAlpha(room.type === 'boss' ? 0.55 : 0.9);
     this.altar.setVisible(room.type === 'altar');
+    music.setBoss(room.type === 'boss');
     for (const [, v] of this.views) { v.spr.destroy(); v.shadow.destroy(); v.label?.destroy(); }
     this.views.clear();
     this.clearCards();

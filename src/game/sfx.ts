@@ -2,25 +2,35 @@
  * Efeitos sonoros sintetizados na hora, sem arquivos de áudio. Servem para dar peso aos golpes
  * no protótipo; serão trocados por gravações quando houver uma biblioteca de sons escolhida.
  */
+import { audioContext, loadVolumes } from './audio';
+
 export type SfxName = 'swing' | 'hit' | 'crit' | 'kill' | 'hurt' | 'dodge' | 'perfect' | 'cast' | 'tele' | 'slam' | 'crash'
   | 'spit' | 'splat' | 'win' | 'death' | 'wave' | 'armor';
 
 export class Sfx {
   private ctx: AudioContext | null = null;
   private master: GainNode | null = null;
+  private vol = loadVolumes().efeitos;
   muted = false;
+
+  /** Volume dos efeitos, de 0 a 1 (o controle das opções). */
+  get volume(): number { return this.vol; }
+  set volume(v: number) {
+    this.vol = Math.max(0, Math.min(1, v));
+    if (this.master) this.master.gain.value = 0.5 * this.vol;
+  }
 
   /** Navegadores só liberam áudio depois de um gesto do jogador. */
   unlock(): void {
     try {
       if (!this.ctx) {
-        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        this.ctx = new AC();
+        this.ctx = audioContext();
+        if (!this.ctx) return;
         this.master = this.ctx.createGain();
-        this.master.gain.value = 0.5;
+        this.master.gain.value = 0.5 * this.vol;
         this.master.connect(this.ctx.destination);
       }
-      if (this.ctx.state === 'suspended') void this.ctx.resume();
+      if (this.ctx.state === 'suspended') void this.ctx.resume().catch(() => undefined);
     } catch {
       this.ctx = null;
     }
@@ -57,7 +67,7 @@ export class Sfx {
   }
 
   play(name: SfxName): void {
-    if (this.muted || !this.ctx) return;
+    if (this.muted || !this.ctx || this.vol <= 0) return;
     switch (name) {
       case 'swing': this.noise(0.13, 0.35, 'bandpass', 2600, 700); break;
       case 'hit': this.noise(0.09, 0.6, 'lowpass', 1800, 300); this.tone(190, 80, 0.11, 'square', 0.25); break;
@@ -79,3 +89,5 @@ export class Sfx {
     }
   }
 }
+
+export const sfx = new Sfx();

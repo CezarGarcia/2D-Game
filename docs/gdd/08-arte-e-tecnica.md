@@ -20,9 +20,10 @@ Referência cultural: gibão e chapéu de couro do sertão, xilogravura de corde
 
 | Por código | De fora |
 |---|---|
-| Personagens, monstros, chefões, cenários | Efeitos sonoros e música (bibliotecas livres no começo) |
+| Personagens, monstros, chefões, cenários | Efeitos sonoros gravados (bibliotecas livres no começo) |
 | Animação, luz, partículas, efeitos de feitiço | Ilustração de capa para divulgação |
 | Toda a interface | |
+| Música de fundo e efeitos sonoros provisórios (sintetizados) | |
 
 ## Tecnologia
 
@@ -44,8 +45,32 @@ O código Java antigo não é reaproveitado. Está em `legacy/java`.
 | `src/data` | Números do jogo: `balance.ts` (combate do protótipo) e `progression.ts` (fórmulas do documento 01) |
 | `src/sim` | Regras do combate, sem Phaser e sem navegador. É o que os testes exercitam |
 | `src/art` | Desenho dos personagens e do cenário, e a conversão em texturas |
-| `src/game` | Cena do Phaser: comandos, sprites, efeitos, HUD e som |
+| `src/game` | Cena do Phaser: comandos, sprites, efeitos, HUD, som e música |
 | `tests` | Testes das regras (`npm test`) |
+
+### Música
+
+A música é composta e tocada na hora, com WebAudio, sem arquivos de áudio. São duas partes:
+
+- `src/game/tracks.ts` escreve as partituras e não toca nada (é o que os testes exercitam). Cada faixa tem escala, progressão de acordes de 8 compassos e uma melodia de 16 compassos na forma A A' B A, com cadência no fim; na segunda volta cada frase volta com outra variação (ornamento, outro final ou uma síncope). A semente sai do nome da faixa, então o mesmo capítulo soa sempre igual.
+- `src/game/music.ts` toca: um agendador acorda a cada 25 ms e marca no relógio do áudio as notas dos próximos 0,15 s. Os instrumentos são osciladores, ruído, filtros e envelopes; as cordas (viola, violão, berimbau) usam Karplus-Strong, geradas uma vez por nota e guardadas. Há um limite de 40 vozes, uma reverberação comum e um eco por faixa no tempo da música.
+
+| Faixa | Ideia |
+|---|---|
+| Acampamento | Berimbau no toque de Angola, caxixi, viola dedilhada e pandeiro leve; a melodia passa da viola para a flauta |
+| 1 · Mata Atlântica | Pífano em dórico, atabaque e ganzá, passarinhos ao longe |
+| 2 · Rios | 6/8 em lídio, arpejo de sons de água e a voz da Iara |
+| 3 · Sertão | Baião em mixolídio: zabumba, bacalhau, triângulo e sanfona |
+| 4 · Cerrado | Moda de viola em terças, rasqueado, palmas e sapateado de cateretê |
+| 5 · Selva | Frígio, bordão grave, tambores; a ocarina só entra depois de quatro compassos |
+| 6 · Pampa | Milonga em 3-3-2 na menor harmônica: bordões de violão, bandoneon, bombo leguero |
+| 7 · Pantanal | 6/8 em lídio, coro desafinado, caixinha de música e ecos; na segunda volta a melodia reaparece meio compasso depois, uma oitava acima |
+| 8 · Terra Sem Nome | Tons inteiros, sinos esparsos e notas que vão sumindo |
+| Torre | Baque virado de maracatu: alfaias, gonguê, caixa e um clarim |
+
+Na sala do chefe a mesma faixa fica 18% mais rápida e ganha uma camada por cima (bumbo em todo tempo, caixa com virada, baixo em colcheias, quintas graves); a troca acontece na virada do compasso, sem perder o lugar na música. Entre acampamento e fase a troca é um fade cruzado. Vencer ou perder toca uma vinheta curta no tom da faixa, e a próxima faixa só entra quando ela acaba. A pausa abaixa a música; M silencia tudo.
+
+O som só começa depois do primeiro clique ou tecla (regra dos navegadores). Efeitos e música dividem o mesmo contexto de áudio (`src/game/audio.ts`), que para quando a aba fica escondida. Os volumes de Música (padrão 50%, abaixo dos efeitos) e Efeitos ficam nas opções do acampamento e são salvos no navegador em `encantados.som.v1`.
 
 ## Ordem de construção
 
