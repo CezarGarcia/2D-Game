@@ -11,3 +11,6 @@ legacy/java/out/
 
 # páginas temporárias de pré-visualização
 preview-*.html
+
+# cópias de trabalho temporárias
+.claude/worktrees/

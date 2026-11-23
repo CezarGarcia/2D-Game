@@ -4,8 +4,9 @@ import {
   AFFIXES, GEM_LEVEL_NAMES, ITEM_TYPES, RARITIES, SETS, SLOT_LABEL, UNIQUES, affixText, baseLabel, baseValue, canHoldGem, gemName, gemText, sellValue,
   type AffixKey, type Gem, type Item, type Slot,
 } from '../data/items';
-import { equip, slotsFor, type Profile } from '../meta/profile';
-import { activeItems, deriveStats, powerOf, setCounts } from '../meta/stats';
+import { bestSlot } from '../meta/mochila';
+import { slotsFor, type Profile } from '../meta/profile';
+import { activeItems, setCounts } from '../meta/stats';
 import { br, gemIcon, h, itemIcon, num, signed, ui } from './dom';
 import { tip, type TipRow, type TipSpec } from './tip';
 
@@ -49,16 +50,41 @@ export function typeLine(item: Item): string {
 
 /** Espaço onde o item da mochila entraria se fosse equipado agora. */
 export function targetSlot(p: Profile, item: Item): Slot {
-  const options = slotsFor(item.type);
-  return options.find((sl) => !p.equipped[sl]) ?? options[0];
+  if (!p.inventory.some((i) => i.id === item.id)) return slotsFor(item.type)[0];
+  return bestSlot(p, item).slot;
 }
 
-/** Quanto o Poder muda se o item da mochila for equipado. */
+/** Quanto o Poder muda se o item da mochila for equipado (no melhor espaço). */
 export function powerDelta(p: Profile, item: Item): number {
   if (!p.inventory.some((i) => i.id === item.id)) return 0;
-  const trial: Profile = { ...p, inventory: p.inventory.slice(), equipped: { ...p.equipped } };
-  if (!equip(trial, item.id)) return 0;
-  return powerOf(deriveStats(trial)) - powerOf(deriveStats(p));
+  return bestSlot(p, item).delta;
+}
+
+/** Valor e nome de um bônus separados, para tabelas ("+8", "Espírito"). */
+export function affixParts(k: AffixKey, v: number): { value: string; label: string } {
+  const text = AFFIXES[k].text(v), m = /^([+−-]?[\d.,]+%?)\s+(?:de |na |no )?(.*)$/.exec(text);
+  return m ? { value: br(m[1]), label: m[2].charAt(0).toUpperCase() + m[2].slice(1) } : { value: '', label: text };
+}
+
+export interface CompareLine { icon: string; label: string; mine: string | null; theirs: string | null; tone: 'ok' | 'bad' | 'dim' }
+
+/** Linhas da tabela "este × equipado": dano ou defesa base e cada bônus dos dois itens. */
+export function compareTable(item: Item, other: Item | null | undefined): CompareLine[] {
+  const rows: CompareLine[] = [];
+  const tA = ITEM_TYPES[item.type], tB = other ? ITEM_TYPES[other.type] : null;
+  const bases = new Set([tA.base, tB?.base].filter((b) => b && b !== 'nenhum'));
+  for (const b of bases) {
+    const mine = tA.base === b ? baseValue(item) : 0, theirs = other && tB?.base === b ? baseValue(other) : 0;
+    rows.push({ icon: b === 'dano' ? 'dano' : 'defesa', label: b === 'dano' ? 'Dano' : 'Defesa', mine: mine ? br(num(mine, 1)) : null, theirs: theirs ? br(num(theirs, 1)) : null, tone: mine > theirs ? 'ok' : mine < theirs ? 'bad' : 'dim' });
+  }
+  const a = new Map<AffixKey, number>(), o = new Map<AffixKey, number>();
+  for (const x of item.affixes) a.set(x.k, (a.get(x.k) ?? 0) + x.v);
+  for (const x of other?.affixes ?? []) o.set(x.k, (o.get(x.k) ?? 0) + x.v);
+  for (const k of new Set([...a.keys(), ...o.keys()])) {
+    const va = a.get(k) ?? 0, vo = o.get(k) ?? 0, label = affixParts(k, va || vo).label;
+    rows.push({ icon: AFFIX_ICON[k], label, mine: va ? affixParts(k, va).value : null, theirs: vo ? affixParts(k, vo).value : null, tone: va > vo ? 'ok' : va < vo ? 'bad' : 'dim' });
+  }
+  return rows;
 }
 
 /* ---------- quadradinho ---------- */
@@ -72,6 +98,10 @@ export interface TileOpts {
   onMenu?: (e: MouseEvent) => void;
   /** Seta verde: aumenta o Poder. */
   better?: boolean;
+  /** Selo com a mudança de Poder (só aparece se for ganho). */
+  gain?: number;
+  /** Item escolhido na tela. */
+  selected?: boolean;
   /** Mostra o nível do item no canto. */
   level?: boolean;
   /** Selo verde no canto de cima: dá para fazer agora. */
@@ -88,7 +118,7 @@ export function itemTile(item: Item, o: TileOpts = {}): HTMLElement {
     item.plus > 0 && h('span', 'tile-plus', `+${item.plus}`),
     o.level !== false && h('span', 'tile-lv', item.ilvl),
     item.locked && h('span', 'tile-lock', ui('cadeado', 16)),
-    o.better && h('span', 'tile-up', '▲'),
+    o.gain != null && o.gain > 0 ? h('span', 'tile-gain', `▲${num(o.gain)}`) : o.better && h('span', 'tile-up', '▲'),
     o.seal && h('span', 'tile-seal'),
     o.equipped && h('span', 'tile-eq', 'E'),
     item.set && h('span', 'tile-set', ui('conjunto', Math.max(14, Math.round(size * 0.3)))),
@@ -96,7 +126,7 @@ export function itemTile(item: Item, o: TileOpts = {}): HTMLElement {
   ];
   const label = `${fullName(item)}, ${RARITIES[item.rarity].label}, ${ITEM_TYPES[item.type].label}${item.set ? `, conjunto ${SETS[item.set]?.name ?? ''}` : ''}${item.gem ? `, ${gemName(item.gem)}` : ''}${item.locked ? ', travado' : ''}`;
   const attrs: Record<string, unknown> = {
-    class: `tile r${item.rarity}${item.unique ? ' named' : ''} ${o.cls ?? ''}`.trim(),
+    class: `tile r${item.rarity}${item.unique ? ' named' : ''}${o.gain != null && o.gain > 0 ? ' up' : ''}${o.selected ? ' sel' : ''} ${o.cls ?? ''}`.trim(),
     style: `--rar:${rarColor(item)};--tile:${size}px`,
     'aria-label': label,
   };

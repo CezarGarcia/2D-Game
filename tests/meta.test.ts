@@ -10,6 +10,7 @@ import {
 } from '../src/meta/profile';
 import { applyOutcome, isChapterOpen, isUnlocked, stageInfo, type StageOutcome } from '../src/meta/rewards';
 import { attrEffects, deriveStats, powerOf, recommendedPower } from '../src/meta/stats';
+import { bestSlot, equipBest, junkItems, planUpgrades, sellJunk } from '../src/meta/mochila';
 
 const win = (stageId: string, over: Partial<StageOutcome> = {}): StageOutcome => ({ stageId, won: true, time: 60, deaths: 0, roomsCleared: 5, kills: 20, perfects: 0, hitsTaken: 0, ...over });
 
@@ -250,5 +251,48 @@ describe('etapa 3: o que mudou nas regras', () => {
     expect(p.talents).toEqual({});
     expect(p.supremos).toEqual(['natureza']);
     expect(p.spellLevels).toEqual({});
+  });
+});
+
+describe('atalhos da mochila', () => {
+  function stocked(): Profile {
+    const p = newProfile(5), rng = makeRng(9);
+    p.level = 20;
+    const types = ['facao', 'arco', 'escudo', 'chapeu', 'gibao', 'luvas', 'alpercatas', 'anel', 'anel', 'amuleto'] as const;
+    for (const t of types) addItem(p, makeItem(p.nextItemId++, rng, 18, 2, t));
+    for (let i = 0; i < 6; i++) addItem(p, makeItem(p.nextItemId++, rng, 1, 0, 'luvas'));
+    return p;
+  }
+
+  it('equipar melhores só aumenta o Poder e não troca o tipo de arma', () => {
+    const p = stocked(), before = powerOf(deriveStats(p));
+    const gain = equipBest(p);
+    expect(gain).toBeGreaterThan(0);
+    expect(powerOf(deriveStats(p))).toBe(before + gain);
+    expect(p.equipped.arma?.type).toBe('facao');
+    expect(p.equipped.anel1 && p.equipped.anel2).toBeTruthy();
+    expect(planUpgrades(p)).toEqual([]);
+  });
+
+  it('vender sobras não vende nada que aumente o Poder, travado ou raro', () => {
+    const p = stocked();
+    equipBest(p);
+    p.inventory[0].locked = true;
+    const junk = junkItems(p);
+    expect(junk.length).toBeGreaterThan(0);
+    for (const it of junk) { expect(it.rarity).toBeLessThanOrEqual(1); expect(it.locked).toBeFalsy(); }
+    const gold = p.gold, n = p.inventory.length, r = sellJunk(p);
+    expect(r.count).toBe(junk.length);
+    expect(p.gold).toBe(gold + r.gold);
+    expect(p.inventory.length).toBe(n - r.count);
+    expect(junkItems(p)).toEqual([]);
+  });
+
+  it('o anel vai para o espaço vazio', () => {
+    const p = newProfile(3), rng = makeRng(4);
+    p.equipped.anel1 = makeItem(p.nextItemId++, rng, 5, 1, 'anel');
+    const ring = makeItem(p.nextItemId++, rng, 5, 1, 'anel');
+    addItem(p, ring);
+    expect(bestSlot(p, ring).slot).toBe('anel2');
   });
 });
