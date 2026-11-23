@@ -3,6 +3,7 @@
  * quadro a quadro, numa folha de sprites; durante o jogo só se troca o quadro.
  */
 import Phaser from 'phaser';
+import type { WeaponKind } from '../data/items';
 import { ARENA, VIEW } from '../data/balance';
 import { paintCanopy, paintGround, paintRays } from './arena';
 import { paintRiverCanopy, paintRiverGround } from './arena2';
@@ -61,7 +62,11 @@ function canvas(w: number, h: number): [HTMLCanvasElement, Ctx] {
   return [cv, cv.getContext('2d')!];
 }
 
+/** Quando não é nulo, só estas folhas são geradas (para pegar um chefe de outro capítulo sem gerar o capítulo inteiro). */
+let only: Set<string> | null = null;
+
 function bakeSheet(scene: Phaser.Scene, s: Sheet, frames: [string, Draw][]): void {
+  if (only && !only.has(s.key)) return;
   const cols = Math.min(8, frames.length), rows = Math.ceil(frames.length / cols);
   const cw = s.cellW * BAKE, ch = s.cellH * BAKE;
   const [cv, c] = canvas(cols * cw, rows * ch);
@@ -104,7 +109,8 @@ export const HERO_SHEET: Record<string, Sheet> = {
 /** Todas as folhas de sprites, dos capítulos 1 e 2 e dos arquivos de capítulo. */
 export const ALL_SHEETS: Record<string, Sheet> = { ...(SHEETS as unknown as Record<string, Sheet>), ...CHAPTER_SHEETS };
 
-export function makeKit(scene: Phaser.Scene): Kit {
+/** Kit de desenho; `keys` recebe o nome de cada textura criada (para poder tirá-las da memória depois). */
+export function makeKit(scene: Phaser.Scene, keys?: string[]): Kit {
   return {
     creature(s, draw) {
       const frames: [string, Draw][] = [];
@@ -112,57 +118,115 @@ export function makeKit(scene: Phaser.Scene): Kit {
         const r = RAMP_ANIMS.includes(name);
         for (let i = 0; i < n; i++) { const k = r ? (n > 1 ? i / (n - 1) : 1) : i / n; frames.push([name + i, (c) => draw(c, name, k)]); }
       }
-      if (!scene.textures.exists(s.key)) bakeSheet(scene, s, frames);
+      if (!scene.textures.exists(s.key) && (!only || only.has(s.key))) { bakeSheet(scene, s, frames); keys?.push(s.key); }
     },
-    image(key, w, h, draw) { if (!scene.textures.exists(key)) simple(scene, key, w, h, draw); },
+    image(key, w, h, draw) { if (!only && !scene.textures.exists(key)) { simple(scene, key, w, h, draw); keys?.push(key); } },
   };
 }
 
-const bakedChapters = new Set<number>();
-/** Gera só os bichos de alguns capítulos (sem chão de arena): para companheiros e para o acampamento. */
-export function bakeChapterSprites(scene: Phaser.Scene, chapters: number[]): void {
-  const kit = makeKit(scene);
-  for (const n of chapters) {
-    const art = CHAPTER_ART[n];
-    if (!art || bakedChapters.has(n)) continue;
-    try { art.bake(kit); } catch (err) { console.error('arte do capítulo', n, err); }
-    bakedChapters.add(n);
+/** Texturas criadas por capítulo que está na memória. */
+const bakedChapters = new Map<number, string[]>();
+
+/** Folhas avulsas geradas sem o resto do capítulo. */
+const bakedSingles = new Set<string>();
+
+function runChapter(scene: Phaser.Scene, n: number, keys: string[]): void {
+  try {
+    if (n === 1) { bakeMata(scene); keys.push(...MATA_KEYS.filter((k) => !only || only.has(k))); }
+    else if (n === 2) { bakeRio(scene); keys.push(...RIO_KEYS.filter((k) => !only || only.has(k))); }
+    else CHAPTER_ART[n]?.bake(makeKit(scene, keys));
+  } catch (err) { console.error('arte do capítulo', n, err); }
+}
+
+/** Gera os bichos de um capítulo (sem o chão das arenas), se ainda não estiverem na memória. */
+function bakeChapter(scene: Phaser.Scene, n: number): void {
+  if (bakedChapters.has(n)) return;
+  const keys: string[] = [];
+  runChapter(scene, n, keys);
+  bakedChapters.set(n, keys);
+}
+
+/** Gera só algumas folhas de outros capítulos (os Ecos dos Sete usam um chefe de cada). */
+function bakeSingles(scene: Phaser.Scene, sheets: string[]): void {
+  for (const key of sheets) {
+    const n = sheetChapter(key);
+    if (!n || scene.textures.exists(key)) continue;
+    only = new Set([key]);
+    try { runChapter(scene, n, []); } finally { only = null; }
+    bakedSingles.add(key);
   }
 }
-/** Capítulo de onde vem a folha de sprites (0 se for dos capítulos 1 e 2). */
-export function sheetChapter(key: string): number { return SHEET_CHAPTER[key] ?? 0; }
+
+/** Gera só os bichos de alguns capítulos (sem chão de arena): para companheiros e para o acampamento. */
+export function bakeChapterSprites(scene: Phaser.Scene, chapters: number[]): void {
+  for (const n of chapters) bakeChapter(scene, n);
+}
+/** Capítulo de onde vem a folha de sprites (0 se ficar sempre na memória). */
+export function sheetChapter(key: string): number {
+  return SHEET_CHAPTER[key] ?? ((MATA_KEYS as readonly string[]).includes(key) ? 1 : (RIO_KEYS as readonly string[]).includes(key) ? 2 : 0);
+}
+
+const GROUND_KEY = /^(ch\d|torre|mata|rio)_(bg\d|canopy)$/;
+
 /**
- * Gera a arte de um capítulo de 3 a 8 na primeira vez que ela é pedida, e o chão das arenas dele.
- * Os chãos são texturas grandes: só fica na memória o do capítulo atual (e o da Torre, se for o caso).
+ * Deixa na memória só a arte que a fase usa: os bichos dos capítulos pedidos e o chão das arenas de um capítulo
+ * (ou da Torre). O resto sai, para a memória de vídeo não crescer a cada capítulo visitado.
  */
-export function ensureChapterArt(scene: Phaser.Scene, chapters: number[], arenaOf: number | 'torre'): void {
-  const kit = makeKit(scene);
-  for (const n of chapters) {
-    const art = CHAPTER_ART[n];
-    if (!art || bakedChapters.has(n)) continue;
-    try { art.bake(kit); } catch (err) { console.error('arte do capítulo', n, err); }
-    bakedChapters.add(n);
+export function ensureChapterArt(scene: Phaser.Scene, chapters: number[], arenaOf: number | 'torre', sheets: string[] = []): void {
+  const want = new Set(chapters.filter((n) => n >= 1 && n <= 8));
+  for (const [n, keys] of [...bakedChapters]) {
+    if (want.has(n)) continue;
+    for (const k of keys) if (!sheets.includes(k) && scene.textures.exists(k)) scene.textures.remove(k);
+    bakedChapters.delete(n);
   }
+  for (const k of [...bakedSingles]) {
+    if (sheets.includes(k) || want.has(sheetChapter(k))) continue;
+    if (scene.textures.exists(k)) scene.textures.remove(k);
+    bakedSingles.delete(k);
+  }
+  for (const n of want) bakeChapter(scene, n);
+  bakeSingles(scene, sheets);
+  const pre = arenaOf === 'torre' ? 'torre' : arenaOf === 1 ? 'mata' : arenaOf === 2 ? 'rio' : 'ch' + arenaOf;
   for (const key of scene.textures.getTextureKeys()) {
-    const m = /^(ch\d|torre)_(bg\d|canopy)$/.exec(key);
-    if (m && m[1] !== (arenaOf === 'torre' ? 'torre' : 'ch' + arenaOf)) scene.textures.remove(key);
+    const m = GROUND_KEY.exec(key);
+    if (m && m[1] !== pre) scene.textures.remove(key);
+  }
+  const kit = makeKit(scene);
+  if (arenaOf === 1) {
+    for (let i = 0; i < 3; i++) kit.image(`mata_bg${i}`, VIEW.w, VIEW.h, (c) => paintGround(c, VIEW.w, VIEW.h, ARENA, 31 + i * 17));
+    return;
+  }
+  if (arenaOf === 2) {
+    for (let i = 0; i < 3; i++) kit.image(`rio_bg${i}`, VIEW.w, VIEW.h, (c) => paintRiverGround(c, VIEW.w, VIEW.h, i, 41 + i * 17));
+    kit.image('rio_canopy', VIEW.w, VIEW.h, (c) => paintRiverCanopy(c, VIEW.w, VIEW.h, 91));
+    return;
   }
   const src = arenaOf === 'torre' ? TORRE : CHAPTER_ART[arenaOf];
   if (!src) return;
-  const pre = arenaOf === 'torre' ? 'torre' : 'ch' + arenaOf;
   for (let i = 0; i < 3; i++) kit.image(`${pre}_bg${i}`, VIEW.w, VIEW.h, (c) => src.ground(c, VIEW.w, VIEW.h, i, 31 + i * 17));
   kit.image(`${pre}_canopy`, VIEW.w, VIEW.h, (c) => src.canopy(c, VIEW.w, VIEW.h, 77));
 }
 
-export function bakeAll(scene: Phaser.Scene): void {
-  for (const weapon of ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'] as const) {
-    const s = HERO_SHEET[weapon], A = s.anims;
+const MATA_KEYS = ['sauva', 'queixada', 'tronco', 'cuspidor', 'urutau', 'cogumelo', 'caipora', 'curupira', 'curupira_m'] as const;
+const RIO_KEYS = ['piranha', 'sapo', 'arraia', 'caramujo', 'jacare', 'boto', 'iara', 'iara_free'] as const;
+
+/** Folha do herói com uma arma. As outras armas saem da memória: cada folha ocupa uns 20 MB de vídeo. */
+export function ensureHero(scene: Phaser.Scene, weapon: string): Sheet {
+  const w = (HERO_SHEET[weapon] ? weapon : 'facao') as keyof typeof HERO_SHEET, s = HERO_SHEET[w];
+  for (const [k, other] of Object.entries(HERO_SHEET)) if (k !== w && scene.textures.exists(other.key)) scene.textures.remove(other.key);
+  if (!scene.textures.exists(s.key)) {
+    const A = s.anims as { idle: number; walk: number; atk: number }, weaponKind = w as WeaponKind;
     bakeSheet(scene, s, [
-      ...cycle(A.idle, 'idle', (c, k) => drawHero(c, k * 2.618, { weapon })),
-      ...cycle(A.walk, 'walk', (c, k) => drawHero(c, k * 2.618, { weapon, walk: k * TAU })),
-      ...ramp(A.atk, 'atk', (c, k) => drawHero(c, 0, { weapon, swing: k })),
+      ...cycle(A.idle, 'idle', (c, k) => drawHero(c, k * 2.618, { weapon: weaponKind })),
+      ...cycle(A.walk, 'walk', (c, k) => drawHero(c, k * 2.618, { weapon: weaponKind, walk: k * TAU })),
+      ...ramp(A.atk, 'atk', (c, k) => drawHero(c, 0, { weapon: weaponKind, swing: k })),
     ]);
   }
+  return s;
+}
+
+/** Bichos e chefes do Capítulo 1 (os companheiros iniciais ficam no básico). */
+function bakeMata(scene: Phaser.Scene): void {
   bakeSheet(scene, SHEETS.sauva, cycle(SHEETS.sauva.anims.walk, 'walk', (c, k) => drawSauva(c, k * 2.094, { walk: k * TAU })));
   bakeSheet(scene, SHEETS.queixada, [
     ...cycle(SHEETS.queixada.anims.idle, 'idle', (c, k) => drawQueixada(c, k * Math.PI, {})),
@@ -197,6 +261,10 @@ export function bakeAll(scene: Phaser.Scene): void {
     ...cycle(SHEETS.curupira_m.anims.idle, 'idle', (c, k) => mounted(c, k * 1.4, undefined)),
     ...cycle(SHEETS.curupira_m.anims.run, 'run', (c, k) => mounted(c, k * 1.4, k * TAU)),
   ]);
+}
+
+/** Começo do jogo: efeitos, ícones, projéteis, os companheiros iniciais e o cenário do acampamento. O resto vem por capítulo. */
+export function bakeAll(scene: Phaser.Scene): void {
   bakeSheet(scene, SHEETS.capivara, [
     ...cycle(SHEETS.capivara.anims.idle, 'idle', (c, k) => drawCapi(c, k * 2.417, {})),
     ...cycle(SHEETS.capivara.anims.walk, 'walk', (c, k) => drawCapi(c, 0, { walk: (k * TAU) / 1.4 })),
@@ -238,11 +306,13 @@ export function bakeAll(scene: Phaser.Scene): void {
   simple(scene, 'cage', 110, 110, (c) => { c.translate(55, 100); c.scale(1.8, 1.8); drawCage(c, 0, { open: 0 }); });
   for (const k of ICON_KEYS) simple(scene, 'ic_' + k, 48, 48, (c) => drawMiscIcon(c, k, 48));
 
-  for (let i = 0; i < 3; i++) simple(scene, 'bg' + i, VIEW.w, VIEW.h, (c) => paintGround(c, VIEW.w, VIEW.h, ARENA, 31 + i * 17));
+  simple(scene, 'bg0', VIEW.w, VIEW.h, (c) => paintGround(c, VIEW.w, VIEW.h, ARENA, 31));
   simple(scene, 'canopy', VIEW.w, VIEW.h, (c) => paintCanopy(c, VIEW.w, VIEW.h, 77));
-  simple(scene, 'rays', VIEW.w, VIEW.h, (c) => paintRays(c, VIEW.w, VIEW.h));
-
-  bakeRio(scene);
+  // luz suave: metade da resolução basta e economiza 11 MB de vídeo
+  const [rv, rc] = canvas(VIEW.w, VIEW.h);
+  paintRays(rc, VIEW.w, VIEW.h);
+  scene.textures.addCanvas('rays', rv);
+  bakeRioFx(scene);
   bakeFx(makeKit(scene));
   for (const k of UI_ICON_KEYS) simple(scene, 'ui_' + k, 64, 64, (c) => drawUiIcon(c, k, 64));
 }
@@ -250,7 +320,7 @@ export function bakeAll(scene: Phaser.Scene): void {
 /** Um ciclo de animação dos bichos do rio fecha em TAU / 2,4 segundos. */
 const LOOP = TAU / 2.4;
 
-/** Capítulo 2, "Rios do Norte": bichos do rio, chefes, a arara e o cenário. */
+/** Capítulo 2, "Rios do Norte": bichos do rio e chefes. */
 function bakeRio(scene: Phaser.Scene): void {
   const S = SHEETS;
   bakeSheet(scene, S.piranha, [
@@ -287,6 +357,11 @@ function bakeRio(scene: Phaser.Scene): void {
     ...cycle(S.iara.anims.down, 'down', (c, k) => drawIara(c, k * LOOP, { down: true })),
   ]);
   bakeSheet(scene, S.iara_free, cycle(S.iara_free.anims.idle, 'idle', (c, k) => drawIara(c, k * LOOP, { gray: false })));
+}
+
+/** Projéteis de água e a arara (companheira): pequenos, ficam sempre. */
+function bakeRioFx(scene: Phaser.Scene): void {
+  const S = SHEETS;
   bakeSheet(scene, S.arara, [
     ...cycle(S.arara.anims.fly, 'fly', (c, k) => drawArara(c, k * LOOP, { fly: k * TAU })),
     ...ramp(S.arara.anims.caged, 'caged', (c) => drawArara(c, 0, { caged: true })),
@@ -327,6 +402,5 @@ function bakeRio(scene: Phaser.Scene): void {
     });
   });
 
-  for (let i = 0; i < 3; i++) simple(scene, 'rio' + i, VIEW.w, VIEW.h, (c) => paintRiverGround(c, VIEW.w, VIEW.h, i, 41 + i * 17));
-  simple(scene, 'riocanopy', VIEW.w, VIEW.h, (c) => paintRiverCanopy(c, VIEW.w, VIEW.h, 91));
 }
+

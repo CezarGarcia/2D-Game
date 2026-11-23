@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { ALL_SHEETS, BAKE, HERO_SHEET, SHEETS, bakeAll, bakeChapterSprites, sheetChapter, type Sheet } from './art/bake';
+import { ALL_SHEETS, BAKE, SHEETS, bakeAll, bakeChapterSprites, ensureHero, sheetChapter, type Sheet } from './art/bake';
 import { VIEW } from './data/balance';
 import { StageScene } from './game/StageScene';
 import { session } from './game/session';
@@ -41,7 +41,7 @@ class CampScene extends Phaser.Scene {
   create(): void {
     const inv = 1 / BAKE, p = session.profile;
     this.add.image(0, 0, 'bg0').setOrigin(0).setScale(inv);
-    const sheet = HERO_SHEET[p?.equipped.arma?.type ?? 'facao'] ?? SHEETS.hero;
+    const sheet = ensureHero(this, p?.equipped.arma?.type ?? 'facao');
     const x = VIEW.w * 0.5, y = VIEW.h * 0.62;
     this.add.image(x + 4, y + 2, 'shadow').setScale(inv * 0.95);
     const hero = this.add.sprite(x, y, sheet.key, 'idle0').setOrigin(sheet.ox / sheet.cellW, sheet.oy / sheet.cellH).setScale(inv);

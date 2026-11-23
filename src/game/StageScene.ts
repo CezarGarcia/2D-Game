@@ -3,7 +3,7 @@
  * Nenhuma regra de combate mora aqui; a cena só mostra o que a simulação decidiu.
  */
 import Phaser from 'phaser';
-import { ALL_SHEETS, BAKE, HERO_SHEET, SHEETS, ensureChapterArt, sheetChapter, type Sheet } from '../art/bake';
+import { ALL_SHEETS, BAKE, SHEETS, ensureChapterArt, ensureHero, sheetChapter, type Sheet } from '../art/bake';
 import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase, isBossKind, isMonster } from '../data/balance';
 import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
 import { artChaptersOf, findStage, isTowerId } from '../data/tower';
@@ -103,19 +103,21 @@ export class StageScene extends Phaser.Scene {
 
     const tower = isTowerId(this.stage.id);
     const petChapter = session.profile?.companion ? sheetChapter(session.profile.companion) : 0;
-    ensureChapterArt(this, [...artChaptersOf(this.stage).filter((n) => n >= 3), ...(petChapter ? [petChapter] : []), ...(this.stage.chapter === 8 ? [3, 4, 5, 6, 7] : [])], tower ? 'torre' : this.stage.chapter);
+    const ecos = this.stage.rooms.some((r) => r.waves.some((wv) => wv.some((d) => d.kind === 'ecos')));
+    ensureChapterArt(this, [...artChaptersOf(this.stage), ...(petChapter ? [petChapter] : [])], tower ? 'torre' : this.stage.chapter, ecos ? ECHO_SHEETS : []);
     this.extras.clear(); this.segs = [];
     this.bg = this.add.image(0, 0, 'bg0').setOrigin(0).setScale(INV).setDepth(-1000);
-    const canopy = tower ? 'torre_canopy' : this.stage.chapter >= 3 ? `ch${this.stage.chapter}_canopy` : this.stage.chapter === 2 ? 'riocanopy' : 'canopy';
+    const canopy = tower ? 'torre_canopy' : this.stage.chapter >= 3 ? `ch${this.stage.chapter}_canopy` : this.stage.chapter === 2 ? 'rio_canopy' : 'canopy';
     this.add.image(0, 0, this.textures.exists(canopy) ? canopy : 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
     if (!this.textures.exists('darkmask')) {
-      const cv = document.createElement('canvas'); cv.width = VIEW.w * 2; cv.height = VIEW.h * 2;
-      const c = cv.getContext('2d')!, g = c.createRadialGradient(VIEW.w, VIEW.h, 60, VIEW.w, VIEW.h, 330);
+      // degradê suave: um quarto da resolução, ampliado, ocupa 16 vezes menos memória
+      const cv = document.createElement('canvas'); cv.width = VIEW.w / 2; cv.height = VIEW.h / 2;
+      const c = cv.getContext('2d')!, g = c.createRadialGradient(VIEW.w / 4, VIEW.h / 4, 15, VIEW.w / 4, VIEW.h / 4, 82.5);
       g.addColorStop(0, 'rgba(4,8,6,0)'); g.addColorStop(0.55, 'rgba(4,8,6,0.55)'); g.addColorStop(1, 'rgba(4,8,6,0.93)');
       c.fillStyle = g; c.fillRect(0, 0, cv.width, cv.height);
       this.textures.addCanvas('darkmask', cv);
     }
-    this.dark = this.add.image(0, 0, 'darkmask').setDepth(8500).setVisible(false);
+    this.dark = this.add.image(0, 0, 'darkmask').setScale(4).setDepth(8500).setVisible(false);
     const rays = this.add.image(0, 0, 'rays').setOrigin(0).setScale(INV).setDepth(9001).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: rays, alpha: { from: 0.65, to: 1 }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
@@ -124,8 +126,7 @@ export class StageScene extends Phaser.Scene {
     this.hudG = this.add.graphics().setDepth(10000);
     this.altar = this.add.image((ARENA.x0 + ARENA.x1) / 2, (ARENA.y0 + ARENA.y1) / 2 - 40, 'altar').setOrigin(0.5, 0.925).setScale(INV).setVisible(false);
     this.altar.setDepth(this.altar.y);
-    this.heroSheet = HERO_SHEET[this.world.stats.weapon] ?? SHEETS.hero;
-    if (!this.textures.exists(this.heroSheet.key)) this.heroSheet = SHEETS.hero;
+    this.heroSheet = ensureHero(this, this.world.stats.weapon);
     this.heroShadow = this.add.image(0, 0, 'shadow').setScale(INV * 0.95).setDepth(2);
     this.hero = this.makeSprite(this.heroSheet, 'idle0');
     if (this.world.pet) {
@@ -486,8 +487,8 @@ export class StageScene extends Phaser.Scene {
   private onRoomStart(index: number): void {
     const room = this.stage.rooms[index];
     const art = room.artChapter ?? this.stage.chapter, tower = isTowerId(this.stage.id);
-    const key = tower ? `torre_bg${room.bg}` : art >= 3 ? `ch${art}_bg${room.bg}` : art === 2 ? `rio${room.bg}` : `bg${room.bg}`;
-    this.bg.setTexture(this.textures.exists(key) ? key : `bg${room.bg}`);
+    const key = tower ? `torre_bg${room.bg}` : art >= 3 ? `ch${art}_bg${room.bg}` : art === 2 ? `rio_bg${room.bg}` : `mata_bg${room.bg}`;
+    this.bg.setTexture(this.textures.exists(key) ? key : 'bg0');
     this.dark.setVisible(!!room.dark).setAlpha(room.type === 'boss' ? 0.55 : 0.9);
     this.altar.setVisible(room.type === 'altar');
     for (const [, v] of this.views) { v.spr.destroy(); v.shadow.destroy(); v.label?.destroy(); }
@@ -812,7 +813,7 @@ export class StageScene extends Phaser.Scene {
   private syncExtras(): void {
     const w = this.world, p = w.player, t = this.clock, seen = new Set<string>();
     /* escuridão da Selva: luz só em volta do herói */
-    if (this.dark.visible) this.dark.setPosition(p.x, p.y - 30).setScale(INV * 2 * 1.0);
+    if (this.dark.visible) this.dark.setPosition(p.x, p.y - 30);
     /* capim do Cerrado */
     w.grass.forEach((g, i) => {
       const img = this.extra('g' + i, 'capim', seen);
