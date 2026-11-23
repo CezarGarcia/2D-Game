@@ -71,7 +71,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
   const mats = (Object.keys(r.materials) as (keyof Materials)[]).filter((k) => r.materials[k] > 0);
   const gains = h('div', 'res-gains',
     gain('xp', r.xp, 0, { title: 'Experiência', tag: `+${num(r.xp)}`, rows: [r.firstClear ? { icon: 'novo', text: 'Bônus de primeira vitória', tone: 'ok' } : null, r.xpMult < 1 ? { icon: 'xp', text: 'Fase abaixo do seu nível', value: pct(r.xpMult), tone: 'warn' } : null, !r.won ? { text: 'Parte da experiência das salas vencidas.', tone: 'dim' } : null] }),
-    gain('ouro', r.gold, 1, { title: 'Ouro', color: '#f2c14e', tag: `+${num(r.gold)}`, rows: [r.goldMult < 1 ? { icon: 'ouro', text: 'Fase abaixo do seu nível', value: pct(r.goldMult), tone: 'warn' } : null, r.soldOverflow.length ? { icon: 'vender', text: 'Inclui itens vendidos (mochila cheia)', tone: 'dim' } : null] }),
+    gain('ouro', r.gold, 1, { title: 'Ouro', color: '#f2c14e', tag: `+${num(r.gold)}`, rows: [r.found && r.found.gold > 0 ? { icon: 'bau', text: 'Achado na fase (baús, moedas e potes)', value: `+${num(r.found.gold)}`, tone: 'ok' } : null, r.goldMult < 1 ? { icon: 'ouro', text: 'Fase abaixo do seu nível', value: pct(r.goldMult), tone: 'warn' } : null, r.soldOverflow.length ? { icon: 'vender', text: 'Inclui itens vendidos (mochila cheia)', tone: 'dim' } : null] }),
     mats.map((k, i) => gain(MAT_ICON[k], r.materials[k], 2 + i, { title: MATERIAL_LABEL[k], tag: `+${num(r.materials[k])}`, rows: [{ icon: MAT_ICON[k], text: 'Você tem', value: num(p.materials[k]) }] })));
 
   /* ---------- itens e gemas ---------- */
@@ -103,6 +103,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     const rows: TipRow[] = [{ icon: 'ouro', text: 'Ouro', value: `+${num(r.starChest.gold)}`, tone: 'ok' }, { icon: 'resina', text: 'Resina', value: `+${num(r.starChest.mata)}`, tone: 'ok' }, r.starChest.talent ? { icon: 'talentos', text: 'Ponto de talento', value: '+1', tone: 'ok' } : null];
     note(ui('bau', 34), 'Baú de estrelas', null, { title: `Baú de ${r.starChest.stars} estrelas`, color: '#f2c14e', rows }, 'gold');
   }
+  if (r.found && r.found.chests > 0) note(ui('bau', 34), `${r.found.chests} ${r.found.chests === 1 ? 'baú' : 'baús'}`, null, { title: 'Baús da fase', color: '#f2c14e', rows: [{ icon: 'bau', text: 'Baús abertos', value: num(r.found.chests) }, { icon: 'ouro', text: 'Ouro achado na fase', value: `+${num(r.found.gold)}`, tone: 'ok' }] });
   if (r.talentPoints > 0) note(ui('talentos', 34), `+${r.talentPoints} talento`, 'talentos', { title: 'Ponto de talento', rows: [{ text: 'Prêmio por vencer o chefão pela primeira vez.' }], foot: ['Clique: ver talentos'] });
   if (r.bestTime && rec.bestTime != null) note(ui('relogio', 34), `Recorde ${clock(rec.bestTime)}`, null, { title: 'Novo melhor tempo', tag: clock(rec.bestTime), rows: [{ icon: 'relogio', text: 'Tempo da 3ª estrela', value: clock(stage.starTime) }] });
   if (p.attrPoints > 0) note(ui('heroi', 34), `${p.attrPoints} ${p.attrPoints === 1 ? 'ponto' : 'pontos'}`, 'heroi', { title: 'Pontos de atributo', tag: String(p.attrPoints), rows: [{ text: 'Você tem pontos de atributo para gastar.' }], foot: ['Clique: ver herói'] }, 'hot');

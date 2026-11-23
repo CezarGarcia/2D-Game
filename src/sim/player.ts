@@ -4,6 +4,7 @@ import { COMPANIONS, SPELLS, SPELL_LEVEL_POWER, SPELL_NUM, SUPREMO_NUM, type Spe
 import {
   attackSpeed, chargeSupremo, clampArena, damageEnemy, emit, healPlayer, hurtPet, hurtPlayer, isBoss, levelScale, max0, rand, spellScale, strike, weaponBonus, wrapAngle,
 } from './core';
+import { buffPower, lootHit } from './loot';
 import { castNewSpell, castNewSupremo, onDodge, registerZoneHurt, spellHit, updateNewZone } from './spells';
 import { applyElement } from './status';
 import { igniteAt } from './terrain';
@@ -30,7 +31,7 @@ export function spellLevelPower(lv: number): number {
   return (1 + SPELL_LEVEL_POWER * (lv - 1)) * (lv >= 10 ? 1.25 : 1);
 }
 export function spellCost(w: World, slot: number, id: SpellId): number {
-  return SPELLS[id].cost * w.stats.manaCostMult * (w.stats.spellLevels[slot] >= 7 ? 0.8 : 1);
+  return SPELLS[id].cost * w.stats.manaCostMult * (w.stats.spellLevels[slot] >= 7 ? 0.8 : 1) * (1 - buffPower(w, 'mana'));
 }
 
 function shot(w: World, kind: Projectile['kind'], x: number, y: number, ang: number, speed: number, range: number, damage: number): Projectile {
@@ -81,6 +82,10 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
     p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * s.manaPerHitMult * hits);
     p.perfectT = 0; p.contraT = 0;
   }
+  if (w.pots.length || w.wisp) lootHit(w, (x, y, r) => {
+    const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
+    return d <= range + r && (wide || d <= r + 22 || Math.abs(wrapAngle(Math.atan2(dy, dx) - p.aim)) <= a.arc);
+  });
 }
 
 /** Disparo do cajado: um orbe com o último elemento usado num feitiço. */
@@ -110,6 +115,7 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
       if (charge >= 0.6) { e.crackT = Math.max(e.crackT, H.crack); if (isBoss(e)) e.posture = Math.min(100, e.posture + H.posture); }
       if (s.uniques.garraDoMapinguari) { e.crackT = Math.max(e.crackT, 8); if (!isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; } }
     }
+    lootHit(w, (x, y, rr) => Math.hypot(x - cx, y - cy) <= r + rr * 0.5);
     emit(w, { type: 'heavy', x: cx, y: cy, value: r });
   } else {
     const Z = PLAYER.weapons.zagaia.thrust, len = Z.len * s.reachMult * (0.6 + 0.4 * charge), dmg = weaponDamage(w, Z.mult * (0.5 + 0.5 * charge) * s.thirdHitMult);
@@ -119,6 +125,10 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
       const L2 = len * len, k = Math.max(0, Math.min(1, ((e.x - p.x) * (ex - p.x) + (e.y - p.y) * (ey - p.y)) / L2));
       if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) damageEnemy(w, e, dmg, 'melee', aim);
     }
+    lootHit(w, (x, y, rr) => {
+      const k = Math.max(0, Math.min(1, ((x - p.x) * (ex - p.x) + (y - p.y) * (ey - p.y)) / (len * len)));
+      return Math.hypot(x - (p.x + (ex - p.x) * k), y - (p.y + (ey - p.y) * k)) < Z.width / 2 + rr;
+    });
     p.x += Math.cos(aim) * 40; p.y += Math.sin(aim) * 40;
     emit(w, { type: 'thrust', x: p.x, y: p.y, x2: ex, y2: ey, ang: aim });
   }
@@ -274,10 +284,10 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (p.stackT > 0) { p.stackT -= dt; if (p.stackT <= 0) p.stacks = 0; }
   for (let i = 0; i < 3; i++) p.cds[i] = max0(p.cds[i] - dt);
   if (p.dodgeCharges < s.dodgeCharges) {
-    p.dodgeTimer += dt;
+    p.dodgeTimer += dt * (1 + 2 * buffPower(w, 'vento'));
     if (p.dodgeTimer >= s.dodgeCooldown) { p.dodgeCharges++; p.dodgeTimer = 0; }
   } else p.dodgeTimer = 0;
-  p.mana = Math.min(s.maxMana, p.mana + s.manaRegen * dt);
+  p.mana = Math.min(s.maxMana, p.mana + s.manaRegen * dt * (buffPower(w, 'mana') ? 3 : 1));
   p.bufAttack = inp.attackPressed ? P.inputBuffer : max0(p.bufAttack - dt);
   p.bufDodge = inp.dodgePressed ? P.inputBuffer : max0(p.bufDodge - dt);
   for (let i = 0; i < 3; i++) p.bufSpell[i] = inp.spell[i] ? P.inputBuffer : max0(p.bufSpell[i] - dt);
@@ -305,7 +315,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (w.current && !free && p.state !== 'dodge' && w.phase === 'fight') p.x += w.current * dt;
   const aim = Math.atan2(inp.aimY - p.y, inp.aimX - p.x);
   const len = Math.hypot(inp.mx, inp.my);
-  const speed = s.moveSpeed * (p.slowT > 0 ? 0.5 : 1) * (p.inPuddle && !free ? PUDDLE_SLOW : 1) * (p.wolfT > 0 ? 1 + SUPREMO_NUM.sombra.speed : 1) * (p.stoneT > 0 ? 0.85 : 1);
+  const speed = s.moveSpeed * (p.slowT > 0 ? 0.5 : 1) * (p.inPuddle && !free ? PUDDLE_SLOW : 1) * (p.wolfT > 0 ? 1 + SUPREMO_NUM.sombra.speed : 1) * (p.stoneT > 0 ? 0.85 : 1) * (1 + buffPower(w, 'vento'));
   const as = attackSpeed(w);
   p.vx = 0; p.vy = 0; p.moving = false;
   const walkBy = (mult: number) => {
@@ -459,6 +469,8 @@ export function updateProjectiles(w: World, dt: number): void {
       return true;
     }
 
+    /* potes e Mãe-do-Ouro: o disparo acerta e segue em frente, para não roubar golpe dos monstros */
+    if (w.pots.length || w.wisp) lootHit(w, (x, y, r) => Math.hypot(x - pr.x, y - pr.y) < r + 10);
     for (const e of w.enemies) {
       if (!hittable(e) || pr.hit.includes(e.id) || Math.hypot(e.x - pr.x, e.y - pr.y) > e.radius + (pr.charged || pr.kind === 'bubble' ? 16 : 10)) continue;
       const ang = Math.atan2(pr.vy, pr.vx);

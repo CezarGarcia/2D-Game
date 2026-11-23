@@ -7,7 +7,7 @@ import { deriveStats } from '../src/meta/stats';
 import type { Profile } from '../src/meta/profile';
 import { TICK } from '../src/data/balance';
 import { STAGES } from '../src/data/stages';
-import { chooseBlessing, createWorld, exitZone, NO_INPUT, step, type Enemy, type Input, type Telegraph, type World } from '../src/sim/world';
+import { chooseBlessing, chooseOffer, createWorld, exitZone, NO_INPUT, step, type Enemy, type Input, type Telegraph, type World } from '../src/sim/world';
 
 export interface BotOpts { react: number; notice: number; seed: number }
 export const PERFECT: BotOpts = { react: 0, notice: 1, seed: 1 };
@@ -34,7 +34,11 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
   return (w: World): Input => {
     const p = w.player;
     if (w.phase === 'altar') { chooseBlessing(w, 0, (b) => deriveStats(profile, b)); return idleAt(w); }
-    if (w.phase === 'cleared') { const z = exitZone(w); return { ...idleAt(w), mx: 1, my: Math.abs(z.y - p.y) > 8 ? Math.sign(z.y - p.y) : 0 }; }
+    if (w.offer) { chooseOffer(w, 0, (b) => deriveStats(profile, b)); return idleAt(w); }
+    /* baú fechado: com a sala limpa vai buscar; na luta, só se estiver perto */
+    const chest = w.chests.filter((c) => c.open < 0 && c.t >= 0.5).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+    const toChest = chest ? { ...idleAt(w), mx: Math.sign(chest.x - p.x) * (Math.abs(chest.x - p.x) > 6 ? 1 : 0), my: Math.sign(chest.y - p.y) * (Math.abs(chest.y - p.y) > 6 ? 1 : 0) } : null;
+    if (w.phase === 'cleared') { if (toChest) return toChest; const z = exitZone(w); return { ...idleAt(w), mx: 1, my: Math.abs(z.y - p.y) > 8 ? Math.sign(z.y - p.y) : 0 }; }
     let target: Enemy | null = null, best = Infinity;
     for (const e of w.enemies) { if (e.hidden || e.fake || e.state === 'spawn') continue; const d = Math.hypot(e.x - p.x, e.y - p.y) - (e.kind === 'caramujo' ? 200 : 0); if (d < best) { best = d; target = e; } }
     if (!target) {
@@ -59,6 +63,7 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
     const bow = w.stats.weapon === 'arco', want = bow ? 300 : target.radius + 70, close = d < want;
     let mx = close ? -dy / d : dx / d, my = close ? dx / d : dy / d;
     const av = away as { x: number; y: number } | null;
+    if (toChest && !danger && !av && Math.hypot(chest!.x - p.x, chest!.y - p.y) < 200) { mx = toChest.mx; my = toChest.my; }
     if (av) { const ax = p.x - av.x, ay = p.y - av.y, ad = Math.hypot(ax, ay) || 1; mx = ax / ad; my = ay / ad; }
     /* parede d'água: corre para a passagem */
     const wall = w.projectiles.find((pr) => pr.kind === 'wall' && !pr.hit.includes(-1) && aware(w, `w${pr.id}`));

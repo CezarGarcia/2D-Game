@@ -2,6 +2,7 @@
 import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyBase, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, isBossKind, isMonster, type EnemyKind, type SpawnDef } from '../data/balance';
 import { BOSSES as BOSS_DEFS, MONSTERS } from '../data/bestiary';
 import { BROTAR, SUPREMO_NUM, WET_DURATION, type ElementId } from '../data/content';
+import { absorbGuard, buffOf, buffPower, lootOnKill } from './loot';
 import { onPerfect } from './spells';
 import { applyElement, wakeAndCharge } from './status';
 import { damageReduction } from '../meta/stats';
@@ -187,6 +188,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   const open = isOpen(e);
   const weapon = source === 'melee' || source === 'arrow' || source === 'roll';
   if (element) dmg *= 1 + s.elemDamage[element];
+  if (w.buffs.length) dmg *= 1 + buffPower(w, 'furia');
   if (e.mods.includes('blindado')) {
     if (!open && !(weapon && s.ignoreArmor)) { dmg *= e.kind === 'caramujo' ? ENEMY.caramujo.armor : ENEMY.tronco.armor; armored = true; }
     dmg *= 1 + s.passives.armoredBonus;
@@ -230,6 +232,8 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   if (weapon) {
     if (s.weaponGem && rand(w) < s.weaponGem.chance) applyElement(w, e, s.weaponGem.el);
     if (s.weapon === 'cajado' && source === 'arrow' && rand(w) < PLAYER.weapons.cajado.statusChance) applyElement(w, e, p.lastElement);
+    const be = w.buffs.length ? buffOf(w, 'elemento') : undefined;
+    if (be?.el && e.hp > 0 && rand(w) < buffPower(w, 'elemento')) applyElement(w, e, be.el);
   }
 
   if (crit && weapon) {
@@ -298,6 +302,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
       if (near) { near.curseT = Math.max(near.curseT, 6); near.wisp = true; applyElement(w, near, 'fogo'); emit(w, { type: 'reaction', x: near.x, y: near.y, kind: 'fogoFatuo' }); }
     }
     emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id });
+    lootOnKill(w, e);
   }
   return dmg;
 }
@@ -382,6 +387,10 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   }
   if (s.thorns > 0 && o.melee && src && src.hp > 0) damageEnemy(w, src, dmg * s.thorns, 'reflect', 0);
   dmg = Math.max(1, Math.round(dmg));
+  if (w.buffs.length) {
+    dmg = Math.round(absorbGuard(w, dmg));
+    if (dmg <= 0) { p.hurtInv = PLAYER.hurtInvuln; if (!o.soft) w.hitsTaken++; return false; }
+  }
 
   if (dmg >= p.hp && s.talents.cascaDeJabuti && !p.jabutiUsed) {
     p.jabutiUsed = true; p.hp = 1; p.iframes = PLAYER.jabutiInvuln; p.hurtInv = PLAYER.jabutiInvuln;

@@ -92,3 +92,19 @@ Monstros também usam elementos. Estar Molhado perto de um inimigo de Tempestade
 | **Encanto** | Sussurro (confunde) | Poção Borbulhante (efeito sorteado) | Canção de Ninar (sono) | Troca (troca de lugar com o alvo) | Espelho (uma cópia sua) | **Cuca:** todo inimigo comum da sala vira sapo por 6 s |
 
 O Supremo carrega causando e recebendo dano. Uma carga completa leva cerca de 90 segundos de combate.
+
+## Efeitos de baú
+
+Saem dos baús que caem na fase (`05-mundo-monstros-e-chefes.md`). Valem por segundos de luta: o relógio para com a sala limpa. Pegar o mesmo de novo renova o tempo. Ficam no canto de baixo, acima das bênçãos, com o tempo que falta.
+
+| Efeito | O que faz | Duração |
+|---|---|---|
+| **Fúria da Onça** | +15% de dano | 15 s |
+| **Pés de Vento** | +20% de velocidade; a esquiva recarrega 40% mais rápido | 15 s |
+| **Carapaça de Jabuti** | Absorve dano igual a 15% da vida, até quebrar | 20 s |
+| **Chuva de Mana** | Mana volta 3× mais rápido e feitiços custam metade | 15 s |
+| **Golpe Elemental** | Golpes de arma têm 35% de chance de aplicar um elemento sorteado (Golpe de Fogo, de Água…) | 15 s |
+| **Ímã de Ouro** | Puxa as moedas de longe; moedas valem 50% mais e todo inimigo derrotado solta uma | 30 s |
+
+Os números são modestos de propósito: com o jogador automático, a chance de vencer as fases mais apertadas subiu uns dois pontos.
+

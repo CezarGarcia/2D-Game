@@ -3,7 +3,7 @@
  * no protótipo; serão trocados por gravações quando houver uma biblioteca de sons escolhida.
  */
 export type SfxName = 'swing' | 'hit' | 'crit' | 'kill' | 'hurt' | 'dodge' | 'perfect' | 'cast' | 'tele' | 'slam' | 'crash'
-  | 'spit' | 'splat' | 'win' | 'death' | 'wave' | 'armor';
+  | 'spit' | 'splat' | 'win' | 'death' | 'wave' | 'armor' | 'coin' | 'chest' | 'buff' | 'pot' | 'orb';
 
 export class Sfx {
   private ctx: AudioContext | null = null;
@@ -75,6 +75,11 @@ export class Sfx {
       case 'splat': this.noise(0.14, 0.4, 'lowpass', 700, 150); break;
       case 'wave': this.tone(392, 392, 0.12, 'triangle', 0.22); this.tone(523, 523, 0.18, 'triangle', 0.22, 0.12); break;
       case 'win': [523, 659, 784, 1047].forEach((f, i) => this.tone(f, f, 0.28, 'triangle', 0.26, i * 0.12)); break;
+      case 'coin': { const f = 1568 + Math.random() * 300; this.tone(f, f, 0.05, 'square', 0.07); this.tone(f * 1.5, f * 1.5, 0.09, 'triangle', 0.1, 0.04); break; }
+      case 'chest': this.noise(0.12, 0.35, 'lowpass', 900, 200); [659, 784, 988, 1319].forEach((f, i) => this.tone(f, f, 0.16, 'triangle', 0.18, 0.06 + i * 0.07)); break;
+      case 'buff': this.tone(330, 990, 0.3, 'sine', 0.22); this.tone(660, 1320, 0.24, 'triangle', 0.14, 0.08); break;
+      case 'pot': this.noise(0.18, 0.55, 'bandpass', 2400, 600); this.tone(420, 180, 0.12, 'triangle', 0.18); break;
+      case 'orb': this.tone(880, 1760, 0.14, 'sine', 0.18); break;
       case 'death': [330, 262, 196, 131].forEach((f, i) => this.tone(f, f * 0.9, 0.34, 'sawtooth', 0.22, i * 0.16)); break;
     }
   }
