@@ -21,6 +21,31 @@ Cada capítulo tem 12 fases: 10 normais, 1 de elite (fase 11) e 1 de chefão (fa
 - Tipos de sala: combate, emboscada, corredor de armadilhas, sala do **altar** (escolha 1 de 3 bênçãos que valem até o fim da fase), sala secreta (precisa ser encontrada), sala final.
 - As salas de cada fase são fixas, para o tempo no ranking ser comparável. A composição exata de inimigos varia um pouco dentro de uma lista.
 
+### Achados dentro da fase
+
+Bônus que deixam a fase menos previsível. Ninguém precisa deles para vencer. Os números estão em `src/data/loot.ts`; o ouro é sempre uma fração do ouro base da fase, para valer o mesmo em qualquer nível.
+
+- **Baús.** Caem dos monstros e abrem quando o herói encosta. Monstro comum: 2,2% (com um azar acumulado pequeno); campeão: 8%; elite: 30%. O chefão da sala final sempre deixa um, e o grande elite da fase 11 também.
+
+| Baú | Ouro | Além do ouro |
+|---|---|---|
+| Madeira | 3% | nada (50), fruta (20), efeito (30) |
+| Bronze | 6% | nada (25), fruta (15), efeito (45), oferenda de 2 (15) |
+| Dourado | 10% | efeito (50), oferenda de 3 (50) |
+| Encantado | 20% | oferenda de 3, até Rara |
+
+  - **Fruta do mato:** cura 10% da vida.
+  - **Efeito:** dura alguns segundos de luta (o relógio para entre as salas); veja `03-combate-e-feiticos.md`.
+  - **Oferenda:** escolha 1 entre 2 ou 3 bênçãos simples (só Comuns; o encantado aceita Raras), que valem até o fim da fase como as do altar. A luta espera a escolha.
+  - Baú que fica no chão abre sozinho ao trocar de sala ou ao acabar a fase, e o prêmio vira ouro. Por isso o baú do chefão final aparece já abrindo na vitória.
+- **Moedas e orbes.** Elites soltam 3 moedas, campeões 2, e o monstro comum às vezes 1. Às vezes cai um orbe de mana. Moedas saltam, esperam meio segundo e correm para o herói quando ele chega perto; com a sala limpa, todas correm sozinhas.
+- **Potes de barro.** De 0 a 2 por sala (nenhum na do chefão); quebram com qualquer golpe ou disparo, que segue em frente, e soltam moedas, às vezes um orbe (de vida, raro).
+- **Mãe-do-Ouro.** A bola de fogo que mostra onde há ouro. Às vezes (12% por sala de combate, uma vez por fase) aparece na primeira onda e foge pela sala por 9 s. Quem acerta 4 golpes antes ganha um baú dourado.
+- **Desafio do totem.** Às vezes (25% por sala de combate a partir da segunda, uma vez por fase) um totem propõe: vencer a sala tomando no máximo 2 golpes, ou dentro de um tempo (12 s + 2,4 s por inimigo). Cumprido, um baú dourado. Falhar não custa nada.
+- O ouro achado aparece no canto da tela durante a fase e entra no resultado com os mesmos multiplicadores do ouro da fase. Vale mesmo na derrota.
+- A Torre usa as mesmas regras, andar por andar.
+- Em média, com o jogador automático: cerca de 2,5 baús por fase e um terço do ouro base em achados.
+
 ## Monstros
 
 ### Arquétipos

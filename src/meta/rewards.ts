@@ -29,6 +29,10 @@ export interface StageOutcome {
   stolen?: number;
   /** Contagens da cena para as missões do dia (poções, feitiços, reações, Supremo). */
   tally?: RunTally;
+  /** Ouro achado na fase (baús, moedas, potes), antes dos multiplicadores. Vale mesmo na derrota. */
+  foundGold?: number;
+  /** Baús abertos na fase. */
+  chests?: number;
 }
 
 export interface StageRewards {
@@ -55,6 +59,8 @@ export interface StageRewards {
   credits: boolean;
   talentPoints: number;
   starChest: { stars: number; gold: number; mata: number; talent: boolean } | null;
+  /** Ouro achado dentro da fase (já somado em `gold`) e baús abertos. */
+  found?: { gold: number; chests: number };
   /** Torre: andares vencidos nesta subida e o recorde. */
   tower?: { from: number; floors: number; best: number; newBest: boolean; weekBest: number };
 }
@@ -132,6 +138,11 @@ export function namedChance(p: Profile, stage: StageDef): number {
   return (stage.named.chance + recordOf(p, stage.id).pity) * (p.talents.dedoDeOuro ? 2 : 1);
 }
 
+/** Ouro achado na fase, com os mesmos multiplicadores do ouro da fase. */
+function foundGold(o: StageOutcome, mult: number): { gold: number; chests: number } {
+  return { gold: Math.round(Math.max(0, o.foundGold ?? 0) * mult), chests: o.chests ?? 0 };
+}
+
 /** Aplica o resultado de uma fase ao perfil e devolve o resumo para a tela de resultado. */
 export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
   if (isTowerId(o.stageId)) return applyTowerOutcome(p, o);
@@ -146,13 +157,15 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
   const xp = Math.round(stageXp(stage.level) * xpMult * progress * stats.xpMult * (1 + 0.25 * (bl.sabedoria ?? 0))
     * (firstClear ? FIRST_CLEAR_XP_BONUS : 1) * (stage.final === 'chefao' && o.won ? BOSS_STAGE_XP_BONUS : 1));
   let gold = Math.round(stageGold(stage.level) * goldMult * progress * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  const found = foundGold(o, goldMult * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  gold += found.gold;
 
   const out: StageRewards = {
     won: o.won, xp, gold, xpMult, goldMult, firstClear, items: [], soldOverflow: [], named: null,
     namedChance: namedChance(p, stage),
     materials: { mata: 0, po: 0, lagrima: 0, tomo: 0 },
     stars: [rec.stars[0], rec.stars[1], rec.stars[2]], newStars: 0, bestTime: false,
-    levels: 0, spells: [], rescued: null, supremo: null, gems: [], credits: false, talentPoints: 0, starChest: null,
+    levels: 0, spells: [], rescued: null, supremo: null, gems: [], credits: false, talentPoints: 0, starChest: null, found,
   };
 
   if (o.won) {
@@ -263,7 +276,8 @@ export function applyTowerOutcome(p: Profile, o: StageOutcome): StageRewards {
     else { const g = sellValue(it); gold += g; out.soldOverflow.push({ item: it, gold: g }); }
   }
   out.xp = Math.round(xp * stats.xpMult * (1 + 0.25 * (bl.sabedoria ?? 0)));
-  out.gold = Math.round(gold * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  out.found = foundGold(o, stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  out.gold = Math.round(gold * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0))) + out.found.gold;
   const t = p.tower, wk = weekKey(), climbed = top >= run.number ? top : 0;
   if (t.week !== wk) { t.week = wk; t.weekBest = 0; t.weekTime = 0; }
   const newBest = climbed > t.best;

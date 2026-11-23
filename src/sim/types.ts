@@ -1,6 +1,7 @@
 /** Tipos da simulação de combate. */
 import type { EliteMod, EnemyKind } from '../data/balance';
 import type { BlessingId, CompanionId, ElementId, SpellId } from '../data/content';
+import type { BuffId, ChestTier } from '../data/loot';
 import type { RoomDef } from '../data/stages';
 import type { HeroStats } from '../meta/stats';
 
@@ -200,6 +201,21 @@ export interface Grass { x: number; y: number; r: number; burnT: number; burnt: 
 /** Bloco da Muralha. */
 export interface WallBlock { x: number; y: number; r: number; t: number }
 
+/** Baú no chão. Salta de onde o monstro caiu (sx, sy) até (x, y) e abre quando o herói encosta. */
+export interface Chest { id: number; tier: ChestTier; x: number; y: number; sx: number; sy: number; t: number; /** Tempo desde que abriu (−1 = fechado). */ open: number }
+/** Moeda ou orbe solto: salta, espera um instante e corre para o herói. */
+export interface Pickup { id: number; kind: 'moeda' | 'vida' | 'mana'; x: number; y: number; vx: number; vy: number; t: number; value: number }
+/** Efeito de baú ativo. `value` guarda o que sobra da carapaça; `el`, o elemento do Golpe Elemental. */
+export interface Buff { id: BuffId; t: number; dur: number; value: number; el?: ElementId }
+/** Pote de barro: quebra com um golpe. */
+export interface Pot { id: number; x: number; y: number }
+/** Mãe-do-Ouro: foge pela sala até o tempo acabar. */
+export interface Wisp { id: number; x: number; y: number; vx: number; vy: number; t: number; dur: number; hits: number; need: number; cd: number; flash: number }
+/** Desafio da sala atual. */
+export interface Challenge { kind: 'intocado' | 'ligeiro'; limit: number; hits0: number; /** Tempo de luta no começo da sala. */ t0: number; state: 'ativo' | 'vencido' | 'perdido'; x: number; y: number }
+/** Achados da fase: ouro já recolhido, baús abertos e a sorte (semente própria, para não mexer nos sorteios do combate). */
+export interface LootState { gold: number; chests: number; since: number; wisps: number; challenges: number; rng: number }
+
 export type SimEventType =
   | 'swing' | 'hit' | 'kill' | 'hurt' | 'death' | 'revive' | 'dodge' | 'perfect' | 'parry' | 'block' | 'cast' | 'shoot' | 'spawn' | 'wave'
   | 'roomClear' | 'roomStart' | 'altar' | 'blessing' | 'win' | 'lose'
@@ -207,7 +223,8 @@ export type SimEventType =
   | 'sementes' | 'cipo' | 'heal' | 'potion' | 'pet' | 'petHurt' | 'petDown' | 'taunt'
   | 'phase' | 'vanish' | 'appear' | 'footprints' | 'whistle' | 'cloneBurst' | 'downed' | 'call' | 'jabuti' | 'shrink' | 'enrage' | 'stack'
   | 'supremo' | 'brotar' | 'nova' | 'shield' | 'mark' | 'bubble' | 'splash' | 'dive' | 'sing' | 'wave' | 'onda' | 'correnteza' | 'pop' | 'freecast'
-  | 'reaction' | 'spark' | 'status' | 'zap' | 'blink' | 'erase' | 'restore' | 'steal' | 'dream' | 'help' | 'grab' | 'ignite' | 'moon' | 'transform' | 'petAct' | 'heavy' | 'thrust' | 'devil' | 'roar' | 'miss';
+  | 'reaction' | 'spark' | 'status' | 'zap' | 'blink' | 'erase' | 'restore' | 'steal' | 'dream' | 'help' | 'grab' | 'ignite' | 'moon' | 'transform' | 'petAct' | 'heavy' | 'thrust' | 'devil' | 'roar' | 'miss'
+  | 'chest' | 'chestOpen' | 'offer' | 'pickup' | 'buff' | 'buffEnd' | 'guard' | 'pot' | 'wisp' | 'challenge';
 
 export interface SimEvent {
   type: SimEventType;
@@ -275,4 +292,13 @@ export interface World {
   steals: number;
   /** Nível dos monstros da sala atual (a Torre muda a cada andar). */
   level: number;
+  chests: Chest[];
+  pickups: Pickup[];
+  buffs: Buff[];
+  pots: Pot[];
+  wisp: Wisp | null;
+  challenge: Challenge | null;
+  /** Bênçãos oferecidas por um baú. Enquanto houver escolha, a luta espera. */
+  offer: BlessingId[] | null;
+  loot: LootState;
 }

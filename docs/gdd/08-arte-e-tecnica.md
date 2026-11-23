@@ -160,3 +160,11 @@ Missões do dia, bônus de descanso e expedições (regras em [07](07-online-e-e
 
 Ficou para depois: modificadores que mexem no herói (só feitiços de um elemento, sem poção obrigatório), que pedem mudança na simulação, e missões conferidas pelo servidor na etapa 4.
 
+## Achados dentro da fase
+
+Baús, moedas, orbes, potes, a Mãe-do-Ouro e o desafio do totem (regras em `05-mundo-monstros-e-chefes.md`, efeitos em `03-combate-e-feiticos.md`).
+
+- **Código.** Números em `src/data/loot.ts`, regras em `src/sim/loot.ts`. Os sorteios dos achados usam uma semente própria do mundo (`lootRand`), separada da do combate: um baú a mais não muda o que os monstros fazem, e a mesma semente dá sempre os mesmos baús. O ouro achado vai no resultado da fase (`foundGold` e `chests`) e `applyOutcome` o soma ao ouro.
+- **Arte.** `src/art/loot.ts`: quatro baús (madeira com ferragem de ferro, bronze em madeira escura, dourado vermelho com ouro e pedra azul, encantado roxo com runas verde-água), cada um fechado e aberto com o tesouro à mostra; moeda, orbes de vida e de mana, pote de barro com faixa marajoara, a Mãe-do-Ouro em quatro quadros, o totem com cocar e os seis ícones dos efeitos. Baú dourado e encantado têm um facho de luz no chão.
+- **Cena.** O baú salta de onde o monstro caiu; moedas saltam, giram e correm para o herói; o ouro recolhido sobe num número só a cada instante. Sons novos em `src/game/sfx.ts`: moeda, baú, efeito, pote e orbe.
+

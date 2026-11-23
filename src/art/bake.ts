@@ -14,6 +14,7 @@ import { drawMiscIcon } from './icons';
 import { UI_ICON_KEYS, drawUiIcon } from './uiicons';
 import { CHAPTER_ART, CHAPTER_SHEETS, SHEET_CHAPTER } from './chapters';
 import { bakeFx } from './fx';
+import { bakeLoot } from './loot';
 import { RAMP_ANIMS, type Kit, type Sheet } from './kit';
 import { TORRE } from './torre';
 
@@ -314,6 +315,7 @@ export function bakeAll(scene: Phaser.Scene): void {
   scene.textures.addCanvas('rays', rv);
   bakeRioFx(scene);
   bakeFx(makeKit(scene));
+  bakeLoot(makeKit(scene));
   for (const k of UI_ICON_KEYS) simple(scene, 'ui_' + k, 64, 64, (c) => drawUiIcon(c, k, 64));
 }
 

@@ -9,12 +9,14 @@ import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
 import { artChaptersOf, findStage, isTowerId } from '../data/tower';
 import { boitataBody } from '../sim/bosses';
 import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, REACTIONS, SPELLS, SUPREMOS, blessingCounts, type BlessingId, type ElementId } from '../data/content';
+import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
 import { deriveStats } from '../meta/stats';
 import { isBoss } from '../sim/core';
+import { challengeLeft } from '../sim/loot';
 import { comboOf, spellCost } from '../sim/player';
-import { chooseBlessing, createWorld, exitZone, step, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
+import { chooseBlessing, chooseOffer, createWorld, exitZone, step, type Buff, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
 import { music, unlockAudio } from './music';
 import { session } from './session';
 import { sfx } from './sfx';
@@ -71,6 +73,17 @@ export class StageScene extends Phaser.Scene {
   private dark!: Phaser.GameObjects.Image;
   private blessShown = -1;
   private supIcon: Phaser.GameObjects.Image | null = null;
+  /** Chão dos achados (brilho dos baús, sombra das moedas) e o HUD deles. */
+  private lootG!: Phaser.GameObjects.Graphics;
+  private buffIcons: Phaser.GameObjects.GameObject[] = [];
+  private buffShown = '';
+  private txtGold!: Phaser.GameObjects.Text;
+  private goldIcon!: Phaser.GameObjects.Image;
+  private txtChallenge!: Phaser.GameObjects.Text;
+  /** Ouro das moedas recolhidas há pouco: sai num número só, em vez de um por moeda. */
+  private goldAcc = 0;
+  private goldAccT = 0;
+  private coinSfxT = 0;
 
   private txtInfo!: Phaser.GameObjects.Text;
   private txtTime!: Phaser.GameObjects.Text;
@@ -104,6 +117,7 @@ export class StageScene extends Phaser.Scene {
     this.views.clear(); this.shots.clear(); this.cards = [];
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
     this.blessIcons = []; this.blessShown = -1; this.supIcon = null;
+    this.buffIcons = []; this.buffShown = ''; this.goldAcc = 0; this.goldAccT = 0;
 
     const tower = isTowerId(this.stage.id);
     const petChapter = session.profile?.companion ? sheetChapter(session.profile.companion) : 0;
@@ -126,6 +140,7 @@ export class StageScene extends Phaser.Scene {
     this.tweens.add({ targets: rays, alpha: { from: 0.65, to: 1 }, duration: 3200, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     this.teleG = this.add.graphics().setDepth(1);
+    this.lootG = this.add.graphics().setDepth(3);
     this.fxG = this.add.graphics().setDepth(8000);
     this.hudG = this.add.graphics().setDepth(10000);
     this.altar = this.add.image((ARENA.x0 + ARENA.x1) / 2, (ARENA.y0 + ARENA.y1) / 2 - 40, 'altar').setOrigin(0.5, 0.925).setScale(INV).setVisible(false);
@@ -164,7 +179,7 @@ export class StageScene extends Phaser.Scene {
     kb.on('keydown-F', () => { this.latch.pet = true; });
     kb.on('keydown-T', () => { this.latch.supremo = true; });
     kb.on('keydown-C', () => { this.latch.potion = true; });
-    (['ONE', 'TWO', 'THREE', 'FOUR'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar') this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
+    (['ONE', 'TWO', 'THREE', 'FOUR'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar' || this.world.offer) this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
     kb.on('keydown-M', () => { sfx.muted = !sfx.muted; music.muted = sfx.muted; });
     kb.on('keydown-ESC', () => { if (!this.ended) this.setPaused(!this.paused); });
     kb.on('keydown-X', () => { if (this.paused) { this.setPaused(false); this.finish(false, 0); } });
@@ -213,6 +228,7 @@ export class StageScene extends Phaser.Scene {
         }
       }
     }
+    this.flushGold(real);
     this.syncHero(real);
     this.syncPet();
     this.syncEnemies();
@@ -230,7 +246,7 @@ export class StageScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => {
       this.tweens.add({
         targets: this.fade, alpha: 1, duration: 300,
-        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally }),
+        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests }),
       });
     });
   }
@@ -310,6 +326,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'altar': sfx.play('perfect'); break;
       case 'blessing':
+        if (e.text) this.clearCards();
         this.number(p.x, p.y - 140, BLESSINGS[e.kind as BlessingId].name, BLESSING_TIER_COLOR[BLESSINGS[e.kind as BlessingId].tier], 32, 1.5);
         this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: 0, dur: 0.5, r0: 20, r1: 130, color: 0x9be7c0, width: 7 });
         sfx.play('perfect');
@@ -478,6 +495,9 @@ export class StageScene extends Phaser.Scene {
       case 'devil': this.fx.push({ kind: 'puff', x: e.x, y: e.y - 20, t: 0, dur: 0.5, color: 0xd9b98a, n: 10, seed: w.tick }); sfx.play('dodge'); break;
       case 'roar': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 40, t: 0, dur: 0.5, r0: 30, r1: 260, color: e.kind === 'uivo' ? 0xb98cff : 0xfff0cd, width: 9 }); this.cameras.main.shake(260, 0.01); sfx.play('slam'); break;
       case 'miss': this.number(p.x, p.y - 140, w.player.stolen === e.value ? 'ROUBADO' : 'APAGADO', '#c9c4bd', 22, 0.6); break;
+      case 'chest': case 'chestOpen': case 'offer': case 'pickup': case 'buff': case 'buffEnd': case 'guard': case 'pot': case 'wisp': case 'challenge':
+        this.onLootEvent(e);
+        break;
       case 'status': if (e.kind === 'dormindo') this.number(e.x, e.y - 130, 'Zz', '#c8d4ff', 30); else if (e.kind === 'erro') this.number(e.x, e.y - 60, 'errou', '#c9c4bd', 18, 0.5); break;
     }
   }
@@ -503,15 +523,187 @@ export class StageScene extends Phaser.Scene {
     this.views.clear();
     this.clearCards();
     if (index > 0) { this.fade.setAlpha(1); this.tweens.add({ targets: this.fade, alpha: 0, duration: 320 }); }
-    if (room.type === 'altar') this.showCards();
+    if (room.type === 'altar') this.showCards(this.world.altar ?? [], 'Escolha uma bênção');
     if (room.type === 'boss') this.number(VIEW.w / 2, 230, ENEMY_NAMES[room.waves[0][0].kind], '#ffb238', 64, 2);
     else if (room.type === 'elite') this.number(VIEW.w / 2, 230, 'Elite', '#ffb238', 54, 1.6);
   }
 
+  /* ---------- achados: baús, moedas, potes, Mãe-do-Ouro, desafio ---------- */
+
+  private buffName(b: { id: BuffId; el?: ElementId }): string {
+    return b.id === 'elemento' && b.el ? `Golpe de ${ELEMENTS[b.el].name}` : BUFFS[b.id].name;
+  }
+
+  private onLootEvent(e: SimEvent): void {
+    const w = this.world, p = w.player;
+    const tierCol = (k?: string) => Phaser.Display.Color.HexStringToColor(CHESTS[(k ?? 'madeira') as ChestTier].color).color;
+    switch (e.type) {
+      case 'chest':
+        this.number(e.x, e.y - 90, CHESTS[e.kind as ChestTier].name, CHESTS[e.kind as ChestTier].color, 24, 1.1);
+        this.time.delayedCall(480, () => { if (!this.ended) { this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.35, color: 0xcdbf9a, n: 6, seed: e.id! }); sfx.play('splat'); } });
+        break;
+      case 'chestOpen': {
+        const col = tierCol(e.kind);
+        this.fx.push({ kind: 'ring', x: e.x, y: e.y - 26, t: 0, dur: 0.45, r0: 14, r1: 110, color: col, width: 8 });
+        this.fx.push({ kind: 'spark', x: e.x, y: e.y - 34, t: 0, dur: 0.35, color: 0xfff0b0, n: 10, seed: e.id! });
+        if (e.text === 'auto') { this.number(e.x, e.y - 80, `+${Math.round(e.value ?? 0)} de ouro`, '#f2c14e', 26, 1.2); sfx.play('coin'); break; }
+        sfx.play('chest');
+        if (e.text === 'cura') this.number(e.x, e.y - 100, 'Fruta do mato: vida!', '#7be08a', 28, 1.3);
+        else if (e.text === 'oferenda') this.number(e.x, e.y - 100, 'OFERENDA!', '#c99cff', 32, 1.2);
+        break;
+      }
+      case 'offer':
+        this.showCards(w.offer ?? [], 'Oferenda do baú: escolha uma bênção');
+        break;
+      case 'pickup':
+        if (e.kind === 'moeda') {
+          this.goldAcc += e.value ?? 0;
+          if (this.coinSfxT <= 0) { sfx.play('coin'); this.coinSfxT = 0.06; }
+        } else {
+          this.number(p.x, p.y - 112, '+' + e.value, e.kind === 'vida' ? '#7be08a' : '#8fd0ff', 24);
+          this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: 0, dur: 0.3, r0: 10, r1: 60, color: e.kind === 'vida' ? 0x7be08a : 0x5cb8ff, width: 5 });
+          sfx.play('orb');
+        }
+        break;
+      case 'buff': {
+        const b = BUFFS[e.kind as BuffId], col = Phaser.Display.Color.HexStringToColor(b.color).color;
+        const cx = Phaser.Math.Clamp(p.x, 290, VIEW.w - 290);
+        this.number(cx, p.y - 150, this.buffName({ id: e.kind as BuffId, el: e.text as ElementId | undefined }).toUpperCase(), b.color, 32, 1.6);
+        this.number(cx, p.y - 118, `${b.desc} · ${b.duration} s`, '#f1ebd8', 19, 1.8);
+        for (let i = 0; i < 2; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: -i * 0.12, dur: 0.5, r0: 20, r1: 120, color: col, width: 7 });
+        sfx.play('buff');
+        break;
+      }
+      case 'buffEnd': this.number(p.x, p.y - 130, `${BUFFS[e.kind as BuffId].name} acabou`, '#c9c4bd', 18, 1); break;
+      case 'guard':
+        this.number(e.x, e.y - 100, e.kind === 'quebrou' ? 'CARAPAÇA QUEBROU' : `−${e.value} na carapaça`, '#e3c68a', e.kind === 'quebrou' ? 26 : 20);
+        sfx.play('armor');
+        break;
+      case 'pot':
+        this.fx.push({ kind: 'puff', x: e.x, y: e.y - 20, t: 0, dur: 0.45, color: 0xb8693a, n: 9, seed: e.id! });
+        this.fx.push({ kind: 'spikes', x: e.x, y: e.y + 4, t: 0, dur: 0.3, r0: 26, color: 0xa85a30 });
+        sfx.play('pot');
+        break;
+      case 'wisp':
+        if (e.kind === 'appear') { this.number(VIEW.w / 2, 160, 'MÃE-DO-OURO! Acerte antes que ela fuja', '#ffd23f', 34, 2); sfx.play('perfect'); }
+        else if (e.kind === 'hit') { this.fx.push({ kind: 'spark', x: e.x, y: e.y, t: 0, dur: 0.25, color: 0xffd23f, n: 8, seed: w.tick }); this.number(e.x, e.y - 50, String(e.value), '#ffd23f', 28, 0.6); sfx.play('coin'); }
+        else if (e.kind === 'caught') {
+          this.fx.push({ kind: 'ring', x: e.x, y: e.y, t: 0, dur: 0.5, r0: 20, r1: 160, color: 0xffd23f, width: 10 });
+          this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.6, color: 0xffc93f, n: 12, seed: w.tick });
+          this.number(e.x, e.y - 60, 'PEGOU A MÃE-DO-OURO!', '#ffd23f', 34, 1.6);
+          this.cameras.main.flash(160, 255, 220, 120); sfx.play('chest');
+        } else { this.fx.push({ kind: 'puff', x: e.x, y: e.y, t: 0, dur: 0.5, color: 0xffc93f, n: 10, seed: w.tick }); this.number(e.x, e.y - 40, 'A Mãe-do-Ouro fugiu', '#c9c4bd', 24, 1.2); }
+        break;
+      case 'challenge':
+        if (e.kind === 'start') {
+          const what = e.text === 'ligeiro' ? `Vença a sala em até ${e.value} s` : `Vença a sala tomando no máximo ${e.value} golpes`;
+          this.number(VIEW.w / 2, 290, 'DESAFIO DO TOTEM', '#ffd23f', 40, 2.2);
+          this.number(VIEW.w / 2, 334, `${what}: baú dourado`, '#f1ebd8', 26, 2.4);
+          sfx.play('tele');
+        } else if (e.kind === 'won') { this.number(VIEW.w / 2, 230, 'DESAFIO VENCIDO!', '#ffd23f', 44, 1.6); sfx.play('win'); }
+        else { this.number(e.x, e.y - 60, 'Desafio perdido', '#c9c4bd', 26, 1.4); sfx.play('armor'); }
+        break;
+    }
+  }
+
+  /** Ouro das moedas: um número só a cada instante, sobre o herói. */
+  private flushGold(real: number): void {
+    this.coinSfxT -= real;
+    if (this.goldAcc <= 0) return;
+    this.goldAccT += real;
+    if (this.goldAccT < 0.22) return;
+    const p = this.world.player, v = Math.round(this.goldAcc);
+    if (v > 0) this.number(p.x + 26, p.y - 96, `+${v}`, '#f2c14e', 22, 0.7);
+    this.goldAcc -= v; this.goldAccT = 0;
+    if (this.goldAcc < 0.5) this.goldAcc = 0;
+  }
+
+  private syncLoot(seen: Set<string>): void {
+    const w = this.world, g = this.lootG, t = this.clock, p = w.player;
+    g.clear();
+    /* potes */
+    for (const pt of w.pots) this.extra('pt' + pt.id, 'pote', seen)?.setOrigin(0.5, 0.94).setPosition(pt.x, pt.y).setDepth(pt.y);
+    /* totem do desafio */
+    const ch = w.challenge;
+    if (ch) {
+      const img = this.extra('totem', 'totem', seen);
+      img?.setOrigin(0.5, 0.96).setPosition(ch.x, ch.y).setDepth(ch.y);
+      if (ch.state === 'ativo') { img?.clearTint().setAlpha(1); g.fillStyle(0xffd23f, 0.16 + 0.08 * Math.sin(t * 4)).fillEllipse(ch.x, ch.y, 90, 26); }
+      else if (ch.state === 'vencido') img?.setTint(0xffe9a0).setAlpha(1);
+      else img?.setTint(0x7a7a7a).setAlpha(0.75);
+    }
+    /* baús: saltam de onde o monstro caiu, brilham no chão e abrem */
+    for (const c of w.chests) {
+      const k = Math.min(1, c.t / 0.5), x = c.sx + (c.x - c.sx) * k, y = c.sy + (c.y - c.sy) * k - Math.sin(k * Math.PI) * 70;
+      const col = Phaser.Display.Color.HexStringToColor(CHESTS[c.tier].color).color, opened = c.open >= 0;
+      if (!opened && k >= 1) {
+        const pulse = 0.5 + 0.5 * Math.sin(t * 4 + c.id);
+        g.fillStyle(col, 0.18 + 0.12 * pulse).fillEllipse(c.x, c.y + 2, 84, 26);
+        g.lineStyle(3, col, 0.5 + 0.3 * pulse).strokeEllipse(c.x, c.y + 2, 70 + 10 * pulse, 20 + 3 * pulse);
+        if (c.tier === 'dourado' || c.tier === 'encantado') { g.fillStyle(col, 0.1 + 0.06 * pulse).fillRect(c.x - 14, c.y - 150, 28, 150); g.fillStyle(col, 0.12).fillRect(c.x - 6, c.y - 170, 12, 170); }
+      }
+      const img = this.extra('c' + c.id, `bau_${c.tier}${opened ? '_aberto' : ''}`, seen);
+      if (!img) continue;
+      const squash = k < 1 ? 1 : opened ? 1 + 0.12 * Math.max(0, 1 - c.open * 5) : 1 + 0.03 * Math.sin(t * 5 + c.id);
+      img.setOrigin(0.5, 0.92).setPosition(x, y).setDepth(c.y).setScale(INV * 1.2 * (2 - squash), INV * 1.2 * squash).setAlpha(opened ? Math.max(0, Math.min(1, (1.6 - c.open) / 0.5)) : 1);
+    }
+    /* moedas e orbes */
+    for (const kp of w.pickups) {
+      const hop = kp.t < 0.45 ? Math.sin((kp.t / 0.45) * Math.PI) * 30 : 0;
+      g.fillStyle(0x0a0f0a, 0.3).fillEllipse(kp.x, kp.y + 6, 14, 5);
+      if (kp.kind === 'moeda') {
+        const spin = Math.max(0.2, Math.abs(Math.cos(t * 9 + kp.id)));
+        this.extra('k' + kp.id, 'moeda', seen)?.setOrigin(0.5).setPosition(kp.x, kp.y - 6 - hop).setDepth(kp.y + 1).setScale(INV * 1.3 * spin, INV * 1.3);
+      } else {
+        const bob = Math.sin(t * 5 + kp.id) * 3;
+        this.extra('k' + kp.id, kp.kind === 'vida' ? 'orbe_vida' : 'orbe_mana', seen)?.setOrigin(0.5).setPosition(kp.x, kp.y - 12 - hop + bob).setDepth(kp.y + 1).setScale(INV * 1.3 * (1 + 0.08 * Math.sin(t * 8)));
+      }
+    }
+    /* Mãe-do-Ouro: chama que foge; o anel mostra quanto tempo falta */
+    const m = w.wisp;
+    if (m) {
+      const y = m.y - 40 + Math.sin(t * 6) * 5, left = 1 - m.t / m.dur;
+      g.fillStyle(0xffb030, 0.25).fillEllipse(m.x, m.y + 4, 46, 14);
+      const img = this.extra('wisp', 'maedoouro' + (Math.floor(t * 12) % 4), seen);
+      if (img) { img.setOrigin(0.5).setPosition(m.x, y).setDepth(m.y + 40).setScale(INV * (m.vx < 0 ? -1 : 1), INV); if (m.flash > 0) img.setTintFill(0xffffff); else img.clearTint(); }
+      g.lineStyle(4, 0x22100a, 0.6).beginPath().arc(m.x, y, 40, -Math.PI / 2, Math.PI * 1.5).strokePath();
+      g.lineStyle(3, left < 0.3 ? 0xff6b5a : 0xffd23f, 0.9).beginPath().arc(m.x, y, 40, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left).strokePath();
+      for (let i = 0; i < m.need; i++) g.fillStyle(i < m.hits ? 0xffd23f : 0x3a2a14, 1).fillCircle(m.x - (m.need - 1) * 7 + i * 14, y - 50, 4.5);
+    }
+    /* efeitos ativos no herói */
+    const guard = w.buffs.find((b) => b.id === 'jabuti');
+    if (guard && guard.value > 0) this.fxG.lineStyle(4, 0xc9a26b, 0.55 + 0.2 * Math.sin(t * 6)).strokeEllipse(p.x, p.y - 40, 70, 100);
+    const last = w.buffs[w.buffs.length - 1];
+    if (last) g.lineStyle(3, Phaser.Display.Color.HexStringToColor(BUFFS[last.id].color).color, 0.55 + 0.25 * Math.sin(t * 7)).strokeEllipse(p.x, p.y + 2, 60, 20);
+  }
+
+  /** Efeitos de baú ativos: ícone, anel do tempo que falta e os segundos. */
+  private drawBuffs(g: Phaser.GameObjects.Graphics): void {
+    const w = this.world, key = w.buffs.map((b) => b.id + (b.el ?? '')).join(',');
+    const pos = (i: number) => ({ x: 44 + i * 52, y: VIEW.h - 166 });
+    if (key !== this.buffShown) {
+      this.buffShown = key;
+      for (const o of this.buffIcons) o.destroy();
+      this.buffIcons = [];
+      w.buffs.forEach((b: Buff, i) => {
+        const { x, y } = pos(i);
+        this.buffIcons.push(this.add.image(x, y, 'buff_' + b.id).setScale(INV * 0.9).setDepth(10002));
+        this.buffIcons.push(this.label(x, y + 18, 14).setOrigin(0.5, 0).setDepth(10003));
+      });
+    }
+    w.buffs.forEach((b, i) => {
+      const { x, y } = pos(i), col = Phaser.Display.Color.HexStringToColor(BUFFS[b.id].color).color, left = Math.max(0, 1 - b.t / b.dur);
+      g.fillStyle(0x0a0f0a, 0.85).fillCircle(x, y, 22);
+      g.lineStyle(4, col, 0.95).beginPath().arc(x, y, 22, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left).strokePath();
+      const txt = this.buffIcons[i * 2 + 1] as Phaser.GameObjects.Text | undefined;
+      txt?.setText(b.id === 'jabuti' ? `${Math.ceil(b.value)}` : `${Math.ceil(b.dur - b.t)}s`).setColor(left < 0.25 ? '#ff9a8a' : '#ffffff');
+    });
+  }
+
   /* ---------- altar ---------- */
 
-  private showCards(): void {
-    const opts = this.world.altar ?? [], have = blessingCounts(this.world.blessings);
+  private showCards(opts: BlessingId[], title: string): void {
+    const have = blessingCounts(this.world.blessings);
     const cw = opts.length > 3 ? 250 : 270, ch = 250, gap = 22;
     opts.forEach((id, i) => {
       const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 440;
@@ -535,7 +727,7 @@ export class StageScene extends Phaser.Scene {
       card.on('pointerdown', () => this.pickBlessing(i));
       this.cards.push(card);
     });
-    this.txtSub.setText('Escolha uma bênção').setPosition(VIEW.w / 2, 268).setVisible(true).setAlpha(1);
+    this.txtSub.setText(title).setPosition(VIEW.w / 2, 268).setVisible(true).setAlpha(1);
   }
 
   private clearCards(): void {
@@ -545,8 +737,8 @@ export class StageScene extends Phaser.Scene {
   }
 
   private pickBlessing(i: number): void {
-    const profile = session.profile!;
-    if (chooseBlessing(this.world, i, (b) => deriveStats(profile, b))) { this.latch.attack = false; this.clearCards(); this.handleEvents(); }
+    const profile = session.profile!, restat = (b: BlessingId[]) => deriveStats(profile, b);
+    if (this.world.offer ? chooseOffer(this.world, i, restat) : chooseBlessing(this.world, i, restat)) { this.latch.attack = false; this.clearCards(); this.handleEvents(); }
   }
 
   /* ---------- sprites ---------- */
@@ -870,6 +1062,7 @@ export class StageScene extends Phaser.Scene {
     });
     const cuca = w.enemies.find((e) => e.kind === 'cuca' && e.state === 'cast' && (e.pattern === 'pocoes' || e.pattern === 'ninar' || e.pattern === 'sonho'));
     if (cuca) this.extra('caldeirao', 'caldeirao', seen)?.setOrigin(0.5, 0.9).setPosition(cuca.x + cuca.facing * 62, cuca.y + 4).setDepth(cuca.y + 2);
+    this.syncLoot(seen);
     for (const [k, img] of this.extras) if (!seen.has(k)) { img.destroy(); this.extras.delete(k); }
   }
 
@@ -1122,6 +1315,9 @@ export class StageScene extends Phaser.Scene {
     ];
     this.supIcon = w.supremo ? icon(7, 'ui_' + w.supremo) : null;
     this.add.image(304, VIEW.h - 68, 'ic_pocao').setScale(INV * 0.8).setDepth(10001);
+    this.goldIcon = this.add.image(36, 92, 'moeda').setScale(INV * 1.1).setDepth(10001).setVisible(false);
+    this.txtGold = this.label(52, 80, 22, '#f2c14e').setVisible(false);
+    this.txtChallenge = this.label(24, 108, 19, '#ffd23f').setVisible(false);
   }
 
   private banner(title: string, sub: string, color: string): void {
@@ -1204,6 +1400,17 @@ export class StageScene extends Phaser.Scene {
     });
     const late = w.time > this.stage.starTime;
     this.txtTime.setText(`${this.fmt(w.time)}   alvo ${this.fmt(this.stage.starTime).slice(0, 5)}`).setColor(late ? '#c9c4bd' : '#ffffff');
+
+    /* ouro achado, desafio da sala e efeitos de baú */
+    const found = Math.round(w.loot.gold - this.goldAcc);
+    this.goldIcon.setVisible(found > 0); this.txtGold.setVisible(found > 0).setText(String(found));
+    const ch = w.challenge;
+    if (ch) {
+      const now = ch.kind === 'ligeiro' ? `${Math.ceil(challengeLeft(w))} s` : `${Math.min(ch.limit + 1, w.hitsTaken - ch.hits0)}/${ch.limit} golpes`;
+      const txt = ch.state === 'ativo' ? `Desafio: ${now}` : ch.state === 'vencido' ? 'Desafio vencido' : 'Desafio perdido';
+      this.txtChallenge.setVisible(true).setText(txt).setColor(ch.state === 'ativo' ? '#ffd23f' : ch.state === 'vencido' ? '#9be7c0' : '#c9c4bd').setY(found > 0 ? 108 : 84);
+    } else this.txtChallenge.setVisible(false);
+    this.drawBuffs(g);
 
     /* lua do Pampa */
     if (w.moon > 0) {

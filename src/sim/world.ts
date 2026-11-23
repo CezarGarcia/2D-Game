@@ -9,6 +9,7 @@ import { levelCombatModifiers } from '../data/progression';
 import type { HeroStats } from '../meta/stats';
 import { clampArena, emit, healPlayer, max0, rand, spawnEnemy, wet } from './core';
 import { separate, updateEnemy } from './enemies';
+import { flushLoot, lootOnRoomClear, lootOnWave, startRoomLoot, updateLoot } from './loot';
 import { makePet, updateHazards, updatePet, updatePlayer, updateProjectiles, updateZones } from './player';
 import { updateAllies } from './spells';
 import { startTerrain, updateTerrain } from './terrain';
@@ -50,6 +51,8 @@ export function createWorld(cfg: StageConfig): World {
     spells: cfg.stats.loadout.slice(0, 3),
     puddles: [], current: 0, supremo: cfg.stats.supremo, flooded: false,
     allies: [], devils: [], grass: [], walls: [], moon: 0, eraseT: 0, trail: [], steals: 0, level: cfg.level,
+    chests: [], pickups: [], buffs: [], pots: [], wisp: null, challenge: null, offer: null,
+    loot: { gold: 0, chests: 0, since: 0, wisps: 0, challenges: 0, rng: (cfg.seed ^ 0x5bd1e995) | 0 },
   };
   w.pet = makePet(w);
   startRoom(w, 0);
@@ -61,7 +64,7 @@ export function exitZone(w: World): { x: number; y: number; h: number } {
   return { x: w.arena.x1 - 46, y: (w.arena.y0 + w.arena.y1) / 2, h: 120 };
 }
 
-function startRoom(w: World, index: number): void {
+function startRoom(w: World, index: number, revive = false): void {
   const p = w.player, room = w.cfg.rooms[index];
   w.room = index;
   w.arena = { ...ARENA };
@@ -73,6 +76,7 @@ function startRoom(w: World, index: number): void {
   w.dealt = mods.dealt; w.taken = mods.taken;
   w.allies = [];
   startTerrain(w, room);
+  startRoomLoot(w, room, index, revive);
   p.shield = w.stats.firstHitShield; p.surf = 0; p.surfKind = 'dodge';
   p.erased = [0, 0, 0]; p.stolen = -1; p.dreamT = 0; p.spellMap = [0, 1, 2]; p.heldT = 0; p.sleepT = 0; p.confuseT = 0;
   p.x = ARENA.x0 + 100; p.y = (ARENA.y0 + ARENA.y1) / 2;
@@ -114,7 +118,22 @@ function rollBlessings(w: World): BlessingId[] {
  */
 export function chooseBlessing(w: World, index: number, restat: (blessings: BlessingId[]) => HeroStats): boolean {
   if (w.phase !== 'altar' || !w.altar || !w.altar[index]) return false;
-  const id = w.altar[index], p = w.player, before = w.stats.maxHp;
+  grantBlessing(w, w.altar[index], restat);
+  w.altar = null; w.phase = 'cleared'; w.roomsCleared++;
+  return true;
+}
+
+/** Escolhe uma das bênçãos da oferenda de um baú. A luta volta de onde parou. */
+export function chooseOffer(w: World, index: number, restat: (blessings: BlessingId[]) => HeroStats): boolean {
+  if (!w.offer || !w.offer[index]) return false;
+  const id = w.offer[index];
+  w.offer = null;
+  grantBlessing(w, id, restat, 'baú');
+  return true;
+}
+
+function grantBlessing(w: World, id: BlessingId, restat: (blessings: BlessingId[]) => HeroStats, from?: string): void {
+  const p = w.player, before = w.stats.maxHp;
   w.blessings.push(id);
   w.stats = restat(w.blessings);
   if (id === 'vigor') healPlayer(w, w.stats.maxHp - before, true);
@@ -122,25 +141,24 @@ export function chooseBlessing(w: World, index: number, restat: (blessings: Bles
   if (id === 'amparo') p.shield = true;
   if (id === 'folego') p.dodgeCharges = w.stats.dodgeCharges;
   p.hp = Math.min(p.hp, w.stats.maxHp); p.mana = Math.min(p.mana, w.stats.maxMana);
-  w.altar = null; w.phase = 'cleared'; w.roomsCleared++;
-  emit(w, { type: 'blessing', x: p.x, y: p.y, kind: id });
-  return true;
+  emit(w, { type: 'blessing', x: p.x, y: p.y, kind: id, text: from });
 }
 
 export function step(w: World, inp: Input, dt: number): void {
   w.tick++;
-  if (w.phase === 'won' || w.phase === 'lost') return;
+  if (w.phase === 'won' || w.phase === 'lost' || w.offer) return;
   const p = w.player;
   if (w.phase === 'dead') {
     w.deadT += dt; p.stateT += dt;
     if (w.deadT >= 1.7) {
       if (w.revives > 0) {
         w.revives--;
-        startRoom(w, w.room);
+        startRoom(w, w.room, true);
         p.hp = Math.round(w.stats.maxHp * PLAYER.reviveHp); p.mana = w.stats.maxMana;
         emit(w, { type: 'revive', x: p.x, y: p.y });
       } else {
         w.phase = 'lost';
+        flushLoot(w);
         emit(w, { type: 'lose', x: p.x, y: p.y });
       }
     }
@@ -166,6 +184,7 @@ export function step(w: World, inp: Input, dt: number): void {
   updateProjectiles(w, dt);
   updateZones(w, dt);
   updateHazards(w, dt);
+  updateLoot(w, dt);
   w.enemies = w.enemies.filter((e) => e.hp > 0);
   if ((w.phase as string) === 'dead') return;
   if (w.phase === 'fight') updateWaves(w, dt);
@@ -186,7 +205,9 @@ function updateWaves(w: World, dt: number): void {
     w.projectiles = []; w.roomsCleared++;
     for (const e of w.enemies) e.hp = 0;
     w.enemies = [];
+    lootOnRoomClear(w);
     if (w.room >= w.cfg.rooms.length - 1) {
+      flushLoot(w);
       w.phase = 'won';
       emit(w, { type: 'win', x: w.player.x, y: w.player.y, value: w.time });
     } else {
@@ -212,6 +233,7 @@ function updateWaves(w: World, dt: number): void {
       e.illusion = true; e.hp = e.maxHp = 1; e.dmg *= 0.3;
     }
     emit(w, { type: 'wave', x: 0, y: 0, value: w.wave, kind: String(room.waves.length) });
+    lootOnWave(w);
   }
 }
 
@@ -221,6 +243,6 @@ export function fingerprint(w: World): string {
   return JSON.stringify([
     w.tick, w.phase, w.room, w.wave, r(w.player.x), r(w.player.y), Math.round(w.player.hp), r(w.player.mana),
     w.enemies.map((e) => [e.id, e.kind, e.state, r(e.x), r(e.y), e.hp]),
-    w.projectiles.length, w.hazards.length, w.rng,
+    w.projectiles.length, w.hazards.length, w.rng, w.loot.rng, Math.round(w.loot.gold), w.loot.chests,
   ]);
 }
