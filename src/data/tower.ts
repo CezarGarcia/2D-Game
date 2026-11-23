@@ -6,6 +6,7 @@
  */
 import { ARENA, isBossKind } from './balance';
 import { BOSSES, type BossKind } from './bestiary';
+import { expeditionStage, isExpeditionId } from './daily';
 import { makeRng } from './rng';
 import { STAGES, STAGE_BY_ID, TERRAIN, wave, type RoomDef, type StageDef } from './stages';
 
@@ -68,9 +69,9 @@ export function towerRun(start: number): StageDef {
 
 export function isTowerId(id: string): boolean { return id.startsWith('torre-'); }
 
-/** Fase ou corrida da Torre pelo identificador. */
+/** Fase, corrida da Torre ou expedição pelo identificador. */
 export function findStage(id: string): StageDef | undefined {
-  return isTowerId(id) ? towerRun(Number(id.slice(6))) : STAGE_BY_ID.get(id);
+  return isTowerId(id) ? towerRun(Number(id.slice(6))) : isExpeditionId(id) ? expeditionStage(id) ?? undefined : STAGE_BY_ID.get(id);
 }
 
 /** Capítulos cuja arte uma fase usa (a Torre mistura). */

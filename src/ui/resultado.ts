@@ -10,6 +10,8 @@ import { xpNeeded } from '../data/progression';
 import { STAGES, type StageDef } from '../data/stages';
 import { FLOORS_PER_RUN, TOWER_FLOORS, findStage, isTowerId } from '../data/tower';
 import { ATTR_PER_LEVEL, MATERIAL_LABEL, talentFree, type Materials } from '../meta/profile';
+import { EXP_MODS, EXP_REWARDED_RUNS, isExpeditionId } from '../data/daily';
+import { missionText, type DailyNews, type SettledRewards } from '../meta/daily';
 import { isUnlocked, recordOf, type StageRewards } from '../meta/rewards';
 import { MAT_ICON, VIEW_H, VIEW_W, type Ctx } from './ctx';
 import { backdrop, clock, h, hdCanvas, num, pct, star, ui, type Child } from './dom';
@@ -37,8 +39,10 @@ function countUp(c: Ctx, to: number, delay: number, prefix = '+'): HTMLElement {
 export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLElement {
   if (r.credits && !finaleDone.has(r)) return renderFinal(c, r);
   const p = c.p, tower = isTowerId(stageId) && r.tower ? r.tower : null;
+  const daily: DailyNews | undefined = (r as SettledRewards).daily, exp = isExpeditionId(stageId) ? daily?.expedition ?? null : null;
   const stage: StageDef = findStage(stageId) ?? STAGES[0];
-  const rec = recordOf(p, stage.id), next = tower ? undefined : STAGES[stage.index + 1] as StageDef | undefined;
+  const rec = recordOf(p, stage.id), next = tower || exp || stage.index < 0 ? undefined : STAGES[stage.index + 1] as StageDef | undefined;
+  const rest = daily?.rest ?? 0;
   const nextOpen = r.won && !!next && isUnlocked(p, next);
   const need = xpNeeded(p.level), endFrac = Math.min(1, p.xp / need);
   const startFrac = r.levels > 0 ? 0 : Math.max(0, Math.min(endFrac, (p.xp - r.xp) / need));
@@ -46,7 +50,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
 
   /* ---------- estrelas (na Torre, os andares) ---------- */
   let stamped = 0;
-  const stars = tower ? towerBlock(c, tower, r.won) : h('div', { class: 'res-stars', role: 'img', 'aria-label': `${r.stars.filter(Boolean).length} de 3 estrelas` }, r.stars.map((on, i) => {
+  const stars = tower ? towerBlock(c, tower, r.won) : exp ? expBlock(exp, r.won) : h('div', { class: 'res-stars', role: 'img', 'aria-label': `${r.stars.filter(Boolean).length} de 3 estrelas` }, r.stars.map((on, i) => {
     const delay = on && r.won ? 350 + 320 * stamped++ : 0;
     return tip(h('div', { class: `res-star${on ? ' on' : ''}${on && r.won ? ' stamp' : ''}`, style: `animation-delay:${delay}ms`, tabindex: 0 },
       star(on, i === 1 ? 92 : 74), h('span', null, i === 2 && ui('relogio', 18), goals[i])),
@@ -61,6 +65,10 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     h('div', 'res-xp-mid',
       h('div', 'xp-bar big', fill),
       h('div', 'res-xp-text', h('span', null, `${num(p.xp)} / ${num(need)}`),
+        rest > 0 && tip(h('span', { class: 'res-rest', tabindex: 0 }, ui('descanso', 22), `Descanso +${num(rest)}`), {
+          title: 'Bônus de descanso', color: '#cdb8ff', icon: ui('descanso', 36), tag: 'XP x2',
+          rows: [{ icon: 'xp', text: 'Experiência a mais', value: `+${num(rest)}`, tone: 'ok' }, { icon: 'descanso', text: 'Ainda guardado', value: num(daily?.restLeft ?? 0) }],
+        }),
         r.xpMult < 1 && h('span', 'warn', `Fase fácil: ${pct(r.xpMult)} da experiência`))),
     r.levels > 0 && tip(h('div', 'level-up', h('b', null, `Nível ${p.level}!`), h('span', null, ui('forca', 20), `+${ATTR_PER_LEVEL * r.levels}`, ui('talentos', 20), `+${r.levels}`)),
       { title: `Nível ${p.level}!`, color: '#f2c14e', rows: [{ icon: 'forca', text: 'Pontos de atributo', value: `+${ATTR_PER_LEVEL * r.levels}`, tone: 'ok' }, { icon: 'talentos', text: 'Pontos de talento', value: `+${r.levels}`, tone: 'ok' }] }));
@@ -70,7 +78,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     tip(h('div', { class: 'gain', style: `animation-delay:${500 + i * 90}ms`, tabindex: 0 }, ui(icon, 40), countUp(c, amount, 500 + i * 90)), spec);
   const mats = (Object.keys(r.materials) as (keyof Materials)[]).filter((k) => r.materials[k] > 0);
   const gains = h('div', 'res-gains',
-    gain('xp', r.xp, 0, { title: 'Experiência', tag: `+${num(r.xp)}`, rows: [r.firstClear ? { icon: 'novo', text: 'Bônus de primeira vitória', tone: 'ok' } : null, r.xpMult < 1 ? { icon: 'xp', text: 'Fase abaixo do seu nível', value: pct(r.xpMult), tone: 'warn' } : null, !r.won ? { text: 'Parte da experiência das salas vencidas.', tone: 'dim' } : null] }),
+    gain('xp', r.xp, 0, { title: 'Experiência', tag: `+${num(r.xp)}`, rows: [r.firstClear ? { icon: 'novo', text: 'Bônus de primeira vitória', tone: 'ok' } : null, rest > 0 ? { icon: 'descanso', text: 'Descanso: experiência em dobro', value: `+${num(rest)}`, tone: 'ok' } : null, r.xpMult < 1 ? { icon: 'xp', text: 'Fase abaixo do seu nível', value: pct(r.xpMult), tone: 'warn' } : null, !r.won ? { text: 'Parte da experiência das salas vencidas.', tone: 'dim' } : null] }),
     gain('ouro', r.gold, 1, { title: 'Ouro', color: '#f2c14e', tag: `+${num(r.gold)}`, rows: [r.goldMult < 1 ? { icon: 'ouro', text: 'Fase abaixo do seu nível', value: pct(r.goldMult), tone: 'warn' } : null, r.soldOverflow.length ? { icon: 'vender', text: 'Inclui itens vendidos (mochila cheia)', tone: 'dim' } : null] }),
     mats.map((k, i) => gain(MAT_ICON[k], r.materials[k], 2 + i, { title: MATERIAL_LABEL[k], tag: `+${num(r.materials[k])}`, rows: [{ icon: MAT_ICON[k], text: 'Você tem', value: num(p.materials[k]) }] })));
 
@@ -94,6 +102,10 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
       ? h('button', { type: 'button', class: `news ${cls}`.trim(), style: `animation-delay:${1300 + news.length * 120}ms`, onclick: () => c.go(to) }, kids)
       : h('div', { class: `news ${cls}`.trim(), style: `animation-delay:${1300 + news.length * 120}ms`, tabindex: 0 }, kids), spec));
   };
+  for (const i of daily?.missions ?? []) {
+    const m = p.daily.missions[i];
+    if (m) note(ui('diario', 34), 'Missão cumprida', 'diario', { title: missionText(m), color: '#f2c14e', icon: ui('diario', 36), sub: 'Missão do dia pronta', subColor: '#86e07a', foot: ['Clique: pegar no diário'] }, 'gold');
+  }
   if (r.named) note(star(true, 30), 'Item com nome!', 'heroi', itemTip(p, r.named, { where: 'mochila', foot: ['Clique: ver no herói'] }), 'gold');
   if (r.rescued) { const d = COMPANIONS[r.rescued]; note(ui('companheiro', 34), `${d.name} livre!`, 'companheiros', { title: d.name, color: '#f2c14e', sub: 'Novo companheiro', rows: [{ icon: 'companheiro', text: d.passive, tone: 'ok' }, { text: `${d.activeName}: ${d.active}` }], foot: ['Clique: ver companheiros'] }, 'gold'); }
   if (r.supremo) { const d = SUPREMOS[r.supremo]; note(ui(r.supremo, 34), `${d.name} libertado!`, 'feiticos', { title: d.name, color: ELEMENTS[r.supremo].color, icon: ui('supremo', 40), sub: `Encantado libertado · Supremo de ${ELEMENTS[r.supremo].name}`, subColor: ELEMENTS[r.supremo].color, rows: [{ text: d.desc }, { icon: 'supremo', text: 'Tecla T quando a carga enche', tone: 'dim' }], foot: ['Clique: ver feitiços'] }, 'gold'); }
@@ -110,7 +122,12 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
   if (free > 0 && r.talentPoints === 0) note(ui('talentos', 34), `${free} ${free === 1 ? 'talento' : 'talentos'}`, 'talentos', { title: 'Pontos de talento', tag: String(free), rows: [{ text: 'Você tem pontos de talento para gastar.' }], foot: ['Clique: ver talentos'] }, 'hot');
 
   const again = () => c.host.startStage(stage.id);
-  const actions = tower
+  const actions = exp
+    ? [
+      h('button', { type: 'button', class: 'btn big', 'data-fk': 'res-mapa', onclick: () => c.go('diario') }, ui('diario', 30), 'Diário'),
+      c.p.daily.expeditions.includes(stage.id) && h('button', { type: 'button', class: 'btn big primary', 'data-fk': 'res-principal', onclick: again }, ui('expedicao', 30), r.won ? 'Jogar de novo' : 'Tentar de novo'),
+    ]
+    : tower
     ? [
       h('button', { type: 'button', class: 'btn big', 'data-fk': 'res-mapa', onclick: () => c.go('torre') }, ui('torre', 30), 'Torre'),
       tip(h('button', { type: 'button', class: 'btn big primary', 'data-fk': 'res-principal', onclick: () => c.host.startStage(`torre-${c.p.tower.checkpoint}`) }, ui('seta', 30), r.won ? 'Continuar' : 'Tentar de novo'),
@@ -123,7 +140,7 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
         { title: `${next.id} · ${next.name}`, tag: `Nv ${next.level}` }),
     ];
   const title = tower ? (r.won ? 'Vitória!' : 'Fim da subida') : r.won ? 'Vitória!' : 'Derrota';
-  const sub = tower ? `Torre · andares ${tower.from}–${Math.min(TOWER_FLOORS, tower.from + FLOORS_PER_RUN - 1)}` : `${stage.id} · ${stage.name}`;
+  const sub = exp ? `Expedição · ${stage.name}` : tower ? `Torre · andares ${tower.from}–${Math.min(TOWER_FLOORS, tower.from + FLOORS_PER_RUN - 1)}` : `${stage.id} · ${stage.name}`;
   return h('div', `results ${r.won || (tower && tower.floors > 0) ? 'won' : 'lost'}${tower ? ' tower' : ''}`,
     backdrop('resultado', VIEW_W, VIEW_H, (g) => paintHeroBackdrop(g, VIEW_W, VIEW_H)),
     h('div', 'res-shade'),
@@ -141,6 +158,19 @@ function gemSpec(c: Ctx, g: Gem): TipSpec {
     title: gemName(g), color: ELEMENTS[g.el].color, tag: `Nv ${g.lvl}`, icon: gemTile(g, 36),
     rows: [{ icon: 'dano', text: `Na arma: ${gemText(probe('facao'))}` }, { icon: 'defesa', text: `Na armadura: ${gemText(probe('gibao'))}` }, 'sep', { icon: 'ferreiro', text: 'Encaixe no ferreiro, modo Gemas', tone: 'dim' }],
   };
+}
+
+/* ---------- expedição: modificador e o que ainda paga hoje ---------- */
+
+function expBlock(e: NonNullable<DailyNews['expedition']>, won: boolean): HTMLElement {
+  const mod = EXP_MODS[e.mod];
+  return h('div', 'res-tower res-exp',
+    tip(h('div', { class: 'res-exp-mod', tabindex: 0 }, ui(mod.icon, 34), mod.name), { title: mod.name, color: '#ffc247', icon: ui(mod.icon, 36), rows: [{ text: mod.desc, tone: 'dim' }] }),
+    e.first && tip(h('div', { class: 'res-exp-mod first', tabindex: 0 }, ui('novo', 34), '1ª vitória do dia'), { title: 'Primeira vitória do dia', color: '#f2c14e', rows: [{ icon: 'resina', text: 'Resina em dobro', tone: 'ok' }, { icon: 'tomo', text: 'Um tomo', tone: 'ok' }, { icon: 'item', text: 'Um item', tone: 'ok' }] }),
+    tip(h('div', { class: `res-exp-mod${e.runsLeft > 0 ? '' : ' out'}`, tabindex: 0 }, ui('bau', 34), `${e.runsLeft}/${EXP_REWARDED_RUNS}`), {
+      title: 'Vitórias que ainda pagam hoje', tag: `${e.runsLeft}/${EXP_REWARDED_RUNS}`, icon: ui('bau', 36),
+      rows: [won && !e.rewarded ? { icon: 'cadeado', text: 'Esta vitória só deu experiência.', tone: 'warn' } : null, { text: 'Ouro e material voltam amanhã.', tone: 'dim' }],
+    }));
 }
 
 /* ---------- Torre: andares vencidos e recorde ---------- */

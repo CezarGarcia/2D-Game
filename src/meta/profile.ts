@@ -75,8 +75,40 @@ export interface Profile {
   tower: TowerRecord;
   /** Já viu o final (venceu o Esquecimento). */
   credits: boolean;
+  /** Missões do dia, descanso e expedições (src/meta/daily.ts). */
+  daily: DailyRecord;
   nextItemId: number;
   seed: number;
+}
+
+export interface MissionState {
+  kind: string;
+  /** Elemento, capítulo, tipo de arma ou limite de golpes, conforme a missão. */
+  param?: string | number;
+  target: number;
+  progress: number;
+  claimed: boolean;
+  reward: { gold: number; mata: number; po: number; tomo: number };
+}
+
+export interface DailyRecord {
+  /** Dia (AAAA-MM-DD, hora local) das missões e expedições guardadas. */
+  day: string;
+  /** Semente fixa do sorteio diário (a do perfil muda a cada sorteio). */
+  seed: number;
+  missions: MissionState[];
+  /** Baú das três missões já aberto hoje. */
+  chest: boolean;
+  /** Expedições de hoje (identificadores) e o que já pagou. */
+  expeditions: string[];
+  expRuns: number;
+  expFirst: number[];
+  /** Último dia em que o jogador apareceu, para o descanso. */
+  lastSeen: string;
+  /** XP de descanso guardado: dobra a experiência até acabar. */
+  rest: number;
+  /** Dias fora na última volta (só para avisar). */
+  restDays: number;
 }
 
 export interface TowerRecord {
@@ -102,6 +134,7 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     companions: {}, companion: null, potions: MAX_POTIONS,
     stages: {}, starChests: 0, curupiraFreed: false,
     gems: {}, tower: { best: 0, checkpoint: 1, week: '', weekBest: 0, weekTime: 0 }, credits: false,
+    daily: { day: '', seed: Math.imul(seed, 2654435761) >>> 0 || 1, missions: [], chest: false, expeditions: [], expRuns: 0, expFirst: [], lastSeen: '', rest: 0, restDays: 0 },
     nextItemId: 1, seed,
   };
   const start: [ItemType, string][] = [['facao', 'Facão de Mato'], ['gibao', 'Gibão de Couro'], ['chapeu', 'Chapéu de Couro']];
@@ -127,7 +160,7 @@ export function loadProfile(): Profile {
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
 export function migrate(saved: Profile): Profile {
   const base = newProfile(saved.seed);
-  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials }, tower: { ...base.tower, ...(saved.tower ?? {}) }, gems: { ...(saved.gems ?? {}) } };
+  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials }, tower: { ...base.tower, ...(saved.tower ?? {}) }, gems: { ...(saved.gems ?? {}) }, daily: { ...base.daily, ...(saved.daily ?? {}) } };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];
   if (!p.supremo && p.supremos.length) p.supremo = p.supremos[0];

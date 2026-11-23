@@ -10,6 +10,7 @@ import { artChaptersOf, findStage, isTowerId } from '../data/tower';
 import { boitataBody } from '../sim/bosses';
 import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, REACTIONS, SPELLS, SUPREMOS, blessingCounts, type BlessingId, type ElementId } from '../data/content';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
+import { countEvent, newTally, type RunTally } from '../meta/daily';
 import { deriveStats } from '../meta/stats';
 import { isBoss } from '../sim/core';
 import { comboOf, spellCost } from '../sim/player';
@@ -87,6 +88,9 @@ export class StageScene extends Phaser.Scene {
   private veil!: Phaser.GameObjects.Rectangle;
   private fade!: Phaser.GameObjects.Rectangle;
 
+  /** Contagens para as missões do dia. */
+  private tally: RunTally = newTally();
+
   constructor() { super('stage'); }
 
   init(data: { stageId?: string }): void {
@@ -96,7 +100,7 @@ export class StageScene extends Phaser.Scene {
   create(): void {
     const profile = session.profile!;
     this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed: 7919 + this.stage.index * 131 });
-    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false;
+    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
     this.views.clear(); this.shots.clear(); this.cards = [];
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
     this.blessIcons = []; this.blessShown = -1; this.supIcon = null;
@@ -223,7 +227,7 @@ export class StageScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => {
       this.tweens.add({
         targets: this.fade, alpha: 1, duration: 300,
-        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice() }),
+        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally }),
       });
     });
   }
@@ -232,7 +236,7 @@ export class StageScene extends Phaser.Scene {
 
   private handleEvents(): void {
     const ev = this.world.events;
-    for (const e of ev) this.onEvent(e);
+    for (const e of ev) { countEvent(this.tally, e); this.onEvent(e); }
     ev.length = 0;
   }
 
@@ -1184,7 +1188,7 @@ export class StageScene extends Phaser.Scene {
 
     /* cabeçalho: fase, salas e tempo */
     const fl = this.stage.rooms[w.room]?.floor;
-    this.txtInfo.setText(isTowerId(this.stage.id) ? `Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}` : `${this.stage.id} · ${this.stage.name}`);
+    this.txtInfo.setText(isTowerId(this.stage.id) ? `Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}` : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`);
     const x0 = 28, y0 = 58;
     this.stage.rooms.forEach((r, i) => {
       const x = x0 + i * 26, done = i < w.room || (i === w.room && (w.phase === 'cleared' || w.phase === 'won')), cur = i === w.room;

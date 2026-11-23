@@ -759,3 +759,119 @@
   .enc-ui *, .enc-ui *::before, .enc-ui *::after { animation: none !important; transition: none !important; }
   .enc-ui .toast { animation: enc-toast 2.2s both !important; }
 }
+
+/* =====================================================================
+   Diário: missões do dia, descanso e expedições (src/ui/diario.ts)
+   ===================================================================== */
+/* oito abas na barra: ícones um pouco menores para caberem na altura */
+.enc-ui .dock { gap: 4px; }
+.enc-ui .dock-ico { width: 54px; height: 54px; }
+.enc-ui .dock-lock { top: 32px; }
+
+.enc-ui .hud-rest {
+  display: inline-flex; align-items: center; gap: 2px; height: 36px; padding: 0 12px 0 4px; flex: none;
+  background: linear-gradient(#8f6ad8, #5a3a9e); border: 2px solid var(--ink); border-radius: 99px;
+  box-shadow: inset 0 2px 0 rgba(255, 255, 255, .3), 0 0 10px 1px rgba(205, 184, 255, .45), 0 3px 0 rgba(0, 0, 0, .4);
+}
+.enc-ui .hud-rest b { font-weight: 900; font-size: 20px; color: #fff; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+.enc-ui .hud-rest:hover { filter: brightness(1.15); }
+
+.enc-ui .diario { background: #120d0a; }
+.enc-ui .dia-shade { position: absolute; inset: 0; background: radial-gradient(circle at 50% 40%, rgba(12, 8, 5, .45), rgba(12, 8, 5, .78)); }
+.enc-ui .dia-panel {
+  position: absolute; display: flex; flex-direction: column; gap: 10px; padding: 12px 16px 16px;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, .07) 0 2px, transparent 2px 11px), linear-gradient(var(--wood), var(--wood2));
+  border: 4px solid var(--ink); border-radius: 18px; box-shadow: inset 0 3px 0 var(--wood-hi), 0 6px 0 rgba(0, 0, 0, .5);
+}
+.enc-ui .dia-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+.enc-ui .dia-head .plate { font-size: 24px; padding: 3px 16px 3px 8px; background: linear-gradient(#ffe9a8, #f2b83c); color: var(--ink); box-shadow: inset 0 2px 0 rgba(255, 255, 255, .6), 0 4px 0 rgba(0, 0, 0, .4); }
+.enc-ui .dia-clock, .enc-ui .dia-runs {
+  display: inline-flex; align-items: center; gap: 6px; padding: 3px 14px 3px 8px; font-weight: 900; font-size: 19px;
+  background: rgba(0, 0, 0, .35); border: 2px solid var(--ink); border-radius: 99px;
+}
+.enc-ui .dia-runs b { font-size: 21px; }
+.enc-ui .dia-runs.out b { color: var(--bad); }
+
+/* missões */
+.enc-ui .dia-missions { left: 20px; top: 20px; width: 650px; height: 634px; }
+.enc-ui .dia-list { display: flex; flex-direction: column; gap: 10px; }
+.enc-ui .dia-mission, .enc-ui .dia-chest {
+  --mc: #f2c14e;
+  display: grid; grid-template-columns: 72px 1fr 112px; align-items: center; gap: 14px; height: 128px; padding: 10px 14px;
+  background: rgba(0, 0, 0, .3); border: 2px solid var(--ink); border-radius: 14px; box-shadow: inset 0 0 0 2px rgba(255, 220, 160, .06);
+}
+.enc-ui .dia-mission.ready { background: rgba(60, 40, 10, .45); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent), 0 0 14px 2px rgba(242, 193, 78, .25); }
+.enc-ui .dia-mission.claimed { filter: saturate(.55) brightness(.85); }
+.enc-ui .dm-ico, .enc-ui .dc-ico {
+  display: grid; place-items: center; width: 70px; height: 70px;
+  background: radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--mc) 45%, #3a2a1c), #1a120c 80%);
+  border: 3px solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--mc) 70%, #000), 0 4px 0 3px rgba(0, 0, 0, .4);
+}
+.enc-ui .dm-mid, .enc-ui .dc-mid { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.enc-ui .dm-text { font-weight: 900; font-size: 23px; line-height: 1.05; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+.enc-ui .dm-prog { display: flex; align-items: center; gap: 10px; }
+.enc-ui .dm-prog b { min-width: 58px; font-weight: 900; font-size: 18px; text-align: right; font-variant-numeric: tabular-nums; }
+.enc-ui .dm-bar { flex: 1 1 auto; height: 16px; }
+.enc-ui .dia-mission.ready .dm-bar i, .enc-ui .dia-mission.claimed .dm-bar i { background: linear-gradient(#c8f5a8, #5fcb6a); }
+.enc-ui .dia-rew { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.enc-ui .dia-rew .stat b { font-size: 18px; }
+.enc-ui .dia-rew .stat.gold b { color: var(--gold); }
+.enc-ui .dm-claim { width: 112px; min-height: 50px; font-size: 22px; padding: 4px 8px; }
+.enc-ui .dm-done { display: grid; place-items: center; justify-self: center; width: 56px; height: 56px; background: rgba(0, 0, 0, .45); border: 3px solid var(--ink); border-radius: 50%; }
+.enc-ui .dia-chest { margin-top: auto; height: 112px; background: linear-gradient(rgba(242, 193, 78, .14), rgba(0, 0, 0, .3)); }
+.enc-ui .dia-chest.ready { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--gold) 70%, transparent), 0 0 18px 3px rgba(242, 193, 78, .35); }
+.enc-ui .dia-chest.ready .dc-ico { animation: enc-bob 1.2s ease-in-out infinite; }
+.enc-ui .dia-chest.open { filter: saturate(.55) brightness(.85); }
+.enc-ui .dc-pips { display: flex; align-items: center; gap: 6px; }
+.enc-ui .dc-pip { display: grid; place-items: center; width: 26px; height: 26px; background: #1a120c; border: 3px solid var(--ink); border-radius: 50%; box-shadow: inset 0 2px 3px rgba(0, 0, 0, .6); }
+.enc-ui .dc-pip.on { background: #2d4a22; box-shadow: 0 0 0 2px #5fcb6a; }
+.enc-ui .dc-label { margin-left: 6px; font-weight: 900; font-size: 21px; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+
+/* descanso */
+.enc-ui .dia-rest {
+  position: absolute; left: 690px; top: 20px; width: 486px; height: 134px; display: flex; align-items: center; gap: 16px; padding: 12px 18px;
+  background: repeating-linear-gradient(180deg, rgba(0, 0, 0, .07) 0 2px, transparent 2px 11px), linear-gradient(var(--wood), var(--wood2));
+  border: 4px solid var(--ink); border-radius: 18px; box-shadow: inset 0 3px 0 var(--wood-hi), 0 6px 0 rgba(0, 0, 0, .5);
+}
+.enc-ui .dia-rest.on { background: repeating-linear-gradient(180deg, rgba(0, 0, 0, .07) 0 2px, transparent 2px 11px), linear-gradient(#5d4386, #35244f); box-shadow: inset 0 3px 0 rgba(230, 210, 255, .3), 0 0 22px 3px rgba(170, 130, 255, .35), 0 6px 0 rgba(0, 0, 0, .5); }
+.enc-ui .dr-ico { display: grid; place-items: center; flex: none; width: 92px; height: 92px; background: radial-gradient(circle at 50% 32%, #6b5294, #1c1430 80%); border: 3px solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 3px #9a7ad8, 0 4px 0 3px rgba(0, 0, 0, .4); }
+.enc-ui .dia-rest:not(.on) .dr-ico { filter: grayscale(.6) brightness(.85); }
+.enc-ui .dr-mid { display: flex; flex-direction: column; gap: 8px; flex: 1 1 auto; min-width: 0; }
+.enc-ui .dr-head { display: flex; align-items: center; gap: 10px; }
+.enc-ui .dr-head b { font-weight: 900; font-size: 28px; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+.enc-ui .dr-x2 { padding: 1px 12px; font-weight: 900; font-size: 20px; color: var(--ink); background: linear-gradient(#f0e6ff, #b89cff); border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .dr-bar { height: 16px; }
+.enc-ui .dr-bar i { background: linear-gradient(#e6dcff, #9a7ad8); }
+.enc-ui .dr-text { font-size: 19px; color: var(--cream); }
+.enc-ui .dr-text.dim { color: var(--cream2); }
+
+/* expedições */
+.enc-ui .dia-exp-panel { left: 690px; top: 168px; width: 486px; height: 486px; }
+.enc-ui .dia-exps { display: flex; flex-direction: column; gap: 12px; }
+.enc-ui .dia-exp {
+  --ec: #f2c14e;
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 14px 12px;
+  background: rgba(0, 0, 0, .3); border: 2px solid var(--ink); border-radius: 14px; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ec) 35%, transparent);
+}
+.enc-ui .de-top { display: flex; align-items: center; gap: 12px; }
+.enc-ui .de-medal { display: grid; place-items: center; flex: none; width: 54px; height: 54px; background: radial-gradient(circle at 50% 32%, color-mix(in srgb, var(--ec) 45%, #3a2a1c), #1a120c 80%); border: 3px solid var(--ink); border-radius: 50%; box-shadow: 0 0 0 3px color-mix(in srgb, var(--ec) 70%, #000); }
+.enc-ui .de-name { display: flex; flex-direction: column; min-width: 0; }
+.enc-ui .de-name b { display: flex; align-items: center; gap: 10px; font-weight: 900; font-size: 25px; line-height: 1; text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+.enc-ui .de-name span { font-size: 17px; color: var(--ec); text-shadow: 0 1px 0 #000; }
+.enc-ui .de-lv { padding: 1px 8px; font-style: normal; font-weight: 900; font-size: 16px; text-shadow: none; background: rgba(0, 0, 0, .45); border: 2px solid var(--ink); border-radius: 8px; }
+.enc-ui .de-mod { display: flex; align-items: center; gap: 10px; padding: 5px 10px; background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 10px; }
+.enc-ui .de-mod div { display: flex; flex-direction: column; min-width: 0; }
+.enc-ui .de-mod b { font-weight: 900; font-size: 18px; color: var(--warn); }
+.enc-ui .de-mod span { font-size: 15px; line-height: 1.15; color: var(--cream2); }
+.enc-ui .de-first { display: inline-flex; align-items: center; gap: 3px; margin-left: auto; padding: 0 10px 0 4px; font-weight: 900; font-size: 16px; color: var(--ink); background: linear-gradient(#ffe9a8, #f2b83c); border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .de-go { margin-left: auto; min-height: 48px; padding: 4px 16px; font-size: 24px; }
+.enc-ui .dia-exp.done .de-medal { box-shadow: 0 0 0 3px #5fcb6a; }
+.enc-ui .dia-locked { flex: 1 1 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+.enc-ui .dia-locked p { font-size: 20px; color: var(--cream2); }
+
+/* resultado: descanso e expedição */
+.enc-ui .res-rest { display: inline-flex; align-items: center; gap: 4px; padding: 1px 10px 1px 4px; font-weight: 900; font-size: 16px; color: #fff; background: linear-gradient(#8f6ad8, #5a3a9e); border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .res-exp { display: flex; flex-direction: row; align-items: center; justify-content: center; gap: 14px; }
+.enc-ui .res-exp-mod { display: inline-flex; align-items: center; gap: 8px; padding: 6px 16px 6px 8px; font-weight: 900; font-size: 22px; background: linear-gradient(var(--wood), var(--wood2)); border: 3px solid var(--ink); border-radius: 14px; box-shadow: inset 0 2px 0 var(--wood-hi), 0 4px 0 rgba(0, 0, 0, .45); }
+.enc-ui .res-exp-mod.first { color: var(--ink); background: linear-gradient(#ffe9a8, #f2b83c); }
+.enc-ui .res-exp-mod.out { color: var(--bad); }

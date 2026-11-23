@@ -9,6 +9,7 @@ import { BOSS_STAGE_XP_BONUS, FIRST_CLEAR_XP_BONUS, goldMultiplier, stageGold, s
 import { CHAPTERS, STAGES, STAGE_BY_ID, stagesOf, type StageDef } from '../data/stages';
 import { FLOORS_PER_RUN, isTowerId, towerChapter, towerRun } from '../data/tower';
 import { addGem, addItem, addXp, profileRng, refillPotions, weekKey, type Materials, type Profile, type StageRecord } from './profile';
+import type { RunTally } from './daily';
 import { deriveStats, powerOf, recommendedPower } from './stats';
 
 export interface StageOutcome {
@@ -26,6 +27,8 @@ export interface StageOutcome {
   blessings?: BlessingId[];
   /** Itens afanados pelo graxaim de elites e chefões. */
   stolen?: number;
+  /** Contagens da cena para as missões do dia (poções, feitiços, reações, Supremo). */
+  tally?: RunTally;
 }
 
 export interface StageRewards {

@@ -7,9 +7,11 @@ import './ui.css';
 import { COMPANION_ORDER } from '../data/content';
 import { xpNeeded } from '../data/progression';
 import { ATTR_PER_LEVEL, MATERIAL_LABEL, MATERIAL_USE, knownSpells, talentFree, type Materials } from '../meta/profile';
+import { claimableCount, restInfo, touchDay } from '../meta/daily';
 import { isForgeUnlocked, isTowerUnlocked, type StageRewards } from '../meta/rewards';
 import { deriveStats, powerOf } from '../meta/stats';
 import { renderCompanheiros } from './companheiros';
+import { renderDiario } from './diario';
 import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen, type ConfirmSpec, type Ctx, type Tab } from './ctx';
 import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
@@ -22,11 +24,11 @@ import { renderTalentos } from './talentos';
 import { renderTorre } from './torre';
 import { mountTips, tip } from './tip';
 
-/* a Torre fica por último para as teclas 1 a 6 continuarem como eram */
+/* a Torre e o Diário ficam por último para as teclas 1 a 6 continuarem como eram */
 const TABS: { id: Tab; label: string }[] = [
   { id: 'mapa', label: 'Mapa' }, { id: 'heroi', label: 'Herói' }, { id: 'ferreiro', label: 'Ferreiro' },
   { id: 'talentos', label: 'Talentos' }, { id: 'feiticos', label: 'Feitiços' }, { id: 'companheiros', label: 'Companheiros' },
-  { id: 'torre', label: 'Torre' },
+  { id: 'torre', label: 'Torre' }, { id: 'diario', label: 'Diário' },
 ];
 /* o que abre cada aba trancada */
 const TAB_LOCK: Partial<Record<Tab, string>> = { ferreiro: 'Abre ao vencer a fase 1-2', torre: 'Abre ao libertar o Curupira (fase 1-12)' };
@@ -122,6 +124,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
           { icon: 'talentos', text: 'Ponto de talento', value: '+1', tone: 'ok' },
         ],
       })),
+      restBadge(),
       tip(stat('poder', num(powerOf(deriveStats(p))), { size: 26, cls: 'hud-power' }), {
         title: 'Poder', icon: ui('poder', 36),
         rows: [{ text: 'Resume o dano e a resistência do herói. Compare com o poder pedido por cada fase no mapa.' }],
@@ -138,6 +141,21 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
         onclick: () => { st.options = !st.options; st.menu = null; render(st.options ? 'recomecar' : 'opcoes'); },
       }, ui('opcoes', 28)), { title: 'Opções' }),
     );
+  }
+
+  /** Descanso guardado: experiência em dobro até acabar. */
+  function restBadge(): HTMLElement | null {
+    const r = restInfo(host.getProfile());
+    if (r.pool <= 0) return null;
+    return tip(h('button', { type: 'button', class: 'hud-rest', 'aria-label': `Descanso: ${num(r.pool)} de experiência em dobro`, onclick: () => showCamp('diario') }, ui('descanso', 30), h('b', null, 'x2')), {
+      title: 'Descanso', tag: 'XP x2', color: '#cdb8ff', icon: ui('descanso', 36),
+      rows: [
+        { icon: 'xp', text: 'Experiência em dobro', value: num(r.pool), tone: 'ok' },
+        r.days > 0 ? { icon: 'relogio', text: `Você ficou ${r.days} ${r.days === 1 ? 'dia' : 'dias'} fora` } : null,
+        { text: 'A experiência das próximas fases vem dobrada até acabar.', tone: 'dim' },
+      ],
+      foot: ['Clique: ver o diário'],
+    });
   }
 
   function optionsMenu(): HTMLElement {
@@ -159,6 +177,8 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     const spells = unseen('feiticos', knownSpells(p)).length + unseen('supremos', p.supremos).length;
     if (spells > 0) out.feiticos = { n: '!', why: spells === 1 ? 'Feitiço novo' : 'Feitiços novos' };
     if (unseen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id])).length > 0) out.companheiros = { n: '!', why: 'Companheiro novo' };
+    const daily = claimableCount(p);
+    if (daily > 0) out.diario = { n: daily, why: daily === 1 ? 'Recompensa para pegar' : `${daily} recompensas para pegar` };
     return out;
   }
 
@@ -190,6 +210,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       case 'feiticos': return renderFeiticos(ctx);
       case 'companheiros': return renderCompanheiros(ctx);
       case 'torre': return renderTorre(ctx);
+      case 'diario': return renderDiario(ctx);
       default: return renderMapa(ctx);
     }
   }
@@ -225,6 +246,8 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   function camp(): HTMLElement {
     const enter = shownTab !== st.tab;
     shownTab = st.tab;
+    /* virou o dia com o jogo aberto: missões novas e descanso */
+    if (touchDay(host.getProfile())) host.save();
     const blocked = !!st.confirm;
     return h('div', `camp tab-${st.tab}`,
       h('div', { class: 'camp-in', inert: blocked },

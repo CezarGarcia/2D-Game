@@ -9,6 +9,7 @@ import {
   GEM_FUSE_COST, GEM_REMOVE_COST, GEM_SOCKET_COST, allItems, enchantInfo, enchantItem, findItem, fuseCandidates, fuseGems, fuseInfo, fuseItems, gemList,
   reforgeInfo, reforgeItem, reforgedPreview, socketGem, unsocketGem, upgradeInfo, upgradeItem, type Profile,
 } from '../meta/profile';
+import { recordForge } from '../meta/daily';
 import { isForgeUnlocked } from '../meta/rewards';
 import { MAIN_H, MAIN_W, type CostLine, type Ctx, type ForgeMode } from './ctx';
 import { backdrop, br, h, hdCanvas, num, pct, s, stat, ui } from './dom';
@@ -304,6 +305,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
           const r = fuseItems(c.p, main!.id, st.forgeFodder);
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
           st.forgeFx = r.success ? { ok: true, text: `${RARITIES[main!.rarity].label}!`, color: rarColor(main!) } : { ok: false, text: 'Falhou', sub: '1 item perdido' };
+          recordForge(c.p);
           c.commit('martelo');
         }, 'Fundir'));
     }
@@ -326,6 +328,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
           const r = upgradeItem(c.p, main!.id);
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
           st.forgeFx = r.success ? { ok: true, text: `+${main!.plus}!` } : { ok: false, text: 'Falhou', sub: '+5% na próxima' };
+          recordForge(c.p);
           c.commit('martelo');
         }, 'Aprimorar'));
     } else if (main && mode === 'encantar') {
@@ -342,6 +345,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
           const got = main!.affixes[st.forgeAffix ?? 0];
           st.forgeFx = { ok: true, text: got ? affixText(got) : 'Trocado!' };
+          recordForge(c.p);
           c.commit('martelo');
         }, 'Encantar'));
     } else if (main && mode === 'reforjar') {
@@ -359,6 +363,7 @@ export function renderFerreiro(c: Ctx): HTMLElement {
           const r = reforgeItem(c.p, main!.id);
           if (!r.done) { c.toast(r.reason ?? 'Não deu', 'bad'); return; }
           st.forgeFx = { ok: true, text: `Nv ${c.p.level}!` };
+          recordForge(c.p);
           c.commit('martelo');
         }, 'Reforjar'));
     }
