@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { ALL_SHEETS, BAKE, SHEETS, bakeAll, bakeChapterSprites, ensureHero, sheetChapter, type Sheet } from './art/bake';
 import { VIEW } from './data/balance';
 import { StageScene } from './game/StageScene';
+import { music, unlockAudio } from './game/music';
 import { session } from './game/session';
 import { loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
 import { settleStage, touchDay } from './meta/daily';
@@ -40,6 +41,7 @@ class CampScene extends Phaser.Scene {
 
   create(): void {
     const inv = 1 / BAKE, p = session.profile;
+    music.play('acampamento');
     this.add.image(0, 0, 'bg0').setOrigin(0).setScale(inv);
     const sheet = ensureHero(this, p?.equipped.arma?.type ?? 'facao');
     const x = VIEW.w * 0.5, y = VIEW.h * 0.62;
@@ -103,6 +105,10 @@ session.onStageEnd = (outcome) => {
 };
 
 ui.showCamp('mapa');
+music.play('acampamento');
+// o som só pode começar depois de um gesto do jogador: o primeiro clique ou tecla, nos menus ou na fase
+window.addEventListener('pointerdown', unlockAudio, true);
+window.addEventListener('keydown', unlockAudio, true);
 
 // acesso para depuração e testes automatizados
 (window as unknown as { __app?: unknown }).__app = { game, ui, session };

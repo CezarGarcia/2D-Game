@@ -6,6 +6,9 @@
 import './ui.css';
 import { COMPANION_ORDER } from '../data/content';
 import { xpNeeded } from '../data/progression';
+import { DEFAULT_VOLUMES, saveVolumes, type Volumes } from '../game/audio';
+import { music } from '../game/music';
+import { sfx } from '../game/sfx';
 import { ATTR_PER_LEVEL, MATERIAL_LABEL, MATERIAL_USE, knownSpells, talentFree, type Materials } from '../meta/profile';
 import { claimableCount, restInfo, touchDay } from '../meta/daily';
 import { isForgeUnlocked, isTowerUnlocked, type StageRewards } from '../meta/rewards';
@@ -158,8 +161,39 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     });
   }
 
+  /* volume de antes de silenciar, para o botão devolver */
+  const lastVol: Volumes = { ...DEFAULT_VOLUMES };
+
+  function volumeRow(kind: keyof Volumes, label: string, hint: string): HTMLElement {
+    const v = kind === 'musica' ? music.volume : sfx.volume, on = v > 0;
+    const set = (x: number) => { if (kind === 'musica') music.volume = x; else sfx.volume = x; };
+    const save = () => {
+      saveVolumes({ musica: music.volume, efeitos: sfx.volume });
+      if (kind === 'efeitos') sfx.play('hit');
+    };
+    const pct = h('span', 'vol-num', Math.round(v * 100));
+    return h('div', 'vol-row',
+      tip(h('button', {
+        type: 'button', class: `round-btn vol-mute${on ? '' : ' off'}`, 'aria-label': `${label}: ${on ? 'silenciar' : 'ligar'}`, 'aria-pressed': String(!on), 'data-fk': `som-${kind}`,
+        onclick: () => {
+          if (on) { lastVol[kind] = v; set(0); } else set(lastVol[kind] || DEFAULT_VOLUMES[kind]);
+          save(); render(`som-${kind}`);
+        },
+      }, ui(on ? 'som' : 'mudo', 24)), { title: label, rows: [{ text: hint, tone: 'dim' }] }),
+      h('span', 'vol-label', label),
+      h('input', {
+        type: 'range', class: 'vol-range', min: 0, max: 100, step: 5, value: Math.round(v * 100), 'aria-label': `Volume: ${label}`, 'data-fk': `vol-${kind}`,
+        oninput: (e: Event) => { const x = Number((e.target as HTMLInputElement).value) / 100; set(x); pct.textContent = String(Math.round(x * 100)); },
+        onchange: () => { save(); render(`vol-${kind}`); },
+      }),
+      pct);
+  }
+
   function optionsMenu(): HTMLElement {
     return h('div', { class: 'pop options', role: 'menu' },
+      h('div', { class: 'pop-som', role: 'group', 'aria-label': 'Som' },
+        volumeRow('musica', 'Música', 'A música de fundo de cada capítulo, do acampamento e da Torre.'),
+        volumeRow('efeitos', 'Efeitos', 'Golpes, feitiços e avisos. Na fase, M liga e desliga todo o som.')),
       tip(h('button', {
         type: 'button', class: 'pop-btn danger', role: 'menuitem', 'data-fk': 'recomecar',
         onclick: () => ctx.confirm({

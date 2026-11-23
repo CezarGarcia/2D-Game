@@ -154,6 +154,16 @@
   box-shadow: inset 0 2px 0 var(--wood-hi), 0 6px 0 rgba(0, 0, 0, .45); animation: enc-pop .12s ease-out;
 }
 .enc-ui .pop.options { right: 10px; top: 52px; }
+.enc-ui .pop-som {
+  display: flex; flex-direction: column; justify-content: center; gap: 6px; padding: 4px 10px;
+  background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 10px;
+}
+.enc-ui .vol-row { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.enc-ui .vol-mute { width: 32px; height: 32px; }
+.enc-ui .vol-mute.off { filter: grayscale(.7) brightness(.8); }
+.enc-ui .vol-label { width: 58px; }
+.enc-ui .vol-range { width: 128px; margin: 0; accent-color: var(--gold); cursor: pointer; }
+.enc-ui .vol-num { width: 28px; text-align: right; color: var(--dim); font-variant-numeric: tabular-nums; }
 .enc-ui .pop-btn {
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; width: 86px; height: 78px; padding: 2px;
   font-size: 15px; background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 10px;
