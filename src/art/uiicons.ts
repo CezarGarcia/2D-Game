@@ -41,6 +41,8 @@ export const UI_ICON_KEYS = [
   'sussurro', 'borbulhante', 'ninar', 'troca', 'espelho',
   // diversos novos
   'torre', 'gema', 'conjunto', 'reacao', 'lua', 'credito', 'borduna', 'peixeiras', 'zagaia', 'cajado',
+  // retorno diário
+  'diario', 'expedicao', 'descanso',
 ] as const;
 export type UiIconKey = typeof UI_ICON_KEYS[number];
 
@@ -1062,6 +1064,40 @@ var I = {
   peixeiras: function (c) { drawItemIcon(c, 'peixeiras', 40); },
   zagaia: function (c) { drawItemIcon(c, 'zagaia', 40); },
   cajado: function (c) { drawItemIcon(c, 'cajado', 40); },
+
+  /* ===== retorno diário ===== */
+  /* folhinha de calendário com o visto do dia */
+  diario: function (c) {
+    P(c, function (c) { rr(c, 5.4, 7.6, 29.2, 28.4, 4); }, '#f6ead0', { k: 1.6, lw: 2.3, sh: 'rgba(120,80,30,.32)', inn: function (c) { [21, 26, 31].forEach(function (y) { ln(c, [9, y, 31, y], 'rgba(120,90,50,.28)', .9); }); } });
+    P(c, function (c) { c.moveTo(5.4, 16.4); c.lineTo(5.4, 11.6); c.quadraticCurveTo(5.4, 7.6, 9.4, 7.6); c.lineTo(30.6, 7.6); c.quadraticCurveTo(34.6, 7.6, 34.6, 11.6); c.lineTo(34.6, 16.4); c.closePath(); }, RED, { k: 1, lw: 2.3, sh: 'rgba(90,0,0,.35)' });
+    [12.4, 27.6].forEach(function (x) { P(c, function (c) { rr(c, x - 2, 3, 4, 9.4, 2); }, STEEL, { k: .6, lw: 1.9, sh: COLD }); });
+    bar(c, [12.4, 25.6, 18, 30.6, 28.4, 19.4], UP, 4.4);
+  },
+  /* bússola de latão */
+  expedicao: function (c) {
+    P(c, function (c) { el(c, 20, 21, 15.6, 15.6); }, GOLD, { k: 1.8, lw: 2.3, sh: GSH, hi: 'rgba(255,250,220,.45)' });
+    P(c, function (c) { el(c, 20, 21, 11.4, 11.4); }, '#f8efd6', { k: .8, lw: 1.8, sh: 'rgba(120,80,30,.25)', inn: function (c) { for (var i = 0; i < 8; i++) { var a = i * Math.PI / 4, r0 = i % 2 ? 9 : 8; ln(c, [20 + Math.cos(a) * r0, 21 + Math.sin(a) * r0, 20 + Math.cos(a) * 10.4, 21 + Math.sin(a) * 10.4], 'rgba(90,60,30,.7)', 1.2); } } });
+    P(c, function (c) { el(c, 20, 3.6, 3, 2.4); }, GOLD2, { k: .4, lw: 1.8 });
+    c.save(); c.translate(20, 21); c.rotate(.55);
+    P(c, function (c) { poly(c, [0, -10, 3.4, 0, -3.4, 0]); }, RED, { k: .6, lw: 1.7 });
+    P(c, function (c) { poly(c, [0, 10, 3.4, 0, -3.4, 0]); }, '#e9e4d8', { k: .6, lw: 1.7, sh: COLD });
+    c.restore();
+    odot(c, 20, 21, 1.8, DK);
+  },
+  /* rede de dormir entre dois ganchos, com o sono por cima */
+  descanso: function (c) {
+    bar(c, [3.6, 12.6, 9.6, 22.4], '#c9a46a', 1.8); bar(c, [36.4, 12.6, 30.4, 22.4], '#c9a46a', 1.8);
+    odot(c, 3.6, 12, 2.2, IRON); odot(c, 36.4, 12, 2.2, IRON);
+    P(c, function (c) { c.moveTo(8, 21); c.quadraticCurveTo(20, 41, 32, 21); c.quadraticCurveTo(20, 30, 8, 21); c.closePath(); }, FOG, {
+      k: 1.4, lw: 2.3, sh: FSH, inn: function (c) {
+        c.save(); c.beginPath(); c.moveTo(8, 21); c.quadraticCurveTo(20, 41, 32, 21); c.quadraticCurveTo(20, 30, 8, 21); c.clip();
+        [24, 28.4, 32.8].forEach(function (y, i) { c.beginPath(); c.moveTo(4, y - 6); c.quadraticCurveTo(20, y + 7, 36, y - 6); c.strokeStyle = i % 2 ? '#3fa7e0' : FOG2; c.lineWidth = 2.2; c.stroke(); });
+        c.restore();
+      },
+    });
+    c.font = '900 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 2.6 * Q; c.strokeStyle = OUT; c.fillStyle = '#cdb8ff';
+    [[22, 14, 9], [29, 8.6, 11]].forEach(function (q) { c.font = '900 ' + q[2] + 'px sans-serif'; c.strokeText('z', q[0], q[1]); c.fillText('z', q[0], q[1]); });
+  },
 };
 
 function unknown(c) { P(c, function (c) { poly(c, [20, 6, 34, 20, 20, 34, 6, 20]); }, CRM, { k: 2 }); dot(c, 20, 20, 3, DK); }

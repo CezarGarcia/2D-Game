@@ -56,6 +56,35 @@ Não entram: energia que limita partidas, caixas de sorteio pagas, poder exclusi
 - **Bônus de descanso:** quem fica um dia fora volta com XP em dobro nas primeiras fases. Premia voltar, sem punir quem saiu.
 - **Expedições:** fases curtas que mudam a cada dia e dão material de forja.
 
+Feito na etapa 3, local (sem servidor), na aba **Diário** do acampamento (tecla 8). O dia é o do relógio do aparelho e vira à meia-noite; números em `src/data/daily.ts`, regras em `src/meta/daily.ts`.
+
+**Missões.** Três por dia, de grupos diferentes, sorteadas pelo dia e por uma semente fixa do perfil, só entre as que o jogador já consegue fazer:
+
+| Missão | Alvos | Aparece quando |
+|---|---|---|
+| Vença N fases | 2, 3, 4 | sempre |
+| Derrote N monstros | 50, 80, 120 | sempre |
+| Lance N feitiços de (elemento) | 10, 16, 24 | elemento de um feitiço já aprendido |
+| Lance N feitiços | 20, 35, 50 | sempre |
+| Vença uma fase sem usar poção | 1 | sempre |
+| Repita uma fase do capítulo X | 1, 2 | capítulo com fase vencida (só vale fase já vencida antes) |
+| Faça N esquivas perfeitas | 5, 8, 12 | sempre |
+| Vença uma fase com elite ou chefão | 1, 2 | há uma fase assim aberta, a Torre ou as expedições |
+| Vença uma fase com 2 estrelas | 1, 2 | sempre (fases do mapa) |
+| Vença levando até 8 golpes | 1 | sempre |
+| Suba N andares da Torre | 3, 5, 8 | Torre aberta |
+| Use o ferreiro N vezes | 2, 3 | ferreiro aberto |
+| Vença N expedições | 1, 2 | expedições abertas |
+| Chame o Supremo N vezes | 2, 3 | um Encantado libertado |
+| Cause N reações de elementos | 5, 10, 15 | dois elementos aprendidos |
+| Vença com (arma) | 1, 2 | duas armas diferentes na mochila |
+
+O progresso vem de qualquer partida (fase, Torre ou expedição) e do ferreiro. Cada missão paga ouro (90% a 160% do ouro de uma fase no nível do jogador) e resina; algumas dão pó ou tomo. Cumprir as três abre um baú: ouro, resina, pó, tomo e uma gema.
+
+**Descanso.** Cada dia inteiro sem abrir o jogo guarda a experiência de 3 fases no nível do jogador, até 3 dias. A experiência ganha vem de novo, tirada do descanso, até ele acabar (vale para fases, Torre e expedições). Um selo roxo "x2" no HUD avisa, e a tela de resultado mostra o quanto veio do descanso.
+
+**Expedições.** Abrem com o ferreiro (fase 1-2). Duas por dia: a **Trilha** (2 salas) e a **Travessia** (3 salas, elite no fim). Cada uma usa um capítulo com pelo menos duas fases vencidas, só com os monstros das fases já vencidas dele, no nível do jogador (sem passar da fase mais difícil já aberta), e um modificador do dia: monstros velozes, sede de sangue, estouro, campeões, cheia, correnteza, noite fechada, lua cheia, miragem, esquecimento, horda ou raízes fundas (nunca o que o terreno do capítulo já faz). As três primeiras vitórias do dia pagam ouro, resina e pó; a primeira vitória em cada expedição paga resina em dobro, um tomo e um item. Depois disso, só experiência.
+
 ## Steam (futuro)
 
 Venda entre jogadores com dinheiro só pelo Mercado da Comunidade Steam, se o jogo for publicado lá. O saldo fica na carteira Steam.

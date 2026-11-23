@@ -35,7 +35,7 @@ Abra o endereço que aparecer no terminal (normalmente http://localhost:5173).
 | Pausar | Esc (X abandona a fase) |
 | Ligar e desligar o som | M |
 
-Nos menus, as teclas 1 a 6 trocam de aba.
+Nos menus, as teclas 1 a 8 trocam de aba (a 8 abre o Diário: missões do dia, descanso e expedições).
 
 As peixeiras não têm golpe próprio: depois de uma esquiva perfeita o próximo golpe é crítico. O cajado ataca de longe com o elemento do último feitiço usado.
 

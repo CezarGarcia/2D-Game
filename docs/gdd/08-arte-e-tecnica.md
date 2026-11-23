@@ -123,3 +123,15 @@ Entrou tudo o que a etapa 3 pedia: capítulos 3 a 8 com créditos no fim, as sei
 
 Ficou para depois: formas dos companheiros, salas secretas, runas, a Torre online e as dificuldades Heroica e Mítica.
 
+## Etapa 3: retorno diário
+
+Missões do dia, bônus de descanso e expedições (regras em [07](07-online-e-economia.md#retorno-diário)), na aba **Diário** do acampamento.
+
+- `src/data/daily.ts`: lista de missões e recompensas, números do descanso, modificadores e geração das expedições. Uma expedição se monta só pelo identificador (`exp-AAAAMMDD-posição-capítulo-fase-nível-modificador`), então a cena abre pelo mesmo `findStage` da Torre.
+- `src/meta/daily.ts`: virada do dia, sorteio das missões, progresso, baú, descanso e o resultado das expedições. `settleStage` substitui `applyOutcome` no fim de qualquer partida. A hora vem de `clockNow()`, trocada nos testes com `setClock`.
+- A cena conta poções, feitiços por elemento, Supremo e reações com `countEvent` sobre os eventos da simulação, e manda a contagem no resultado (`tally`). A simulação não mudou: os modificadores das expedições usam só o que as salas já aceitam (modificadores de elite, campeões, poças, correnteza, escuro, lua, ilusões, feitiço apagado).
+- O perfil ganhou `daily`; saves antigos recebem o campo vazio e não ganham descanso na primeira vez.
+- Testes em `tests/daily.test.ts`, incluindo o jogador automático vencendo uma expedição.
+
+Ficou para depois: modificadores que mexem no herói (só feitiços de um elemento, sem poção obrigatório), que pedem mudança na simulação, e missões conferidas pelo servidor na etapa 4.
+

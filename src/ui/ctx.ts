@@ -18,8 +18,8 @@ export const MAIN_H = VIEW_H - HUD_H;
 export type InvSort = 'novo' | 'raridade' | 'nivel' | 'tipo' | 'poder';
 export type InvFilter = 'tudo' | 'armas' | 'armaduras' | 'joias' | 'melhores';
 export type ForgeMode = 'aprimorar' | 'fundir' | 'encantar' | 'reforjar' | 'gemas';
-/** Abas do acampamento: as do contrato com o jogo e a Torre, que só a interface conhece. */
-export type Tab = CampTab | 'torre';
+/** Abas do acampamento: as do contrato com o jogo e a Torre e o Diário, que só a interface conhece. */
+export type Tab = CampTab | 'torre' | 'diario';
 
 export interface CostLine { icon: string; amount: number; have: number }
 

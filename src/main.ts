@@ -4,7 +4,7 @@ import { VIEW } from './data/balance';
 import { StageScene } from './game/StageScene';
 import { session } from './game/session';
 import { loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
-import { applyOutcome } from './meta/rewards';
+import { settleStage, touchDay } from './meta/daily';
 import { mountUi } from './ui/app';
 
 let ready = false;
@@ -60,6 +60,7 @@ class CampScene extends Phaser.Scene {
 }
 
 session.profile = loadProfile();
+if (touchDay(session.profile)) saveProfile(session.profile);
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -91,7 +92,7 @@ const ui = mountUi(document.getElementById('ui')!, {
 });
 
 session.onStageEnd = (outcome) => {
-  const rewards = applyOutcome(session.profile!, outcome);
+  const rewards = settleStage(session.profile!, outcome);
   saveProfile(session.profile!);
   // troca de cena só depois do passo atual do Phaser, para não destruir objetos no meio da atualização
   game.events.once(Phaser.Core.Events.POST_STEP, () => {
