@@ -147,6 +147,22 @@ describe('combate', () => {
     expect(b.hp).toBeLessThan(b.maxHp);
   });
 
+  it('apertar e soltar o botão direito sem parar respeita o tempo entre disparos', () => {
+    for (const weapon of ['arco', 'borduna', 'zagaia'] as const) {
+      const prof = refProfile(5, weapon === 'arco');
+      prof.equipped.arma = makeItem(prof.nextItemId++, makeRng(3), 5, 1, weapon);
+      const w = arena(prof);
+      expect(w.stats.weapon).toBe(weapon);
+      const kind = weapon === 'arco' ? 'shoot' : weapon === 'borduna' ? 'heavy' : 'thrust';
+      const before = w.events.filter((e) => e.type === kind).length;
+      run(w, 3, (w, i) => ({ ...idleAt(w), altHeld: i % 4 < 2 }));
+      const shots = w.events.filter((e) => e.type === kind).length - before;
+      const gap = weapon === 'arco' ? PLAYER.bow.interval : weapon === 'borduna' ? PLAYER.weapons.borduna.heavy.recover : PLAYER.weapons.zagaia.thrust.recover;
+      expect(shots).toBeGreaterThan(0);
+      expect(shots).toBeLessThanOrEqual(Math.ceil(3 / (gap / 1.6)));
+    }
+  });
+
   it('aparar com o escudo anula o golpe e atordoa quem bateu', () => {
     const w = arena(refProfile(2));
     expect(w.stats.hasShield).toBe(true);

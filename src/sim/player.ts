@@ -123,6 +123,7 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     emit(w, { type: 'thrust', x: p.x, y: p.y, x2: ex, y2: ey, ang: aim });
   }
   p.perfectT = 0; p.contraT = 0;
+  p.shotCd = (s.weapon === 'borduna' ? PLAYER.weapons.borduna.heavy.recover : PLAYER.weapons.zagaia.thrust.recover) / attackSpeed(w);
   p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 2);
 }
 
@@ -373,7 +374,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
     walkBy(shooting ? P.bow.shotSlow : 1);
     p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
     if (p.bufDodge > 0 && p.dodgeCharges > 0) startDodge(w, inp);
-    else if (inp.altHeld && chargeable) { p.state = 'charge'; p.charge = 0; }
+    else if (inp.altHeld && chargeable) { if (p.shotCd <= 0) { p.state = 'charge'; p.charge = 0; } }
     else if (inp.altHeld && s.hasShield) { p.state = 'block'; p.blockT = 0; }
     else {
       let cast = false;

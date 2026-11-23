@@ -48,7 +48,7 @@ export const PLAYER = {
         { windup: 0.2, total: 0.78, mult: 1.55, lunge: 140, range: 124, arc: 1.8 },
       ],
       /** Golpe carregado: segura o botão direito; solta para bater no chão à frente. */
-      heavy: { chargeTime: 1.0, moveMult: 0.35, radius: 135, offset: 70, mult: 3, crack: 6, posture: 22 },
+      heavy: { chargeTime: 1.0, recover: 0.6, moveMult: 0.35, radius: 135, offset: 70, mult: 3, crack: 6, posture: 22 },
     },
     peixeiras: {
       combo: [
@@ -66,7 +66,7 @@ export const PLAYER = {
         { windup: 0.13, total: 0.48, mult: 1.55, lunge: 170, range: 150, arc: 0.5 },
       ],
       /** Estocada: segura o botão direito; solta para atravessar a fila à frente. */
-      thrust: { chargeTime: 0.8, moveMult: 0.35, len: 280, width: 54, mult: 2.4 },
+      thrust: { chargeTime: 0.8, recover: 0.5, moveMult: 0.35, len: 280, width: 54, mult: 2.4 },
     },
     cajado: { interval: 0.5, speed: 780, range: 620, mult: 1.05, statusChance: 0.35 },
   },
