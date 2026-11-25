@@ -62,8 +62,17 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       else if (isMonster(e.kind)) setState(e, archetypeStart(e));
       else if (isBossKind(e.kind)) setState(e, 'idle');
       else if (CH2_START[e.kind]) setState(e, CH2_START[e.kind]!);
-      else setState(e, e.kind === 'cuspidor' || e.kind === 'curupira' ? 'idle' : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : 'chase');
+      else setState(e, e.kind === 'cuspidor' || e.kind === 'curupira' || e.kind === 'boneco' ? 'idle' : e.kind === 'queixada' || e.kind === 'caipora' ? 'roam' : 'chase');
     }
+    return;
+  }
+  if (e.kind === 'boneco') {
+    /* boneco de treino: fica no lugar, vira para o herói e se refaz quando param de bater (ou antes de cair) */
+    e.stunT = max0(e.stunT - dt); e.rootT = max0(e.rootT - dt); e.tele = null;
+    const k = Math.min(1, dt * 10);
+    e.x += (e.ax - e.x) * k; e.y += (e.ay - e.y) * k;
+    if (Math.abs(w.player.x - e.x) > 6) e.facing = w.player.x >= e.x ? 1 : -1;
+    if (e.sinceHit > 2.5 || e.hp < e.maxHp * 0.4) e.hp = e.maxHp;
     return;
   }
   if (e.kind === 'curupira') { updateCurupira(w, e, dt); return; }

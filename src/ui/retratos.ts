@@ -4,9 +4,9 @@
  * de cada arquivo de capítulo (src/art/ch3.ts … ch8.ts): um kit de mentira só anota a função de desenho
  * de cada folha, e o retrato chama essa função direto no canvas do menu.
  */
-import { drawCapi, drawCurupira, drawHero } from '../art/characters';
-import { drawOnca } from '../art/characters2';
-import { drawArara, drawIara } from '../art/characters3';
+import { drawCapi, drawCurupira, drawCuspidor, drawHero, drawQueixada, drawSauva, drawTronco } from '../art/characters';
+import { drawCaipora, drawCogumelo, drawOnca, drawUrutau } from '../art/characters2';
+import { drawArara, drawArraia, drawBoto, drawCaramujo, drawIara, drawJacare, drawPiranha, drawSapo } from '../art/characters3';
 import { CHAPTER_ART } from '../art/chapters';
 import type { Kit, Sheet } from '../art/kit';
 
@@ -47,7 +47,28 @@ const OLD: Record<string, Figure> = {
   curupira: { frame: { cellW: 190, cellH: 240, ox: 86, oy: 218, scale: 1.75 }, draw: (c, t) => drawCurupira(c, t, { gray: false }) },
   iara: { frame: { cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66 }, draw: (c, t) => drawIara(c, t, { gray: false }) },
   heroi: { frame: { cellW: 200, cellH: 200, ox: 80, oy: 182, scale: 1.5 }, draw: (c, t) => drawHero(c, t, {}) },
+  /* bestiário: os bichos dos capítulos 1 e 2 como aparecem na fase (sem cor), com `_g` nos dois Encantados */
+  sauva: { frame: { cellW: 112, cellH: 88, ox: 46, oy: 76, scale: 1.45 }, draw: (c, t) => drawSauva(c, t, { walk: t * 5 }) },
+  queixada: { frame: { cellW: 172, cellH: 114, ox: 68, oy: 102, scale: 1.9 }, draw: (c, t) => drawQueixada(c, t, {}) },
+  tronco: { frame: { cellW: 204, cellH: 214, ox: 102, oy: 200, scale: 2.1 }, draw: (c, t) => drawTronco(c, t, { raise: 0.15 + 0.1 * Math.sin(t * 1.4) }) },
+  cuspidor: { frame: { cellW: 152, cellH: 142, ox: 60, oy: 128, scale: 1.9 }, draw: (c, t) => drawCuspidor(c, t, {}) },
+  urutau: { frame: { cellW: 190, cellH: 150, ox: 95, oy: 128, scale: 1.6 }, draw: (c, t) => drawUrutau(c, t, { hidden: 0, fly: t * 7 }) },
+  cogumelo: { frame: { cellW: 124, cellH: 124, ox: 62, oy: 108, scale: 1.7 }, draw: (c, t) => drawCogumelo(c, t, { swell: 0 }) },
+  caipora: { frame: { cellW: 200, cellH: 190, ox: 82, oy: 170, scale: 1.9 }, draw: (c, t) => drawCaipora(c, t, {}) },
+  curupira_g: { frame: { cellW: 190, cellH: 240, ox: 86, oy: 218, scale: 1.75 }, draw: (c, t) => drawCurupira(c, t, {}) },
+  piranha: { frame: { cellW: 76, cellH: 64, ox: 42, oy: 50, scale: 1.3 }, draw: (c, t) => drawPiranha(c, t, { leap: 0 }) },
+  sapo: { frame: { cellW: 108, cellH: 76, ox: 58, oy: 56, scale: 1.25 }, draw: (c, t) => drawSapo(c, t, {}) },
+  arraia: { frame: { cellW: 120, cellH: 92, ox: 68, oy: 76, scale: 1.45 }, draw: (c, t) => drawArraia(c, t, { hidden: 0 }) },
+  caramujo: { frame: { cellW: 106, cellH: 100, ox: 56, oy: 76, scale: 1.25 }, draw: (c, t) => drawCaramujo(c, t, { aura: 0.6 }) },
+  jacare: { frame: { cellW: 200, cellH: 96, ox: 112, oy: 80, scale: 1.55 }, draw: (c, t) => drawJacare(c, t, {}) },
+  boto: { frame: { cellW: 150, cellH: 196, ox: 68, oy: 172, scale: 1.6 }, draw: (c, t) => drawBoto(c, t, {}) },
+  iara_g: { frame: { cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66 }, draw: (c, t) => drawIara(c, t, {}) },
 };
+
+/** Chave do retrato de um inimigo para o bestiário (os Encantados do começo têm a versão sem cor à parte). */
+export function enemyFigure(kind: string): string {
+  return kind === 'curupira' ? 'curupira_g' : kind === 'iara' ? 'iara_g' : kind;
+}
 
 function figure(key: string): Figure | null {
   return OLD[key] ?? fromSheet(key);

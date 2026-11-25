@@ -92,13 +92,16 @@ export const PLAYER = {
 
 export type LegacyKind = 'sauva' | 'queixada' | 'cuspidor' | 'tronco' | 'urutau' | 'cogumelo' | 'caipora' | 'curupira'
   | 'piranha' | 'sapo' | 'arraia' | 'caramujo' | 'jacare' | 'boto' | 'iara';
-export type EnemyKind = LegacyKind | MonsterKind | BossKind;
+/** Boneco do Terreiro de treino: não anda, não bate e não cai. */
+export const DUMMY = { radius: 22, hp: 4_000_000 };
+export type EnemyKind = LegacyKind | MonsterKind | BossKind | 'boneco';
 export const LEGACY_KINDS: LegacyKind[] = ['sauva', 'queixada', 'cuspidor', 'tronco', 'urutau', 'cogumelo', 'caipora', 'curupira', 'piranha', 'sapo', 'arraia', 'caramujo', 'jacare', 'boto', 'iara'];
 export function isLegacy(k: EnemyKind): k is LegacyKind { return (LEGACY_KINDS as string[]).includes(k); }
 export function isMonster(k: EnemyKind): k is MonsterKind { return k in MONSTERS; }
 export function isBossKind(k: EnemyKind): k is BossKind { return k in BOSSES; }
 /** Raio e vida no nível 1, para qualquer inimigo. */
 export function enemyBase(k: EnemyKind): { radius: number; hp: number } {
+  if (k === 'boneco') return DUMMY;
   if (isLegacy(k)) return ENEMY[k];
   if (isMonster(k)) return MONSTERS[k];
   return BOSSES[k];

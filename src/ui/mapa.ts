@@ -108,6 +108,8 @@ function stageTip(p: Profile, info: StageInfo): TipSpec {
 }
 
 let lastClick = { id: '', at: 0 };
+const HUNT_RUNS = [1, 3, 5, 10];
+const HUNT_SPEEDS = [1, 2, 3];
 
 export function renderMapa(c: Ctx): HTMLElement {
   const p = c.p;
@@ -118,6 +120,7 @@ export function renderMapa(c: Ctx): HTMLElement {
   const sel = infos.find((i) => i.stage.id === c.st.mapSel && i.unlocked) ?? null;
 
   const play = (id: string) => c.host.startStage(id);
+  const hunt = (id: string) => c.host.startStage(id, { auto: { runs: c.st.huntRuns, speed: c.st.huntSpeed } });
   const pick = (info: StageInfo) => {
     if (!info.unlocked) { c.toast('Vença a fase anterior', 'bad'); return; }
     const now = performance.now(), id = info.stage.id;
@@ -161,8 +164,28 @@ export function renderMapa(c: Ctx): HTMLElement {
   if (sel) {
     const pt = points[stages.indexOf(sel.stage)], r = sel.stage.final === 'chefao' ? 42 : 34;
     const below = pt.y + r + 26 + 52 <= MAIN_H - 6;
-    playPop = h('div', { class: `play-pop${below ? '' : ' above'}`, style: `left:${pt.x}px;top:${below ? pt.y + r + 26 : pt.y - r - 62}px` },
-      h('button', { type: 'button', class: 'btn primary big play', 'data-fk': 'jogar', onclick: () => play(sel.stage.id) }, ui('dano', 30), 'Jogar'));
+    /* Caçada automática: só em fase com as três estrelas, e nunca no chefão do capítulo */
+    const st3 = sel.record.stars.every(Boolean), bossStage = sel.stage.number === 12, canHunt = sel.record.cleared && st3 && !bossStage;
+    const cycle = <T,>(list: T[], cur: T): T => list[(list.indexOf(cur) + 1) % list.length];
+    const huntRow = sel.record.cleared ? h('div', `hunt${canHunt ? '' : ' off'}`,
+      tip(h('button', { type: 'button', class: 'btn small hunt-go', disabled: !canHunt, 'data-fk': 'cacada', onclick: () => hunt(sel.stage.id) }, ui('auto', 24), 'Automático'), () => ({
+        title: 'Caçada automática', icon: ui('auto', 36), color: canHunt ? '#f2c14e' : undefined,
+        sub: canHunt ? `${c.st.huntRuns} ${c.st.huntRuns === 1 ? 'vez' : 'vezes'} seguidas, em ${c.st.huntSpeed}x` : bossStage ? 'O chefão é sempre na mão' : 'Abre com as 3 estrelas da fase', subColor: canHunt ? undefined : '#ff7b6b',
+        rows: [
+          { text: 'O herói luta sozinho, como alguém atento mas que erra. Rende o mesmo que jogar na mão.' },
+          { text: 'Para se o herói cair ou a mochila encher. Esc pausa; V muda a velocidade.', tone: 'dim' },
+        ],
+      })),
+      canHunt && tip(h('button', { type: 'button', class: 'chip hunt-chip', 'data-fk': 'cacada-vezes', 'aria-label': `Repetições: ${c.st.huntRuns}`, onclick: () => { c.st.huntRuns = cycle(HUNT_RUNS, c.st.huntRuns); c.redraw('cacada-vezes'); } }, `${c.st.huntRuns} ${c.st.huntRuns === 1 ? 'vez' : 'vezes'}`),
+        { title: 'Repetições', rows: [{ text: 'Quantas vezes seguidas a fase é jogada. Clique para mudar.' }] }),
+      canHunt && tip(h('button', { type: 'button', class: 'chip hunt-chip', 'data-fk': 'cacada-vel', 'aria-label': `Velocidade: ${c.st.huntSpeed}x`, onclick: () => { c.st.huntSpeed = cycle(HUNT_SPEEDS, c.st.huntSpeed); c.redraw('cacada-vel'); } }, `${c.st.huntSpeed}x`),
+        { title: 'Velocidade', rows: [{ text: 'A velocidade da luta. Clique para mudar; na fase, a tecla V também muda.' }] })) : null;
+    const tall = huntRow ? 100 : 52, left = Math.max(126, Math.min(MAIN_W - 126, pt.x));
+    const under = pt.y + r + 26 + tall <= MAIN_H - 6;
+    void below;
+    playPop = h('div', { class: `play-pop${under ? '' : ' above'}`, style: `left:${left}px;top:${under ? pt.y + r + 26 : pt.y - r - 10 - tall}px` },
+      h('button', { type: 'button', class: 'btn primary big play', 'data-fk': 'jogar', onclick: () => play(sel.stage.id) }, ui('dano', 30), 'Jogar'),
+      huntRow);
   }
 
   const idx = CHAPTERS.indexOf(chapter);

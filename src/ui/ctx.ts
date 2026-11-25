@@ -2,6 +2,8 @@
  * Estado das telas (o que está selecionado, ordenação, avisos) e o contexto que cada tela recebe.
  * Nada disto é salvo no perfil: é só memória de interface.
  */
+import type { AchievementGroup } from '../data/achievements';
+import type { EnemyKind } from '../data/balance';
 import type { ElementId, SpellId } from '../data/content';
 import type { Profile } from '../meta/profile';
 import type { CampTab, UiHost } from './host';
@@ -19,7 +21,10 @@ export type InvSort = 'novo' | 'raridade' | 'nivel' | 'tipo' | 'poder';
 export type InvFilter = 'tudo' | 'armas' | 'armaduras' | 'joias' | 'melhores';
 export type ForgeMode = 'aprimorar' | 'fundir' | 'encantar' | 'reforjar' | 'gemas';
 /** Abas do acampamento: as do contrato com o jogo e a Torre e o Diário, que só a interface conhece. */
-export type Tab = CampTab | 'torre' | 'diario';
+export type Tab = CampTab | 'torre' | 'diario' | 'almanaque';
+
+/** Seções do Almanaque. */
+export type AlmTab = 'conquistas' | 'bestiario' | 'itens';
 
 export interface CostLine { icon: string; amount: number; have: number }
 
@@ -69,6 +74,12 @@ export interface UiState {
   spellEl: ElementId | null;
   /** Filtro de elemento na tela de companheiros (nulo = todos). */
   compFilter: ElementId | null;
+  /** Almanaque: seção aberta, grupo de conquistas, capítulo e bicho escolhidos no bestiário. */
+  alm: { tab: AlmTab; group: AchievementGroup | null; chapter: number; kind: EnemyKind | null };
+  /** Caçada automática: repetições e velocidade escolhidas no mapa. */
+  huntRuns: number; huntSpeed: number;
+  /** Janelinha das builds salvas (tela do herói). */
+  builds: boolean;
   options: boolean;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
@@ -78,7 +89,9 @@ export function newState(): UiState {
   return {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
-    web: null, spellSel: null, spellEl: null, compFilter: null, options: false, confirm: null, toast: null,
+    web: null, spellSel: null, spellEl: null, compFilter: null,
+    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false,
+    options: false, confirm: null, toast: null,
   };
 }
 

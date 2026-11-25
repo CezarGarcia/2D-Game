@@ -8,12 +8,14 @@ import { UNIQUES, makeItem, makeSetItem, makeUnique } from '../src/data/items';
 import { BESTIARY, BESTIARY_KINDS, COMPANION_LORE, ENEMY_LORE } from '../src/data/lore';
 import { makeRng } from '../src/data/rng';
 import { STAGES, STAGE_BY_ID } from '../src/data/stages';
+import { findStage } from '../src/data/tower';
+import { isTrainingId, trainingId } from '../src/data/training';
 import { UI_ICON_KEYS } from '../src/art/uiicons';
 import { achievementProgress, checkAchievements, claimAchievement, claimAllAchievements, claimableAchievements } from '../src/meta/achievements';
 import { canReroll, countEvent, newTally, rerollMission, rerollsLeft, setClock, settleStage, touchDay } from '../src/meta/daily';
 import { KNOWLEDGE, knowledgeBonus, recordRun } from '../src/meta/life';
 import {
-  PROFILE_VERSION, addItem, addTalent, allocAttr, applyBuild, buildMatches, equip, migrate, newLife, newProfile, saveBuild, type Profile,
+  PROFILE_VERSION, addItem, addTalent, allocAttr, applyBuild, buildMatches, equip, migrate, newProfile, saveBuild, type Profile,
 } from '../src/meta/profile';
 import { applyOutcome, filterDismantles, type StageOutcome } from '../src/meta/rewards';
 import { deriveStats, referenceProfile } from '../src/meta/stats';
@@ -345,4 +347,50 @@ describe('jogador automático dentro do jogo', () => {
   });
 });
 
-void newLife;
+describe('terreiro de treino', () => {
+  it('uma sala com três bonecos: comum, blindado e elite, no nível pedido', () => {
+    const s = findStage(trainingId(27))!;
+    expect(isTrainingId(s.id)).toBe(true);
+    expect(s.level).toBe(27);
+    expect(s.rooms).toHaveLength(1);
+    const wave = s.rooms[0].waves[0];
+    expect(wave.map((d) => d.kind)).toEqual(['boneco', 'boneco', 'boneco']);
+    expect(wave.map((d) => [!!d.elite, (d.mods ?? []).join()])).toEqual([[false, ''], [false, 'blindado'], [true, '']]);
+    expect(findStage('treino-abc')!.level).toBe(1);
+  });
+
+  it('os bonecos não andam, não batem, não caem, e a sala nunca termina', () => {
+    const p = referenceProfile(40), s = findStage(trainingId(40))!;
+    const w = createWorld({ stageId: s.id, level: s.level, rooms: s.rooms, stats: deriveStats(p), seed: 3 });
+    const idle = { mx: 0, my: 0, aimX: 700, aimY: 300, attackPressed: false, attackHeld: false, altHeld: false, dodgePressed: false, spell: [false, false, false] as [boolean, boolean, boolean], petPressed: false, potionPressed: false, supremoPressed: false };
+    for (let i = 0; i < 90; i++) step(w, idle, TICK);
+    const at = w.enemies.map((e) => [e.x, e.y]);
+    expect(w.enemies.map((e) => e.state)).toEqual(['idle', 'idle', 'idle']);
+    /* pancadas enormes: a vida volta antes de acabar */
+    for (let i = 0; i < 400; i++) {
+      for (const e of w.enemies) damageEnemy(w, e, e.maxHp * 0.3, 'spell', 0);
+      step(w, idle, TICK);
+    }
+    expect(w.enemies).toHaveLength(3);
+    expect(w.kills).toBe(0);
+    expect(w.phase).toBe('fight');
+    expect(w.hitsTaken).toBe(0);
+    expect(w.pots).toHaveLength(0);
+    expect(w.challenge).toBeNull();
+    w.enemies.forEach((e, i) => { expect(Math.hypot(e.x - at[i][0], e.y - at[i][1])).toBeLessThan(3); });
+    /* parou de apanhar: a vida volta inteira */
+    for (let i = 0; i < 200; i++) step(w, idle, TICK);
+    for (const e of w.enemies) expect(e.hp).toBe(e.maxHp);
+  });
+
+  it('o boneco blindado recebe menos, e o de elite conta como elite', () => {
+    const p = referenceProfile(40), s = findStage(trainingId(40))!;
+    const w = createWorld({ stageId: s.id, level: s.level, rooms: s.rooms, stats: { ...deriveStats(p), critChance: 0, spellCrit: 0 }, seed: 3 });
+    const idle = { mx: 0, my: 0, aimX: 700, aimY: 300, attackPressed: false, attackHeld: false, altHeld: false, dodgePressed: false, spell: [false, false, false] as [boolean, boolean, boolean], petPressed: false, potionPressed: false, supremoPressed: false };
+    for (let i = 0; i < 90; i++) step(w, idle, TICK);
+    w.pet = null;
+    const [plain, armored, elite] = w.enemies.map((e) => damageEnemy(w, e, 1000, 'spell', 0));
+    expect(armored).toBeLessThan(plain * 0.7);
+    expect(elite / plain).toBeCloseTo(w.stats.eliteDamage, 2);
+  });
+});

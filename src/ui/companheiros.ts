@@ -4,6 +4,7 @@
  */
 import { paintHeroBackdrop } from '../art/backdrops';
 import { COMPANIONS, COMPANION_ORDER, ELEMENTS, ELEMENT_ORDER, type CompanionId, type ElementId } from '../data/content';
+import { COMPANION_LORE } from '../data/lore';
 import { setCompanion } from '../meta/profile';
 import { MAIN_H, MAIN_W, unseen, type Ctx } from './ctx';
 import { backdrop, h, hdCanvas, keycap, num, stat, ui } from './dom';
@@ -58,6 +59,7 @@ export function renderCompanheiros(c: Ctx): HTMLElement {
       title: def.name, color: active ? '#f2c14e' : el.color, icon: ui(def.element, 36),
       sub: `${el.name} · ${own ? (active ? 'Vai com você' : 'Fica no acampamento') : 'Na gaiola'}`, subColor: own ? (active ? '#f2c14e' : undefined) : '#ff7b6b',
       rows: [
+        own && { text: COMPANION_LORE[id], tone: 'dim' as const },
         !own && { icon: 'gaiola', text: `Resgate: ${def.where}`, tone: 'gold' as const },
         { head: 'Sempre' },
         { icon: PASSIVE_ICON[id], text: def.passive, tone: 'ok' as const },

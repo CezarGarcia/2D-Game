@@ -31,7 +31,10 @@ export interface RoomDef {
   /** Ilusões por onda: cópias falsas dos monstros, que somem com um golpe (Pantanal). */
   illusions?: number;
   /** De tanto em tanto tempo um feitiço é apagado até a sala acabar (Terra Sem Nome). */
-  erase?: boolean;  /** Torre: nível dos monstros desta sala (senão vale o da fase), andar e capítulo de onde vêm a arte e o terreno. */
+  erase?: boolean;
+  /** Terreiro de treino: sem potes nem desafio. */
+  training?: boolean;
+  /** Torre: nível dos monstros desta sala (senão vale o da fase), andar e capítulo de onde vêm a arte e o terreno. */
   level?: number;
   floor?: number;
   artChapter?: number;
@@ -365,7 +368,7 @@ const LEGACY_NAMES: Partial<Record<EnemyKind, string>> = {
   sauva: 'Saúva-Cinza', queixada: 'Queixada Sombria', cuspidor: 'Cuspidor', tronco: 'Tronco-Oco',
   urutau: 'Urutau', cogumelo: 'Cogumelo-Estouro', caipora: 'Caipora', curupira: 'Curupira',
   piranha: 'Piranha-Cinza', sapo: 'Sapo-Cururu', arraia: 'Arraia de Areia', caramujo: 'Caramujo-Concha', jacare: 'Jacaré de Lodo',
-  boto: 'Boto', iara: 'Iara',
+  boto: 'Boto', iara: 'Iara', boneco: 'Boneco de Treino',
 };
 
 /** Como cada inimigo luta, em poucas palavras, para os avisos do mapa. */
@@ -385,6 +388,7 @@ const LEGACY_HINT: Partial<Record<EnemyKind, string>> = {
   jacare: 'Bote longo de frente, rabada se você fica atrás.',
   boto: 'Mergulha e sai debaixo de você.',
   iara: 'O canto te puxa para ela.',
+  boneco: 'Não anda, não bate e não cai.',
 };
 
 export const ENEMY_NAMES = new Proxy({} as Record<EnemyKind, string>, {

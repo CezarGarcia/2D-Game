@@ -8,7 +8,7 @@ import { EXP_MODS, EXP_REWARDED_RUNS, EXP_SLOTS, MISSIONS, REST_MAX_DAYS, expedi
 import { CHAPTERS, ENEMY_NAMES } from '../data/stages';
 import {
   chestPreview, chestReady, claimChest, claimMission, expeditionRunsLeft, expeditionsToday, expeditionsUnlocked, missionDone, missionHint,
-  missionText, msToMidnight, restInfo, type ExpeditionInfo, type Reward,
+  missionText, msToMidnight, canReroll, rerollMission, rerollsLeft, restInfo, type ExpeditionInfo, type Reward,
 } from '../meta/daily';
 import type { MissionState, Profile } from '../meta/profile';
 import { MAIN_H, MAIN_W, type Ctx } from './ctx';
@@ -86,7 +86,10 @@ function missionCard(c: Ctx, m: MissionState, i: number): HTMLElement {
       rewardRow(m.reward, 22)),
     m.claimed
       ? h('span', 'dm-done', ui('check', 34))
-      : h('button', { type: 'button', class: `btn ${done ? 'primary' : ''} dm-claim`, disabled: !done, 'data-fk': `missao-${i}`, onclick: claim }, done ? 'Pegar' : ui('cadeado', 24))),
+      : !done && canReroll(c.p, i)
+        ? tip(h('button', { type: 'button', class: 'btn dm-claim dm-swap', 'data-fk': `missao-${i}`, onclick: (e: Event) => { e.stopPropagation(); const fresh = rerollMission(c.p, i); if (fresh) { c.toast(`Nova missão: ${missionText(fresh)}`); c.commit(`missao-${i}`); } } }, ui('trocar', 26), 'Trocar'),
+          { title: 'Trocar de missão', icon: ui('trocar', 36), tag: `${rerollsLeft(c.p)} hoje`, rows: [{ text: 'Sorteia outra missão no lugar desta. O progresso dela se perde.' }, { text: 'Uma troca grátis por dia.', tone: 'dim' }] })
+        : h('button', { type: 'button', class: `btn ${done ? 'primary' : ''} dm-claim`, disabled: !done, 'data-fk': `missao-${i}`, onclick: claim }, done ? 'Pegar' : ui('cadeado', 24))),
   () => ({
     title: missionText(m), color: color ?? '#f2c14e', icon: missionIcon(m, 36), tag: `${num(Math.min(m.progress, m.target))}/${num(m.target)}`,
     sub: m.claimed ? 'Recompensa recebida' : done ? 'Pronta: pegue a recompensa' : 'Em andamento', subColor: m.claimed ? '#b9b2a3' : done ? '#86e07a' : undefined,

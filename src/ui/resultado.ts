@@ -3,6 +3,8 @@
  * Na Torre, os andares vencidos e o recorde tomam o lugar das estrelas. Na primeira vitória sobre o
  * Esquecimento, antes de tudo vem a tela do final.
  */
+import { ACHIEVEMENT_BY_ID } from '../data/achievements';
+import type { HuntSummary } from './host';
 import { paintHeroBackdrop } from '../art/backdrops';
 import { gemName, gemText, type Gem, type Item } from '../data/items';
 import { COMPANIONS, ELEMENTS, SPELLS, SUPREMOS } from '../data/content';
@@ -36,7 +38,7 @@ function countUp(c: Ctx, to: number, delay: number, prefix = '+'): HTMLElement {
   return el;
 }
 
-export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLElement {
+export function renderResultado(c: Ctx, stageId: string, r: StageRewards, hunt?: HuntSummary): HTMLElement {
   if (r.credits && !finaleDone.has(r)) return renderFinal(c, r);
   const p = c.p, tower = isTowerId(stageId) && r.tower ? r.tower : null;
   const daily: DailyNews | undefined = (r as SettledRewards).daily, exp = isExpeditionId(stageId) ? daily?.expedition ?? null : null;
@@ -106,6 +108,33 @@ export function renderResultado(c: Ctx, stageId: string, r: StageRewards): HTMLE
     const m = p.daily.missions[i];
     if (m) note(ui('diario', 34), 'Missão cumprida', 'diario', { title: missionText(m), color: '#f2c14e', icon: ui('diario', 36), sub: 'Missão do dia pronta', subColor: '#86e07a', foot: ['Clique: pegar no diário'] }, 'gold');
   }
+  if (hunt) {
+    const why = { fim: 'Fila completa', queda: 'O herói caiu', mochila: 'A mochila encheu', parou: 'Você encerrou a caçada' }[hunt.stopped];
+    note(ui('auto', 34), `Caçada: ${hunt.wins} de ${hunt.runs}`, null, {
+      title: 'Caçada automática', color: '#f2c14e', icon: ui('auto', 36), sub: why, subColor: hunt.stopped === 'fim' ? '#86e07a' : '#ffb238',
+      rows: [
+        { icon: 'mapa', text: 'Fases vencidas', value: `${hunt.wins} / ${hunt.runs}` },
+        { head: 'Somando todas' },
+        { icon: 'xp', text: 'Experiência', value: `+${num(hunt.xp)}`, tone: 'ok' },
+        { icon: 'ouro', text: 'Ouro', value: `+${num(hunt.gold)}`, tone: 'ok' },
+        { icon: 'item', text: 'Itens guardados', value: num(hunt.items) },
+        hunt.dismantled > 0 ? { icon: 'filtro', text: 'Desmontados pelo filtro', value: num(hunt.dismantled) } : null,
+        { icon: 'resina', text: 'Resina', value: `+${num(hunt.mata)}`, tone: 'ok' },
+        hunt.po > 0 ? { icon: 'po', text: 'Pó de encanto', value: `+${num(hunt.po)}`, tone: 'ok' } : null,
+        hunt.tomo > 0 ? { icon: 'tomo', text: 'Tomos', value: `+${num(hunt.tomo)}`, tone: 'ok' } : null,
+        hunt.levels > 0 ? { icon: 'xp', text: 'Níveis ganhos', value: `+${hunt.levels}`, tone: 'gold' } : null,
+      ],
+    }, 'gold');
+  }
+  for (const id of (r as SettledRewards).achievements ?? []) {
+    const a = ACHIEVEMENT_BY_ID.get(id);
+    if (a) note(ui('conquista', 34), a.name, 'almanaque', { title: a.name, color: '#f2c14e', icon: ui(a.icon, 36), sub: 'Conquista alcançada', subColor: '#86e07a', rows: [{ text: a.desc }], foot: ['Clique: pegar o prêmio no Almanaque'] }, 'gold');
+  }
+  if (r.dismantled) note(ui('filtro', 34), `${r.dismantled.count} ${r.dismantled.count === 1 ? 'desmontado' : 'desmontados'}`, 'heroi', {
+    title: 'Filtro de saque', icon: ui('filtro', 36), sub: 'Sobras desmontadas na hora',
+    rows: [{ icon: 'item', text: 'Itens', value: num(r.dismantled.count) }, { icon: 'resina', text: 'Resina', value: `+${num(r.dismantled.mata)}`, tone: 'ok' }, r.dismantled.po > 0 ? { icon: 'po', text: 'Pó de encanto', value: `+${num(r.dismantled.po)}`, tone: 'ok' } : null],
+    foot: ['Clique: ajustar no herói'],
+  });
   if (r.named) note(star(true, 30), 'Item com nome!', 'heroi', itemTip(p, r.named, { where: 'mochila', foot: ['Clique: ver no herói'] }), 'gold');
   if (r.rescued) { const d = COMPANIONS[r.rescued]; note(ui('companheiro', 34), `${d.name} livre!`, 'companheiros', { title: d.name, color: '#f2c14e', sub: 'Novo companheiro', rows: [{ icon: 'companheiro', text: d.passive, tone: 'ok' }, { text: `${d.activeName}: ${d.active}` }], foot: ['Clique: ver companheiros'] }, 'gold'); }
   if (r.supremo) { const d = SUPREMOS[r.supremo]; note(ui(r.supremo, 34), `${d.name} libertado!`, 'feiticos', { title: d.name, color: ELEMENTS[r.supremo].color, icon: ui('supremo', 40), sub: `Encantado libertado · Supremo de ${ELEMENTS[r.supremo].name}`, subColor: ELEMENTS[r.supremo].color, rows: [{ text: d.desc }, { icon: 'supremo', text: 'Tecla T quando a carga enche', tone: 'dim' }], foot: ['Clique: ver feitiços'] }, 'gold'); }

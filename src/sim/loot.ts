@@ -195,7 +195,7 @@ export function startRoomLoot(w: World, room: RoomDef, index: number, revive: bo
   w.wisp = null;
   if (revive) { if (w.challenge?.state === 'ativo') w.challenge.state = 'perdido'; return; }
   w.pots = []; w.challenge = null;
-  if (room.type === 'altar') return;
+  if (room.type === 'altar' || room.training) return;
   /* a sala do chefão fica limpa */
   const n = room.type === 'boss' ? 0 : Math.floor(lootRand(w) * (POTS.max + 1));
   for (let i = 0; i < n; i++) {

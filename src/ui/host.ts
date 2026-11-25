@@ -8,20 +8,27 @@ import type { StageRewards } from '../meta/rewards';
 
 export type CampTab = 'mapa' | 'heroi' | 'ferreiro' | 'talentos' | 'feiticos' | 'companheiros';
 
+/** Soma de uma Caçada automática, para a tela de resultado. */
+export interface HuntSummary { runs: number; wins: number; xp: number; gold: number; items: number; dismantled: number; mata: number; po: number; tomo: number; levels: number; stopped: 'fim' | 'queda' | 'mochila' | 'parou' }
+
 export interface UiHost {
   /** Perfil em memória. Pode ser trocado por outro objeto depois de `resetGame`, então leia sempre por aqui. */
   getProfile(): Profile;
   /** Grava o perfil. Chame depois de qualquer alteração. */
   save(): void;
-  /** Fecha os menus e começa a fase. */
-  startStage(stageId: string): void;
+  /** Fecha os menus e começa a fase. Com `auto`, a Caçada automática joga a fase `runs` vezes seguidas. */
+  startStage(stageId: string, opts?: { auto?: { runs: number; speed: number } }): void;
+  /** Abre o Terreiro de treino. */
+  startTraining(): void;
   /** Apaga o progresso e recomeça do zero. */
   resetGame(): void;
 }
 
 export interface UiController {
   showCamp(tab?: CampTab): void;
-  showResults(stageId: string, rewards: StageRewards): void;
+  showResults(stageId: string, rewards: StageRewards, hunt?: HuntSummary): void;
+  /** Aviso curto por cima da tela atual (conquistas). */
+  notify(text: string): void;
   hide(): void;
   readonly visible: boolean;
 }

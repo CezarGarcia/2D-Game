@@ -4,9 +4,13 @@ import { VIEW } from './data/balance';
 import { StageScene } from './game/StageScene';
 import { music, unlockAudio } from './game/music';
 import { session } from './game/session';
-import { loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
+import { ACHIEVEMENT_BY_ID } from './data/achievements';
+import { isTrainingId, trainingId } from './data/training';
+import { checkAchievements } from './meta/achievements';
+import { inventoryFull, loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
 import { settleStage, touchDay } from './meta/daily';
 import { mountUi } from './ui/app';
+import type { HuntSummary } from './ui/host';
 
 let ready = false;
 let pendingStage: string | null = null;
@@ -62,7 +66,9 @@ class CampScene extends Phaser.Scene {
 }
 
 session.profile = loadProfile();
-if (touchDay(session.profile)) saveProfile(session.profile);
+/* conquistas que um save antigo já cumpria entram caladas: ficam à espera no Almanaque */
+const hadNews = checkAchievements(session.profile).length > 0;
+if (touchDay(session.profile) || hadNews) saveProfile(session.profile);
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -75,16 +81,29 @@ const game = new Phaser.Game({
   scene: [BootScene, CampScene, StageScene],
 });
 
+/** Caçada automática em andamento: quantas partidas faltam e o que já rendeu. */
+let hunt: { stageId: string; left: number; total: number; sum: HuntSummary } | null = null;
+
+function launch(stageId: string, auto?: { speed: number; index: number; total: number }): void {
+  if (!ready) { pendingStage = stageId; return; }
+  game.scene.stop('camp');
+  game.scene.stop('stage');
+  game.scene.start('stage', { stageId, auto });
+}
+
 const ui = mountUi(document.getElementById('ui')!, {
   getProfile: () => session.profile!,
   save: () => { saveProfile(session.profile!); },
-  startStage: (stageId) => {
+  startStage: (stageId, opts) => {
     ui.hide();
-    if (!ready) { pendingStage = stageId; return; }
-    game.scene.stop('camp');
-    game.scene.stop('stage');
-    game.scene.start('stage', { stageId });
+    const a = opts?.auto;
+    if (a && a.runs >= 1) {
+      session.autoSpeed = a.speed;
+      hunt = { stageId, left: a.runs, total: a.runs, sum: { runs: 0, wins: 0, xp: 0, gold: 0, items: 0, dismantled: 0, mata: 0, po: 0, tomo: 0, levels: 0, stopped: 'fim' } };
+      launch(stageId, { speed: a.speed, index: 1, total: a.runs });
+    } else { hunt = null; launch(stageId); }
   },
+  startTraining: () => { ui.hide(); hunt = null; launch(trainingId(session.profile!.level)); },
   resetGame: () => {
     wipeSave();
     session.profile = newProfile();
@@ -93,14 +112,38 @@ const ui = mountUi(document.getElementById('ui')!, {
   },
 });
 
+const afterStep = (fn: () => void) => game.events.once(Phaser.Core.Events.POST_STEP, fn);
+
 session.onStageEnd = (outcome) => {
-  const rewards = settleStage(session.profile!, outcome);
-  saveProfile(session.profile!);
+  const profile = session.profile!;
+  /* o Terreiro não paga nada nem entra em contador nenhum: só volta para a tela do herói */
+  if (isTrainingId(outcome.stageId)) {
+    afterStep(() => { game.scene.stop('stage'); game.scene.start('camp'); ui.showCamp('heroi'); });
+    return;
+  }
+  const rewards = settleStage(profile, outcome);
+  saveProfile(profile);
+  const h = hunt;
+  if (h) {
+    const s = h.sum;
+    s.runs++; s.wins += outcome.won ? 1 : 0; s.xp += rewards.xp; s.gold += rewards.gold; s.items += rewards.items.length; s.levels += rewards.levels;
+    s.dismantled += rewards.dismantled?.count ?? 0; s.mata += rewards.materials.mata; s.po += rewards.materials.po; s.tomo += rewards.materials.tomo;
+    h.left--;
+    /* continua enquanto houver partidas, o herói vencer e couber item na mochila */
+    const full = inventoryFull(profile);
+    if (outcome.won && h.left > 0 && !full) {
+      afterStep(() => launch(h.stageId, { speed: session.autoSpeed, index: h.total - h.left + 1, total: h.total }));
+      return;
+    }
+    s.stopped = !outcome.won ? (outcome.roomsCleared >= 0 && outcome.deaths > 0 ? 'queda' : 'parou') : h.left > 0 && full ? 'mochila' : 'fim';
+    hunt = null;
+  }
   // troca de cena só depois do passo atual do Phaser, para não destruir objetos no meio da atualização
-  game.events.once(Phaser.Core.Events.POST_STEP, () => {
+  afterStep(() => {
     game.scene.stop('stage');
     game.scene.start('camp');
-    ui.showResults(outcome.stageId, rewards);
+    ui.showResults(outcome.stageId, rewards, h && h.total > 1 ? h.sum : undefined);
+    for (const id of rewards.achievements ?? []) { const a = ACHIEVEMENT_BY_ID.get(id); if (a) ui.notify(`Conquista: ${a.name}`); }
   });
 };
 

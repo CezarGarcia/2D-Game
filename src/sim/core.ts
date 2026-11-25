@@ -228,6 +228,8 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
 
   dmg = Math.max(dmg > 0 ? 1 : 0, Math.round(dmg));
   e.hp -= dmg;
+  /* o boneco de treino nunca cai: perto do fim, a palha se refaz */
+  if (e.kind === 'boneco' && e.hp < e.maxHp * 0.1) e.hp = e.maxHp;
   e.flash = 0.1; e.sinceHit = 0; e.hits++;
   wakeAndCharge(w, e, source);
   if (weapon) {

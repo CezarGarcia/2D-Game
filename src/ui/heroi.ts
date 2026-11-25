@@ -7,16 +7,16 @@
  */
 import { paintHeroBackdrop } from '../art/backdrops';
 import { drawHero } from '../art/characters';
-import { ELEMENTS, ELEMENT_ORDER } from '../data/content';
+import { COMPANIONS, ELEMENTS, ELEMENT_ORDER, SPELLS } from '../data/content';
 import { ITEM_TYPES, RARITIES, SETS, SLOT_LABEL, UNIQUES, WEAPON_KINDS, affixText, baseLabel, canHoldGem, gemText, itemScore, sellValue, type Item, type ItemType, type Slot } from '../data/items';
 import { equipBest, junkItems, junkValue, planUpgrades, sellJunk } from '../meta/mochila';
 import {
-  ATTRS, ATTR_BASE, ATTR_PER_LEVEL, FREE_RESPEC_LEVEL, INVENTORY_SIZE, allocAttr, dismantleItem, dismantleYield, equip, findItem, inventoryFull, offhandWarning,
+  ATTRS, ATTR_BASE, ATTR_PER_LEVEL, FREE_RESPEC_LEVEL, INVENTORY_SIZE, allocAttr, applyBuild, buildMatches, saveBuild, dismantleItem, dismantleYield, equip, findItem, inventoryFull, offhandWarning,
   resetAttrs, respecCost, sellItem, toggleLock, unequip, type AttrKey, type Profile,
 } from '../meta/profile';
 import { BASE_MOVE_SPEED, activeItems, attrEffects, damageReduction, deriveStats, powerOf, setCounts, totalAttrs } from '../meta/stats';
 import { MAIN_H, MAIN_W, VIEW_H, VIEW_W, type Ctx, type InvFilter, type InvSort } from './ctx';
-import { backdrop, br, h, hdCanvas, num, pct, signed, ui } from './dom';
+import { backdrop, br, h, hdCanvas, itemIcon, num, pct, signed, ui } from './dom';
 import { AFFIX_ICON, SET_STEPS, compareTable, emptyTile, fullName, gemTile, itemTile, itemTip, powerDelta, rarColor, targetSlot, typeLine } from './itens';
 import { drawFigure } from './retratos';
 import { tip, type TipRow } from './tip';
@@ -150,6 +150,51 @@ function attrsBlock(c: Ctx): HTMLElement {
     })));
 }
 
+/* ---------- builds salvas ---------- */
+
+function buildsPop(c: Ctx): HTMLElement {
+  const p = c.p;
+  const rows = p.builds.map((b, i) => {
+    const on = !!b && buildMatches(p, i), weapon = b?.equipped.arma != null ? findItem(p, b.equipped.arma)?.item.type : undefined;
+    const save = () => {
+      const type = p.equipped.arma?.type ?? 'facao';
+      saveBuild(c.p, i, ITEM_TYPES[type].label);
+      c.toast(`Build ${i + 1} guardada`);
+      c.commit(`build-salvar-${i}`);
+    };
+    const use = () => {
+      const r = applyBuild(c.p, i);
+      if (!r) return;
+      const lost = [r.missing ? `${r.missing} ${r.missing === 1 ? 'item não está mais com você' : 'itens não estão mais com você'}` : '', r.attrsKept ? 'atributos ficaram como estavam' : '', r.talentsKept ? 'talentos ficaram como estavam' : ''].filter(Boolean);
+      c.toast(lost.length ? `Build ${i + 1}: ${lost.join('; ')}` : `Build ${i + 1} em uso`, lost.length ? 'bad' : 'ok');
+      c.st.heroSel = null; c.st.builds = false;
+      c.commit('builds');
+    };
+    return h('div', `build-row${on ? ' on' : ''}${b ? '' : ' empty'}`,
+      tip(h('button', { type: 'button', class: 'build-use', disabled: !b || on, 'data-fk': `build-usar-${i}`, onclick: use },
+        h('span', 'build-n', i + 1),
+        b ? itemIcon(weapon ?? 'facao', 34) : ui('mais', 26),
+        h('span', 'build-name', b ? b.name : 'Vazia'),
+        on && h('span', 'build-on', ui('check', 18))),
+      () => (b ? {
+        title: `Build ${i + 1} · ${b.name}`, color: on ? '#f2c14e' : undefined, sub: on ? 'Em uso' : 'Guardada', subColor: on ? '#86e07a' : undefined,
+        rows: [
+          { icon: 'item', text: 'Itens', value: String(Object.keys(b.equipped).length) },
+          { icon: 'talentos', text: 'Pontos de talento', value: String(Object.values(b.talents).reduce((n, v) => n + v, 0)) },
+          { icon: 'feiticos', text: b.loadout.filter(Boolean).map((sp) => SPELLS[sp!].name).join(', ') || 'Sem feitiços' },
+          b.companion ? { icon: 'companheiro', text: COMPANIONS[b.companion].name } : null,
+        ],
+        foot: [on ? null : 'Clique: usar esta build'],
+      } : { title: `Build ${i + 1}`, sub: 'Vazia', rows: [{ text: 'Guarde aqui o que o herói está usando agora.', tone: 'dim' }] })),
+      tip(h('button', { type: 'button', class: 'btn small build-save', 'aria-label': `Guardar na build ${i + 1}`, 'data-fk': `build-salvar-${i}`, onclick: b && !on ? () => c.confirm({ title: `Trocar a build ${i + 1}?`, text: 'O que está guardado nela é substituído pelo que o herói usa agora.', icon: 'build', ok: 'Guardar', run: save }) : save }, 'Guardar'),
+        { title: 'Guardar aqui', rows: [{ text: 'Guarda os itens, atributos, talentos, feitiços, Supremo e companheiro de agora.' }] }));
+  });
+  return h('div', { class: 'pop builds-pop', role: 'dialog', 'aria-label': 'Builds salvas' },
+    h('div', 'builds-title', ui('build', 24), 'Builds salvas'),
+    rows,
+    h('div', 'builds-note', 'Trocar de build é grátis.'));
+}
+
 function dollPanel(c: Ctx, target: Slot | null): HTMLElement {
   const p = c.p, W = 212, H = 300;
   const { cv } = hdCanvas(W, H, 'hero-cv');
@@ -164,6 +209,13 @@ function dollPanel(c: Ctx, target: Slot | null): HTMLElement {
   });
   const power = powerOf(deriveStats(p));
   return h('section', { class: 'panel hero-doll', 'aria-label': 'Equipamento e atributos' },
+    tip(h('button', { type: 'button', class: 'round-btn hd-corner left', 'aria-label': 'Terreiro de treino', 'data-fk': 'treino', onclick: () => c.host.startTraining() }, ui('treino', 28)), {
+      title: 'Terreiro de treino', icon: ui('treino', 36), rows: [{ text: 'Três bonecos de palha e um medidor de dano, para testar golpes, feitiços e reações.' }, { text: 'Não vale ouro nem experiência.', tone: 'dim' }], foot: ['Clique: treinar'],
+    }),
+    tip(h('button', { type: 'button', class: `round-btn hd-corner right${c.st.builds ? ' on' : ''}`, 'aria-label': 'Builds salvas', 'aria-expanded': String(c.st.builds), 'data-fk': 'builds', onclick: () => { c.st.builds = !c.st.builds; c.st.menu = null; c.redraw('builds'); } }, ui('build', 28)), {
+      title: 'Builds salvas', icon: ui('build', 36), rows: [{ text: 'Guarde até três jeitos de montar o herói e troque entre eles com um clique.' }],
+    }),
+    c.st.builds && buildsPop(c),
     tip(h('div', 'hd-power', ui('poder', 30), h('b', null, num(power)), h('span', null, 'Poder')), { title: 'Poder', icon: ui('poder', 36), rows: [{ text: 'Resume o dano e a resistência do herói. Os números verdes na mochila dizem quanto cada item soma.' }] }),
     h('div', 'hd-body',
       h('div', 'doll-col', LEFT.map((s) => slotTile(c, s, target))),
@@ -173,6 +225,27 @@ function dollPanel(c: Ctx, target: Slot | null): HTMLElement {
 }
 
 /* ---------- mochila ---------- */
+
+const FILTER_STEPS = [-1, 0, 1, 2];
+
+/** Filtro de saque: cada clique passa para o próximo grau (desligado, Comuns, até Incomuns, até Raros). */
+function filterButton(c: Ctx): HTMLElement {
+  const cur = c.p.lootFilter.dismantle, on = cur >= 0;
+  const label = (v: number) => (v < 0 ? 'Desligado' : v === 0 ? 'Só Comuns' : `Até ${RARITIES[v].label}s`);
+  return tip(h('button', {
+    type: 'button', class: `mini-btn loot-filter${on ? ' on' : ''}`, style: on ? `--rar:${RARITIES[cur].color}` : null, 'aria-label': `Filtro de saque: ${label(cur)}`, 'data-fk': 'filtro-saque',
+    onclick: () => { const next = FILTER_STEPS[(FILTER_STEPS.indexOf(cur) + 1) % FILTER_STEPS.length]; c.p.lootFilter.dismantle = next; c.toast(`Filtro de saque: ${label(next)}`); c.commit('filtro-saque'); },
+  }, ui('filtro', 22), on && h('i', 'lf-dot')), () => ({
+    title: 'Filtro de saque', icon: ui('filtro', 36), sub: label(cur), subColor: on ? RARITIES[cur].color : '#b9b2a3',
+    rows: [
+      { text: 'Ao sair de uma fase, os itens até essa raridade são desmontados na hora e viram resina e pó.' },
+      { head: 'Nunca desmonta' },
+      { icon: 'poder', text: 'O que aumenta o seu Poder' },
+      { icon: 'conjunto', text: 'Peças de conjunto e itens com nome' },
+    ],
+    foot: ['Clique: mudar'],
+  }));
+}
 
 function bagPanel(c: Ctx, gain: Map<number, number>): HTMLElement {
   const p = c.p, f = c.st.invFilter;
@@ -210,7 +283,8 @@ function bagPanel(c: Ctx, gain: Map<number, number>): HTMLElement {
           title: 'Vender sobras', rows: junk.length
             ? [{ text: `${junk.length} ${junk.length === 1 ? 'item Comum ou Incomum' : 'itens Comuns ou Incomuns'} que não aumentam o Poder.` }, { icon: 'ouro', text: 'Ouro', value: `+${num(junkValue(junk))}`, tone: 'ok' }, { text: 'Itens travados, de conjunto, com nome, com gema ou aprimorados ficam.', tone: 'dim' }]
             : [{ text: 'Nenhuma sobra na mochila.', tone: 'dim' }],
-        }))),
+        }),
+        filterButton(c))),
     h('div', 'bag2-bar',
       h('div', { class: 'chips', role: 'group', 'aria-label': 'Filtrar' }, FILTERS.map((x) => h('button', {
         type: 'button', class: `chip${f === x.id ? ' on' : ''}${x.id === 'melhores' && ups ? ' hot' : ''}`, 'aria-pressed': String(f === x.id), 'data-fk': `filtro-${x.id}`,

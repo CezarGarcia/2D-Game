@@ -4,6 +4,28 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 
 **Tamanho:** P é pequeno (um dia de trabalho focado), M é médio (alguns dias), G é grande (uma ou duas semanas). Serve para comparar as partes, não é prazo.
 
+## Estado
+
+| Fase | Estado |
+|---|---|
+| 0 · Preparação | **Feita** |
+| 1 · Conveniências e coleção | **Feita** |
+| 2 · Bênçãos com padrinho | A fazer |
+| 3 · O Sonho, o núcleo | A fazer |
+| 4 · Roda, Presságios, Cordéis e Aspectos | A fazer |
+| 5 · Aldeia, companheiros, pós-jogo e exagero | A fazer |
+
+### O que mudou em relação ao plano nas fases 0 e 1
+
+- **Campos do perfil.** A versão 2 só ganhou os campos que as fases 0 e 1 usam: `life`, `achievements`, `uniquesFound`, `lootFilter`, `builds` e `daily.rerolls`. Os do Sonho, da Aldeia, dos Cordéis e dos Aspectos entram com as fases deles, cada um com o seu passo de migração.
+- **Conquistas.** São 58 (o plano pedia 40 nesta fase): Campanha, Combate, Coleção, Ofício e Segredos. O prêmio é ouro e material, porque as Lembranças só existem a partir da fase 3. As do Sonho entram com ele.
+- **Almanaque.** Três seções: Conquistas, Bestiário e Itens com nome. Os Encantados ficam dentro do Bestiário, como o chefão de cada capítulo, e o texto de cada companheiro aparece na tela dos Companheiros.
+- **Terreiro.** Três bonecos fixos (comum, blindado e elite) no lugar de um boneco configurável: cobre os três casos em que o dano muda, sem tela de ajuste. O medidor mostra dano por segundo (últimos 4 s), média, total, maior golpe, reações e de onde veio o dano.
+- **Caçada automática.** As cartas de bênção ficam 0,75 s na tela (o plano dizia 0,4 s) e o jogador ainda pode escolher na mão nesse tempo. O automático escolhe a mais rara. Cada partida da fila usa uma semente diferente.
+- **Filtro de saque.** Além de conjunto e item com nome, também nunca desmonta o que aumenta o Poder.
+- **Builds.** Guardam também atributos e talentos, e trocar é sempre grátis: o custo de redistribuir já foi pago ao montar cada build.
+- **Fora do plano: HUD da fase.** A vida, a mana, a barra de ações, o cabeçalho, a barra de chefe e as cartas de bênção foram redesenhados em placas de madeira, no estilo dos menus (`src/game/hudart.ts`).
+
 ## O que o código atual já dá
 
 | Precisamos de | Já existe |

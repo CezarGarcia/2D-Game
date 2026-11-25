@@ -3,20 +3,24 @@
  * Nenhuma regra de combate mora aqui; a cena só mostra o que a simulação decidiu.
  */
 import Phaser from 'phaser';
-import { ALL_SHEETS, BAKE, SHEETS, ensureChapterArt, ensureHero, sheetChapter, type Sheet } from '../art/bake';
+import { ALL_SHEETS, BAKE, SHEETS, ensureChapterArt, ensureHero, makeKit, sheetChapter, type Sheet } from '../art/bake';
+import { paintTrainingGround } from '../art/treino';
 import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase, isBossKind, isMonster } from '../data/balance';
 import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
 import { artChaptersOf, findStage, isTowerId } from '../data/tower';
+import { isTrainingId } from '../data/training';
 import { boitataBody } from '../sim/bosses';
 import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, REACTIONS, SPELLS, SUPREMOS, blessingCounts, type BlessingId, type ElementId } from '../data/content';
 import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
 import { deriveStats } from '../meta/stats';
+import { HUMAN, makeBot } from '../sim/bot';
 import { isBoss } from '../sim/core';
 import { challengeLeft } from '../sim/loot';
 import { comboOf, spellCost } from '../sim/player';
 import { chooseBlessing, chooseOffer, createWorld, exitZone, step, type Buff, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
+import { CARD, HUD_SCALE, SLOT, TIER_COLORS, VITALS, bakeHud, plateTexture } from './hudart';
 import { music, unlockAudio } from './music';
 import { session } from './session';
 import { sfx } from './sfx';
@@ -37,6 +41,33 @@ interface Fx {
   x: number; y: number; t: number; dur: number;
   r0?: number; r1?: number; color?: number; ang?: number; width?: number; n?: number; seed?: number; x2?: number; y2?: number;
 }
+/** Velocidades da Caçada automática (tecla V troca). */
+const AUTO_SPEEDS = [1, 2, 3];
+
+/** Medidor de dano do Terreiro: soma os golpes desde o primeiro até parar de bater. */
+type MeterGroup = 'arma' | 'feitico' | 'pet' | 'reacao' | 'efeito';
+interface Meter {
+  /** Tempo de relógio do primeiro e do último golpe da medição (−1 = ainda não começou). */
+  t0: number; last: number;
+  total: number; max: number; hits: number; reactions: number;
+  by: Record<MeterGroup, number>;
+  /** Golpes recentes, para o dano por segundo "agora". */
+  recent: { t: number; v: number }[];
+}
+function newMeter(): Meter { return { t0: -1, last: -1, total: 0, max: 0, hits: 0, reactions: 0, by: { arma: 0, feitico: 0, pet: 0, reacao: 0, efeito: 0 }, recent: [] }; }
+const METER_GROUPS: { id: MeterGroup; name: string; color: number; css: string }[] = [
+  { id: 'arma', name: 'Arma', color: 0xe9e4d4, css: '#e9e4d4' },
+  { id: 'feitico', name: 'Feitiços', color: 0x5cc8f0, css: '#5cc8f0' },
+  { id: 'pet', name: 'Companheiro', color: 0xf2a65a, css: '#f2a65a' },
+  { id: 'reacao', name: 'Reações', color: 0xffd23f, css: '#ffd23f' },
+  { id: 'efeito', name: 'Veneno e fogo', color: 0x8fe36a, css: '#8fe36a' },
+];
+const METER_OF: Record<string, MeterGroup> = { melee: 'arma', arrow: 'arma', roll: 'arma', spell: 'feitico', pet: 'pet', ally: 'pet', reaction: 'reacao', spark: 'reacao', poison: 'efeito', burn: 'efeito', blast: 'efeito', reflect: 'efeito' };
+/** Sem bater por este tempo, a próxima pancada começa uma medição nova. */
+const METER_IDLE = 5;
+const METER_WINDOW = 4;
+const big = (n: number): string => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace('.', ',')} mi` : n >= 1e4 ? `${(n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace('.', ',')} mil` : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
+
 interface EnemyView { spr: Phaser.GameObjects.Sprite; shadow: Phaser.GameObjects.Image; sheet: string; label?: Phaser.GameObjects.Text }
 
 export class StageScene extends Phaser.Scene {
@@ -96,7 +127,6 @@ export class StageScene extends Phaser.Scene {
   private txtExit!: Phaser.GameObjects.Text;
   private txtPotion!: Phaser.GameObjects.Text;
   private slotIcons: (Phaser.GameObjects.Image | null)[] = [];
-  private slotKeys: Phaser.GameObjects.Text[] = [];
   private cards: Phaser.GameObjects.Container[] = [];
   private veil!: Phaser.GameObjects.Rectangle;
   private fade!: Phaser.GameObjects.Rectangle;
@@ -104,16 +134,39 @@ export class StageScene extends Phaser.Scene {
   /** Contagens para as missões do dia. */
   private tally: RunTally = newTally();
 
+  /** Caçada automática: o jogador automático guia o herói. `index` e `total` são a posição na fila. */
+  private auto: { speed: number; index: number; total: number } | null = null;
+  private bot: ((w: World) => Input) | null = null;
+  private autoPickT = 0;
+  private autoChip: Phaser.GameObjects.Text | null = null;
+  private autoHint: Phaser.GameObjects.Text | null = null;
+  /** Terreiro de treino: sem fim, com o medidor de dano. */
+  private training = false;
+  private meter = newMeter();
+  private meterTxt: Phaser.GameObjects.Text[] = [];
+  private meterLegend: Phaser.GameObjects.Text[] = [];
+  /** Vida mostrada com atraso, para o dano recém-tomado ficar visível na barra. */
+  private hpLag = 1;
+  private slotCd: Phaser.GameObjects.Text[] = [];
+  private roomDotsX = 0;
+
   constructor() { super('stage'); }
 
-  init(data: { stageId?: string }): void {
+  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number } }): void {
     this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
+    this.training = isTrainingId(this.stage.id);
+    this.auto = data.auto && !this.training ? { ...data.auto } : null;
   }
 
   create(): void {
     const profile = session.profile!;
-    this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed: 7919 + this.stage.index * 131 });
+    /* a caçada automática muda de semente a cada partida, para não repetir a mesma luta dez vezes */
+    const seed = 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
+    this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed, ranked: isTowerId(this.stage.id) });
+    this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
+    this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = [];
     this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
+    if (this.auto) this.tally.auto = true;
     this.views.clear(); this.shots.clear(); this.cards = [];
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
     this.blessIcons = []; this.blessShown = -1; this.supIcon = null;
@@ -124,6 +177,9 @@ export class StageScene extends Phaser.Scene {
     const ecos = this.stage.rooms.some((r) => r.waves.some((wv) => wv.some((d) => d.kind === 'ecos')));
     ensureChapterArt(this, [...artChaptersOf(this.stage), ...(petChapter ? [petChapter] : [])], tower ? 'torre' : this.stage.chapter, ecos ? ECHO_SHEETS : []);
     this.extras.clear(); this.segs = [];
+    bakeHud(this);
+    if (!this.training && this.textures.exists('mata_bg9')) this.textures.remove('mata_bg9');
+    if (this.training) makeKit(this).image('mata_bg9', VIEW.w, VIEW.h, (c) => paintTrainingGround(c, VIEW.w, VIEW.h, ARENA));
     this.bg = this.add.image(0, 0, 'bg0').setOrigin(0).setScale(INV).setDepth(-1000);
     const canopy = tower ? 'torre_canopy' : this.stage.chapter >= 3 ? `ch${this.stage.chapter}_canopy` : this.stage.chapter === 2 ? 'rio_canopy' : 'canopy';
     this.add.image(0, 0, this.textures.exists(canopy) ? canopy : 'canopy').setOrigin(0).setScale(INV).setDepth(9000);
@@ -159,7 +215,7 @@ export class StageScene extends Phaser.Scene {
 
     this.buildHud();
     this.bindInput();
-    music.play(trackFor(this.stage));
+    music.play(this.training ? 'acampamento' : trackFor(this.stage));
     this.handleEvents();
     (window as unknown as { __enc?: StageScene }).__enc = this;
   }
@@ -181,12 +237,14 @@ export class StageScene extends Phaser.Scene {
     kb.on('keydown-C', () => { this.latch.potion = true; });
     (['ONE', 'TWO', 'THREE', 'FOUR'] as const).forEach((k, i) => kb.on('keydown-' + k, () => { if (this.world.phase === 'altar' || this.world.offer) this.pickBlessing(i); else if (i === 0) this.latch.potion = true; }));
     kb.on('keydown-M', () => { sfx.muted = !sfx.muted; music.muted = sfx.muted; });
+    kb.on('keydown-V', () => { if (this.auto && !this.ended) { this.auto.speed = this.auto.speed >= AUTO_SPEEDS[AUTO_SPEEDS.length - 1] ? AUTO_SPEEDS[0] : this.auto.speed + 1; session.autoSpeed = this.auto.speed; sfx.play('tele'); } });
+    kb.on('keydown-Z', () => { if (this.training) { this.meter = newMeter(); sfx.play('tele'); } });
     kb.on('keydown-ESC', () => { if (!this.ended) this.setPaused(!this.paused); });
     kb.on('keydown-X', () => { if (this.paused) { this.setPaused(false); this.finish(false, 0); } });
     this.input.mouse?.disableContextMenu();
     this.input.on('pointerdown', (p: Phaser.Input.Pointer) => {
       unlockAudio();
-      if (!p.rightButtonDown()) this.latch.attack = true;
+      if (!p.rightButtonDown() && !this.auto) this.latch.attack = true;
     });
   }
 
@@ -206,7 +264,7 @@ export class StageScene extends Phaser.Scene {
   private setPaused(v: boolean): void {
     this.paused = v;
     music.duck(v);
-    if (v) this.banner('PAUSADO', 'Esc continua  ·  X abandona a fase', '#f1ebd8');
+    if (v) this.banner('PAUSADO', this.training ? 'Esc continua  ·  X volta ao acampamento' : this.auto ? 'Esc continua  ·  X encerra a caçada' : 'Esc continua  ·  X abandona a fase', '#f1ebd8');
     else { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); }
   }
 
@@ -219,15 +277,21 @@ export class StageScene extends Phaser.Scene {
       if (this.hitstop > 0) this.hitstop -= real;
       else {
         this.slow = Math.max(0, this.slow - real);
-        this.acc += real * (this.slow > 0 ? 0.35 : 1);
-        while (this.acc >= TICK) {
+        const speed = this.auto ? this.auto.speed : 1;
+        this.acc += real * (this.slow > 0 && speed === 1 ? 0.35 : 1) * speed;
+        let guard = 0;
+        while (this.acc >= TICK && guard++ < 12) {
           this.acc -= TICK;
-          step(this.world, this.readInput(), TICK);
+          step(this.world, this.auto ? this.autoInput(TICK / speed) : this.readInput(), TICK);
           this.handleEvents();
+          /* acelerada, a caçada não para a cada golpe */
+          if (speed > 1) this.hitstop = 0;
           if (this.hitstop > 0) break;
         }
+        if (guard > 12) this.acc = 0;
       }
     }
+    if (this.training) this.tickMeter(real);
     this.flushGold(real);
     this.syncHero(real);
     this.syncPet();
@@ -237,6 +301,25 @@ export class StageScene extends Phaser.Scene {
     this.drawGround();
     this.drawFx(this.paused ? 0 : real);
     this.drawHud();
+  }
+
+  /** Comandos do jogador automático. Altar e oferenda esperam um instante, para dar para ver a escolha. */
+  private autoInput(real: number): Input {
+    const w = this.world, opts = w.phase === 'altar' ? w.altar : w.offer;
+    this.readInput();
+    if (opts && opts.length) {
+      this.autoPickT += real;
+      if (this.autoPickT >= 0.75) {
+        /* a mais rara; em empate, a primeira */
+        let best = 0;
+        opts.forEach((id, i) => { if (BLESSINGS[id].tier > BLESSINGS[opts[best]].tier) best = i; });
+        this.autoPickT = 0;
+        this.pickBlessing(best);
+      }
+      return { mx: 0, my: 0, aimX: w.player.x + 100, aimY: w.player.y, attackPressed: false, attackHeld: false, altHeld: false, dodgePressed: false, spell: [false, false, false], petPressed: false, potionPressed: false, supremoPressed: false };
+    }
+    this.autoPickT = 0;
+    return this.bot!(w);
   }
 
   private finish(won: boolean, delay: number): void {
@@ -255,7 +338,7 @@ export class StageScene extends Phaser.Scene {
 
   private handleEvents(): void {
     const ev = this.world.events;
-    for (const e of ev) { countEvent(this.tally, e); this.onEvent(e); }
+    for (const e of ev) { countEvent(this.tally, e); if (this.training) this.meterEvent(e); this.onEvent(e); }
     ev.length = 0;
   }
 
@@ -314,10 +397,10 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'lose': music.sting('derrota'); this.finish(false, 500); break;
       case 'win':
-        this.banner(this.winTitle(), `Tempo ${this.fmt(w.time)}`, '#ffb238');
+        this.banner(this.winTitle(), this.auto && this.auto.index < this.auto.total ? `Tempo ${this.fmt(w.time)}  ·  a próxima já começa` : `Tempo ${this.fmt(w.time)}`, '#ffb238');
         sfx.play('win');
         music.sting('vitoria');
-        this.finish(true, 1900);
+        this.finish(true, this.auto ? Math.max(500, 1500 / this.auto.speed) : 1900);
         break;
       case 'roomStart': this.onRoomStart(e.value!); break;
       case 'roomClear':
@@ -514,7 +597,7 @@ export class StageScene extends Phaser.Scene {
   private onRoomStart(index: number): void {
     const room = this.stage.rooms[index];
     const art = room.artChapter ?? this.stage.chapter, tower = isTowerId(this.stage.id);
-    const key = tower ? `torre_bg${room.bg}` : art >= 3 ? `ch${art}_bg${room.bg}` : art === 2 ? `rio_bg${room.bg}` : `mata_bg${room.bg}`;
+    const key = this.training ? 'mata_bg9' : tower ? `torre_bg${room.bg}` : art >= 3 ? `ch${art}_bg${room.bg}` : art === 2 ? `rio_bg${room.bg}` : `mata_bg${room.bg}`;
     this.bg.setTexture(this.textures.exists(key) ? key : 'bg0');
     this.dark.setVisible(!!room.dark).setAlpha(room.type === 'boss' ? 0.55 : 0.9);
     this.altar.setVisible(room.type === 'altar');
@@ -704,30 +787,32 @@ export class StageScene extends Phaser.Scene {
 
   private showCards(opts: BlessingId[], title: string): void {
     const have = blessingCounts(this.world.blessings);
-    const cw = opts.length > 3 ? 250 : 270, ch = 250, gap = 22;
+    const cw = CARD.w, ch = CARD.h, gap = opts.length > 3 ? 4 : 14;
     opts.forEach((id, i) => {
-      const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 440;
-      const col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
-      const box = this.add.rectangle(0, 0, cw, ch, 0x16201a, 0.97).setStrokeStyle(4, col);
-      const band = this.add.rectangle(0, -ch / 2 + 17, cw - 8, 26, col, 0.9);
-      const tier = this.add.text(0, -ch / 2 + 17, BLESSING_TIER_LABEL[b.tier].toUpperCase(), { fontFamily: FONT, fontStyle: '900', fontSize: '17px', color: INK }).setOrigin(0.5).setResolution(2);
-      const key = this.add.text(-cw / 2 + 14, -ch / 2 + 34, String(i + 1), { fontFamily: FONT, fontStyle: '900', fontSize: '26px', color: '#f1ebd8', stroke: INK, strokeThickness: 5 }).setResolution(2);
-      const parts: Phaser.GameObjects.GameObject[] = [box, band, tier, key];
-      const disc = this.add.circle(0, -ch / 2 + 82, 38, 0x0a0f0a, 0.7).setStrokeStyle(3, col);
-      parts.push(disc);
-      if (this.textures.exists('ui_' + b.icon)) parts.push(this.add.image(0, -ch / 2 + 82, 'ui_' + b.icon).setScale(INV * 0.95));
-      parts.push(this.add.text(0, -ch / 2 + 128, b.name, { fontFamily: FONT, fontStyle: '900', fontSize: '26px', color: '#ffb238', align: 'center' }).setOrigin(0.5, 0).setResolution(2));
-      parts.push(this.add.text(0, -ch / 2 + 162, b.desc, { fontFamily: FONT, fontSize: '19px', color: '#f1ebd8', align: 'center', wordWrap: { width: cw - 28 }, lineSpacing: -2 }).setOrigin(0.5, 0).setResolution(2));
+      const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 448, color = TIER_COLORS[b.tier - 1] ?? BLESSING_TIER_COLOR[b.tier];
+      const top = -ch / 2;
+      const back = this.add.image(0, 0, `hud_card${b.tier}`).setScale(HUD_SCALE);
+      const tier = this.add.text(0, top + 23, BLESSING_TIER_LABEL[b.tier].toUpperCase(), { fontFamily: FONT, fontStyle: '900', fontSize: '18px', color: INK }).setOrigin(0.5).setResolution(2);
+      const key = this.add.text(-cw / 2 + 24, top + 44, String(i + 1), { fontFamily: FONT, fontStyle: '900', fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6 }).setResolution(2);
+      const parts: Phaser.GameObjects.GameObject[] = [back, tier, key];
+      if (this.textures.exists('ui_' + b.icon)) parts.push(this.add.image(0, top + 92, 'ui_' + b.icon).setScale(INV * 0.92));
+      parts.push(this.add.text(0, top + 140, b.name, { fontFamily: FONT, fontStyle: '900', fontSize: '27px', color, stroke: INK, strokeThickness: 5, align: 'center' }).setOrigin(0.5, 0).setResolution(2));
+      parts.push(this.add.text(0, top + 176, b.desc, { fontFamily: FONT, fontSize: '19px', color: '#f6ead0', align: 'center', wordWrap: { width: cw - 54 }, lineSpacing: -2 }).setOrigin(0.5, 0).setResolution(2));
       const n = have[id] ?? 0;
-      if (b.max > 1 && b.max < 9) parts.push(this.add.text(cw / 2 - 12, -ch / 2 + 36, `${n}/${b.max}`, { fontFamily: FONT, fontSize: '18px', color: '#c9c4bd', stroke: INK, strokeThickness: 4 }).setOrigin(1, 0).setResolution(2));
-      const card = this.add.container(x, y + 30, parts).setDepth(10004).setSize(cw, ch).setInteractive({ useHandCursor: true }).setAlpha(0);
-      this.tweens.add({ targets: card, y, alpha: 1, duration: 260, delay: i * 70, ease: 'Back.easeOut' });
-      card.on('pointerover', () => { box.setFillStyle(0x263528, 1); card.setScale(1.04); });
-      card.on('pointerout', () => { box.setFillStyle(0x16201a, 0.97); card.setScale(1); });
+      if (b.max > 1 && b.max < 9) {
+        /* pontinhos: quantas vezes já foi escolhida e quantas cabem */
+        const g = this.add.graphics(), dots = b.max, dx = 12, x0 = cw / 2 - 26 - (dots - 1) * dx;
+        for (let k = 0; k < dots; k++) { g.fillStyle(0x1c0f0a, 1).fillCircle(x0 + k * dx, top + 58, 5.5); g.fillStyle(k < n ? Phaser.Display.Color.HexStringToColor(color).color : 0x4a3220, 1).fillCircle(x0 + k * dx, top + 58, 3.8); }
+        parts.push(g);
+      }
+      const card = this.add.container(x, y + 34, parts).setDepth(10004).setSize(cw - 16, ch - 20).setInteractive({ useHandCursor: true }).setAlpha(0);
+      this.tweens.add({ targets: card, y, alpha: 1, duration: 280, delay: i * 70, ease: 'Back.easeOut' });
+      card.on('pointerover', () => { this.tweens.add({ targets: card, scale: 1.05, y: y - 8, duration: 110, ease: 'Quad.easeOut' }); });
+      card.on('pointerout', () => { this.tweens.add({ targets: card, scale: 1, y, duration: 110, ease: 'Quad.easeOut' }); });
       card.on('pointerdown', () => this.pickBlessing(i));
       this.cards.push(card);
     });
-    this.txtSub.setText(title).setPosition(VIEW.w / 2, 268).setVisible(true).setAlpha(1);
+    this.txtSub.setText(title).setPosition(VIEW.w / 2, 286).setVisible(true).setAlpha(1);
   }
 
   private clearCards(): void {
@@ -806,6 +891,11 @@ export class StageScene extends Phaser.Scene {
     const jit = Math.floor(t * 40) % 2 ? 1.5 : -1.5;
     let sheet: Sheet = SHEETS.sauva, frame = 'walk0', sx = 1, sy = 1, ox = 0, oy = 0, alpha = 1, rot = 0, lift = 0;
     if (isMonster(e.kind) || isBossKind(e.kind)) return this.poseNew(e, jit);
+    if (e.kind === 'boneco') {
+      /* balança com a pancada e para aos poucos */
+      const k = Math.exp(-e.sinceHit * 4.5), wob = Math.sin(e.sinceHit * 26) * k;
+      return { sheet: SHEETS.boneco, frame: e.elite ? 'elite0' : e.mods.includes('blindado') ? 'armor0' : 'idle0', sx: 1 + 0.05 * k, sy: 1 - 0.07 * k, ox: 0, oy: 0, alpha: 1, rot: wob * 0.16, lift: 0 };
+    }
     if (e.kind === 'sauva') {
       frame = 'walk' + cyc(SHEETS.sauva.anims.walk, e.walk);
       if (e.state === 'windup' && e.tele) { const k = e.stateT / e.tele.dur; sx = sy = 1 + 0.16 * k; ox = jit * k; }
@@ -959,7 +1049,8 @@ export class StageScene extends Phaser.Scene {
       let v = this.views.get(e.id);
       if (!v) {
         v = { spr: this.makeSprite(po.sheet, po.frame), shadow: this.add.image(0, 0, 'shadow').setDepth(2), sheet: po.sheet.key };
-        if ((e.elite || e.champion) && !isBoss(e) && e.mods.length) v.label = this.add.text(0, 0, e.mods.map((m) => MOD_NAMES[m]).join(' · '), { fontFamily: FONT, fontStyle: '900', fontSize: e.elite ? '20px' : '16px', color: '#c9c4bd', stroke: INK, strokeThickness: 5 }).setOrigin(0.5).setResolution(2);
+        if (e.kind === 'boneco') v.label = this.add.text(0, 0, e.elite ? 'Elite' : e.mods.length ? 'Blindado' : 'Comum', { fontFamily: FONT, fontStyle: '900', fontSize: '18px', color: '#f6ead0', stroke: INK, strokeThickness: 5 }).setOrigin(0.5).setResolution(2);
+        else if ((e.elite || e.champion) && !isBoss(e) && e.mods.length) v.label = this.add.text(0, 0, e.mods.map((m) => MOD_NAMES[m]).join(' · '), { fontFamily: FONT, fontStyle: '900', fontSize: e.elite ? '20px' : '16px', color: '#c9c4bd', stroke: INK, strokeThickness: 5 }).setOrigin(0.5).setResolution(2);
         this.views.set(e.id, v);
       }
       const spr = v.spr;
@@ -994,7 +1085,8 @@ export class StageScene extends Phaser.Scene {
       else spr.clearTint();
       if (v.label) {
         const open = e.state === 'exposed' || e.state === 'stunned' || e.stunT > 0;
-        v.label.setColor(open ? '#ffd23f' : '#c9c4bd').setPosition(e.x, e.y - po.sheet.oy * 0.8 * big).setDepth(e.y + 1).setAlpha(spawn);
+        if (e.kind === 'boneco') v.label.setPosition(e.x, e.y + 22).setDepth(e.y + 1).setAlpha(spawn);
+        else v.label.setColor(open ? '#ffd23f' : '#c9c4bd').setPosition(e.x, e.y - po.sheet.oy * 0.8 * big).setDepth(e.y + 1).setAlpha(spawn);
       }
     }
   }
@@ -1288,36 +1380,130 @@ export class StageScene extends Phaser.Scene {
     return this.add.text(x, y, '', { fontFamily: FONT, fontSize: size + 'px', color, stroke: INK, strokeThickness: 4 }).setDepth(10001).setResolution(2);
   }
 
-  private slotX(i: number): number { return VIEW.w - 80 - (7 - i) * 66; }
+  private slotX(i: number): number { return VIEW.w - 84 - (7 - i) * 66; }
 
   private buildHud(): void {
     const w = this.world, bow = w.stats.weapon === 'arco';
-    this.txtInfo = this.label(24, 16, 22);
-    this.txtTime = this.label(VIEW.w - 24, 16, 22).setOrigin(1, 0);
-    this.txtHp = this.label(30, VIEW.h - 77, 18).setDepth(10002);
-    this.txtMana = this.label(30, VIEW.h - 45, 15).setDepth(10002);
-    this.txtPotion = this.label(322, VIEW.h - 78, 18, '#f1ebd8').setDepth(10002);
-    this.txtBoss = this.label(VIEW.w / 2, 62, 24, '#ffb238').setOrigin(0.5);
+    const VX = 14, VY = VIEW.h - VITALS.h - 12, SY = VIEW.h - 106;
+    const img = (x: number, y: number, key: string, scale: number, depth = 10001) => this.add.image(x, y, key).setScale(scale).setDepth(depth);
+
+    /* vida, mana e poção numa placa só */
+    this.add.image(VX, VY, 'hud_vitals').setOrigin(0).setScale(HUD_SCALE).setDepth(9999);
+    img(VX + 24, VY + VITALS.hp.y + VITALS.hp.h / 2, 'ui_vida', INV * 0.44, 10002);
+    img(VX + 24, VY + VITALS.mana.y + VITALS.mana.h / 2, 'ui_mana', INV * 0.36, 10002);
+    img(VX + VITALS.potion.x, VY + VITALS.potion.y - 2, 'ic_pocao', INV * 0.78);
+    this.txtHp = this.label(VX + VITALS.hp.x + VITALS.hp.w / 2, VY + VITALS.hp.y + VITALS.hp.h / 2 - 1, 18).setOrigin(0.5).setDepth(10002);
+    this.txtMana = this.label(VX + VITALS.mana.x + VITALS.mana.w / 2, VY + VITALS.mana.y + VITALS.mana.h / 2 - 1, 14).setOrigin(0.5).setDepth(10002);
+    this.txtPotion = this.label(VX + VITALS.potion.x + 10, VY + VITALS.potion.y + 6, 19, '#f6ead0').setDepth(10003);
+
+    /* cabeçalho: nome da fase numa placa, com as salas embaixo */
+    const title = this.training ? 'Terreiro de treino' : isTowerId(this.stage.id) ? 'Torre · andar 100' : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`;
+    this.txtInfo = this.label(30, 16, 22, '#f6ead0').setText(title);
+    const tw = Math.max(170, Math.ceil(this.txtInfo.width) + 34, this.training ? 0 : 44 + this.stage.rooms.length * 26), th = this.training ? 42 : 64;
+    this.add.image(14, 8, plateTexture(this, tw, th)).setOrigin(0).setScale(HUD_SCALE).setDepth(9999);
+    this.roomDotsX = 32;
+    /* relógio (ou, no treino, as teclas) */
+    const rw = this.training ? 276 : 240;
+    this.add.image(VIEW.w - 14 - rw, 8, plateTexture(this, rw, 42)).setOrigin(0).setScale(HUD_SCALE).setDepth(9999);
+    if (!this.training) img(VIEW.w - rw + 6, 29, 'ui_relogio', INV * 0.36, 10001);
+    this.txtTime = this.label(VIEW.w - 30, 16, this.training ? 19 : 21, '#f6ead0').setOrigin(1, 0);
+
+    this.txtBoss = this.label(VIEW.w / 2, 70, 23, '#ffb238').setOrigin(0.5);
     this.txtExit = this.label(0, 0, 26, '#ffb238').setOrigin(1, 0.5).setText('Siga em frente').setVisible(false);
     this.txtHelp = this.label(VIEW.w / 2, VIEW.h - 132, 19, '#f1ebd8').setOrigin(0.5)
       .setText(['WASD mover', 'clique atacar', bow ? 'botão direito carrega o tiro' : w.stats.hasShield ? 'botão direito defende' : '', 'Espaço esquiva', 'Q feitiço', '1 poção'].filter(Boolean).join('  ·  '));
     this.txtBanner = this.add.text(VIEW.w / 2, VIEW.h / 2 - 50, '', { fontFamily: FONT, fontStyle: '900', fontSize: '92px', color: '#ffb238', stroke: INK, strokeThickness: 12 }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     this.txtSub = this.add.text(VIEW.w / 2, VIEW.h / 2 + 50, '', { fontFamily: FONT, fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
+
+    /* barra de ações: uma moldura por espaço, o ícone, a tecla e os segundos de recarga */
     const alt = bow || w.stats.hasShield || w.stats.weapon === 'borduna' || w.stats.weapon === 'zagaia';
     const names = ['Clique', alt ? 'Dir.' : '', 'Espaço', 'Q', 'E', 'R', 'F', 'T'];
-    this.slotKeys = names.map((s, i) => this.label(this.slotX(i) + 28, VIEW.h - 28, 15).setOrigin(0.5).setText(s));
-    const icon = (i: number, key: string, scale = 0.8) => (this.textures.exists(key) ? this.add.image(this.slotX(i) + 28, VIEW.h - 74, key).setScale(INV * scale).setDepth(10001) : null);
+    const shown = [true, alt, true, !!w.spells[0], !!w.spells[1], !!w.spells[2], !!w.pet, !!w.supremo];
+    names.forEach((s, i) => {
+      const x = this.slotX(i) + SLOT / 2;
+      if (shown[i]) { img(x - SLOT / 2, SY, 'hud_slot', HUD_SCALE, 9999).setOrigin(0); img(x, VIEW.h - 30, 'hud_key', HUD_SCALE, 9999); }
+      this.label(x, VIEW.h - 31, 14, '#f6ead0').setOrigin(0.5).setText(s).setVisible(shown[i]);
+    });
+    this.slotCd = names.map((_, i) => this.label(this.slotX(i) + SLOT / 2, SY + SLOT / 2, 22, '#ffffff').setOrigin(0.5).setDepth(10003).setVisible(false));
+    const icon = (i: number, key: string, scale = 0.74) => (this.textures.exists(key) ? this.add.image(this.slotX(i) + SLOT / 2, SY + SLOT / 2, key).setScale(INV * scale).setDepth(10001) : null);
     this.slotIcons = [
       icon(0, this.textures.exists('ui_' + w.stats.weapon) ? 'ui_' + w.stats.weapon : bow ? 'ui_projetil' : 'ui_dano'),
-      bow || w.stats.hasShield || w.stats.weapon === 'borduna' || w.stats.weapon === 'zagaia' ? icon(1, bow ? 'ui_perfurar' : w.stats.weapon === 'borduna' ? 'ui_tremor' : w.stats.weapon === 'zagaia' ? 'ui_perfurar' : 'ui_defesa') : null, icon(2, 'ui_esquiva'),
-      ...w.spells.map((id, i) => (id ? icon(3 + i, this.textures.exists('ui_' + id) ? 'ui_' + id : 'ic_' + id, this.textures.exists('ui_' + id) ? 0.8 : 1.05) : null)),
+      alt ? icon(1, bow ? 'ui_perfurar' : w.stats.weapon === 'borduna' ? 'ui_tremor' : w.stats.weapon === 'zagaia' ? 'ui_perfurar' : 'ui_defesa') : null, icon(2, 'ui_esquiva'),
+      ...w.spells.map((id, i) => (id ? icon(3 + i, this.textures.exists('ui_' + id) ? 'ui_' + id : 'ic_' + id, this.textures.exists('ui_' + id) ? 0.74 : 0.98) : null)),
       w.pet ? icon(6, 'ui_companheiro') : null, null,
     ];
     this.supIcon = w.supremo ? icon(7, 'ui_' + w.supremo) : null;
-    this.add.image(304, VIEW.h - 68, 'ic_pocao').setScale(INV * 0.8).setDepth(10001);
-    this.goldIcon = this.add.image(36, 92, 'moeda').setScale(INV * 1.1).setDepth(10001).setVisible(false);
-    this.txtGold = this.label(52, 80, 22, '#f2c14e').setVisible(false);
-    this.txtChallenge = this.label(24, 108, 19, '#ffd23f').setVisible(false);
+
+    this.goldIcon = this.add.image(36, th + 30, 'moeda').setScale(INV * 1.1).setDepth(10001).setVisible(false);
+    this.txtGold = this.label(52, th + 18, 22, '#f2c14e').setVisible(false);
+    this.txtChallenge = this.label(24, th + 46, 19, '#ffd23f').setVisible(false);
+
+    if (this.auto) {
+      /* aviso da caçada automática, no alto e no meio */
+      this.add.image(VIEW.w / 2, 29, plateTexture(this, 330, 42, true)).setScale(HUD_SCALE).setDepth(9999);
+      img(VIEW.w / 2 - 140, 29, 'ui_auto', INV * 0.42, 10001);
+      this.autoChip = this.label(VIEW.w / 2 + 14, 16, 21, '#ffd23f').setOrigin(0.5, 0);
+      this.autoHint = this.label(VIEW.w / 2, 56, 15, '#d9cdb4').setOrigin(0.5, 0).setText('V muda a velocidade  ·  Esc pausa');
+    }
+    if (this.training) this.buildMeter();
+  }
+
+  /* ---------- medidor de dano do Terreiro ---------- */
+
+  private readonly MX = 258; private readonly MW = 730; private readonly MY = 8; private readonly MH = 128;
+
+  private buildMeter(): void {
+    const x = this.MX, w = this.MW, y = this.MY;
+    this.add.image(x, y, plateTexture(this, w, this.MH)).setOrigin(0).setScale(HUD_SCALE).setDepth(9999);
+    const cells = ['Dano por segundo', 'Média', 'Total', 'Maior golpe', 'Reações'], cw = w / cells.length;
+    this.meterTxt = cells.map((name, i) => {
+      this.label(x + cw * (i + 0.5), y + 10, 15, '#d9cdb4').setOrigin(0.5, 0).setText(name);
+      return this.label(x + cw * (i + 0.5), y + 28, i === 0 ? 34 : 28, i === 0 ? '#ffd23f' : '#f6ead0').setOrigin(0.5, 0).setText('0');
+    });
+    this.meterLegend = METER_GROUPS.map((g, i) => this.label(x + 22 + i * ((w - 30) / METER_GROUPS.length) + 16, y + 98, 15, g.css).setText(g.name));
+  }
+
+  private meterEvent(e: SimEvent): void {
+    const m = this.meter;
+    if (e.type === 'reaction') { m.reactions++; return; }
+    if (e.type !== 'hit' || !e.value) return;
+    if (m.t0 < 0 || this.clock - m.last > METER_IDLE) { const r = m.reactions; this.meter = newMeter(); this.meter.t0 = this.clock; if (m.t0 < 0) this.meter.reactions = r; }
+    const mm = this.meter;
+    mm.last = this.clock; mm.total += e.value; mm.hits++;
+    if (e.value > mm.max) mm.max = e.value;
+    mm.by[METER_OF[e.kind ?? ''] ?? 'efeito'] += e.value;
+    mm.recent.push({ t: this.clock, v: e.value });
+  }
+
+  private tickMeter(_real: number): void {
+    const m = this.meter, t = this.clock;
+    while (m.recent.length && t - m.recent[0].t > METER_WINDOW) m.recent.shift();
+  }
+
+  private drawMeter(g: Phaser.GameObjects.Graphics): void {
+    const m = this.meter, x = this.MX, w = this.MW, y = this.MY;
+    const span = m.t0 < 0 ? 0 : Math.max(1, m.last - m.t0), now = m.recent.reduce((a, r) => a + r.v, 0) / METER_WINDOW;
+    const vals = [big(now), big(span ? m.total / span : 0), big(m.total), big(m.max), String(m.reactions)];
+    this.meterTxt.forEach((txt, i) => { if (txt.text !== vals[i]) txt.setText(vals[i]); });
+    /* divisórias entre as células */
+    for (let i = 1; i < 5; i++) g.fillStyle(0x1c0f0a, 0.5).fillRect(x + (w / 5) * i - 1, y + 14, 2, 54);
+    /* barra empilhada: de onde veio o dano */
+    const bx = x + 16, bw = w - 32, by = y + 76, bh = 14;
+    g.fillStyle(0x1c0f0a, 1).fillRoundedRect(bx - 2, by - 2, bw + 4, bh + 4, 6);
+    g.fillStyle(0x140b07, 1).fillRoundedRect(bx, by, bw, bh, 4);
+    let at = bx;
+    const step = (w - 30) / METER_GROUPS.length;
+    METER_GROUPS.forEach((gr, i) => {
+      const share = m.total > 0 ? m.by[gr.id] / m.total : 0, sw = bw * share;
+      if (sw > 0.5) { g.fillStyle(gr.color, 1).fillRect(at, by, sw, bh); g.fillStyle(0xffffff, 0.2).fillRect(at, by, sw, bh * 0.4); at += sw; }
+      const lx = x + 22 + i * step;
+      g.fillStyle(0x1c0f0a, 1).fillRoundedRect(lx - 1, y + 101, 13, 13, 3);
+      g.fillStyle(gr.color, share > 0 ? 1 : 0.35).fillRoundedRect(lx + 1, y + 103, 9, 9, 2);
+      const label = `${gr.name} ${Math.round(share * 100)}%`;
+      const txt = this.meterLegend[i];
+      if (txt.text !== label) txt.setText(label);
+      txt.setAlpha(share > 0 ? 1 : 0.5);
+    });
   }
 
   private banner(title: string, sub: string, color: string): void {
@@ -1333,18 +1519,29 @@ export class StageScene extends Phaser.Scene {
   }
 
   private drawHud(): void {
-    const g = this.hudG, w = this.world, p = w.player, s = w.stats;
+    const g = this.hudG, w = this.world, p = w.player, s = w.stats, real = this.game.loop.delta / 1000;
     g.clear();
-    const bar = (x: number, y: number, bw: number, bh: number, k: number, color: number) => {
-      g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 3, y - 3, bw + 6, bh + 6, 5);
-      g.fillStyle(color, 1).fillRect(x, y, bw * Phaser.Math.Clamp(k, 0, 1), bh);
-      g.fillStyle(0xffffff, 0.16).fillRect(x, y, bw * Phaser.Math.Clamp(k, 0, 1), bh * 0.38);
+    const VX = 14, VY = VIEW.h - VITALS.h - 12, SY = VIEW.h - 106;
+    /* barra com brilho em cima e sombra embaixo; `lag` mostra em claro o que acabou de sair */
+    const bar = (x: number, y: number, bw: number, bh: number, k: number, color: number, lag = 0) => {
+      const f = Phaser.Math.Clamp(k, 0, 1), l = Phaser.Math.Clamp(lag, 0, 1);
+      if (l > f) g.fillStyle(0xffe6b0, 0.85).fillRoundedRect(x, y, Math.max(6, bw * l), bh, 4);
+      if (f <= 0) return;
+      const fw = Math.max(6, bw * f);
+      g.fillStyle(color, 1).fillRoundedRect(x, y, fw, bh, 4);
+      g.fillStyle(0xffffff, 0.22).fillRoundedRect(x + 2, y + 2, Math.max(2, fw - 4), bh * 0.3, 2);
+      g.fillStyle(0x000000, 0.2).fillRect(x + 2, y + bh * 0.72, Math.max(2, fw - 4), bh * 0.22);
     };
-    bar(24, VIEW.h - 80, 260, 24, p.hp / s.maxHp, 0xd6402b);
-    bar(24, VIEW.h - 46, 200, 16, p.mana / s.maxMana, 0x3fa7e0);
+    const hpK = p.hp / s.maxHp;
+    this.hpLag = hpK >= this.hpLag ? hpK : Math.max(hpK, this.hpLag - real * 0.45);
+    const low = hpK < 0.3 && p.hp > 0;
+    bar(VX + VITALS.hp.x, VY + VITALS.hp.y, VITALS.hp.w, VITALS.hp.h, hpK, low ? 0xf04a34 : 0xd6402b, this.hpLag);
+    if (low) g.lineStyle(3, 0xff6b5a, 0.45 + 0.4 * Math.sin(this.clock * 9)).strokeRoundedRect(VX + VITALS.hp.x - 3, VY + VITALS.hp.y - 3, VITALS.hp.w + 6, VITALS.hp.h + 6, 7);
+    bar(VX + VITALS.mana.x, VY + VITALS.mana.y, VITALS.mana.w, VITALS.mana.h, p.mana / s.maxMana, 0x3fa7e0);
     this.txtHp.setText(`${Math.ceil(p.hp)} / ${s.maxHp}`);
     this.txtMana.setText(`${Math.floor(p.mana)} / ${s.maxMana}`);
-    this.txtPotion.setText(String(p.potions));
+    this.txtPotion.setText(String(p.potions)).setColor(p.potions > 0 ? '#f6ead0' : '#ff9a8a');
+    if (p.potionCd > 0) { const pc = VITALS.potion; g.fillStyle(0x140b07, 0.6).slice(VX + pc.x, VY + pc.y, pc.r - 1, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, p.potionCd / PLAYER.potionCooldown), false).fillPath(); }
     /* bênçãos ativas: um ícone por bênção, com o número de vezes */
     if (this.blessShown !== w.blessings.length) {
       this.blessShown = w.blessings.length;
@@ -1352,54 +1549,61 @@ export class StageScene extends Phaser.Scene {
       this.blessIcons = [];
       const counts = blessingCounts(w.blessings);
       (Object.keys(counts) as BlessingId[]).forEach((id, i) => {
-        const b = BLESSINGS[id], x = 40 + i * 40, y = VIEW.h - 108, col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
-        this.blessIcons.push(this.add.circle(x, y, 17, 0x0a0f0a, 0.85).setStrokeStyle(2, col).setDepth(10001));
-        if (this.textures.exists('ui_' + b.icon)) this.blessIcons.push(this.add.image(x, y, 'ui_' + b.icon).setScale(INV * 0.42).setDepth(10002));
-        if (counts[id]! > 1) this.blessIcons.push(this.add.text(x + 9, y + 4, String(counts[id]), { fontFamily: FONT, fontStyle: '900', fontSize: '16px', color: '#ffffff', stroke: INK, strokeThickness: 4 }).setDepth(10003).setResolution(2));
+        const b = BLESSINGS[id], x = 36 + i * 40, y = VY - 24, col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
+        this.blessIcons.push(this.add.circle(x, y, 18, 0x1c0f0a, 1).setDepth(10000));
+        this.blessIcons.push(this.add.circle(x, y, 16, 0x3a2416, 1).setStrokeStyle(2, col).setDepth(10001));
+        if (this.textures.exists('ui_' + b.icon)) this.blessIcons.push(this.add.image(x, y, 'ui_' + b.icon).setScale(INV * 0.4).setDepth(10002));
+        if (counts[id]! > 1) this.blessIcons.push(this.add.text(x + 8, y + 3, String(counts[id]), { fontFamily: FONT, fontStyle: '900', fontSize: '16px', color: '#ffffff', stroke: INK, strokeThickness: 4 }).setDepth(10003).setResolution(2));
       });
     }
 
-    const slot = (i: number, color: number, cd: number, ok: boolean, show = true) => {
-      if (!show) { this.slotKeys[i].setVisible(false); return; }
-      const x = this.slotX(i), y = VIEW.h - 102, sz = 56;
-      g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 3, y - 3, sz + 6, sz + 6, 10);
-      g.fillStyle(color, ok ? 1 : 0.35).fillRoundedRect(x, y, sz, sz, 8);
-      if (cd > 0) g.fillStyle(0x0a0f0a, 0.74).fillRect(x, y, sz, sz * Phaser.Math.Clamp(cd, 0, 1));
+    /* espaços de ação: a borda acende quando dá para usar; a recarga desce como uma cortina e mostra os segundos */
+    const slot = (i: number, color: number, cd: number, ok: boolean, show = true, seconds = 0) => {
+      const txt = this.slotCd[i];
+      if (!show) { txt?.setVisible(false); return; }
+      const x = this.slotX(i), k = Phaser.Math.Clamp(cd, 0, 1);
+      g.fillStyle(color, ok ? 0.2 : 0.07).fillRoundedRect(x + 5, SY + 5, SLOT - 10, SLOT - 10, 7);
+      if (k > 0) g.fillStyle(0x0a0604, 0.74).fillRoundedRect(x + 5, SY + 5, SLOT - 10, Math.max(8, (SLOT - 10) * k), 7);
+      g.lineStyle(3, color, ok ? 1 : 0.3).strokeRoundedRect(x + 2.5, SY + 2.5, SLOT - 5, SLOT - 5, 9);
+      if (txt) { const on = seconds >= 0.95; txt.setVisible(on); if (on) txt.setText(String(Math.ceil(seconds))); }
     };
     const bow = s.weapon === 'arco';
     slot(0, 0xe9e4d4, bow ? p.shotCd / PLAYER.bow.interval : 0, true);
-    slot(1, bow ? 0xfff0a8 : 0xc9a26b, 0, true, bow || s.hasShield || s.weapon === 'borduna' || s.weapon === 'zagaia');
+    slot(1, bow ? 0xfff0a8 : 0xd9a66b, 0, true, bow || s.hasShield || s.weapon === 'borduna' || s.weapon === 'zagaia');
     slot(2, 0x8fe3ff, p.dodgeCharges > 0 ? 0 : 1 - p.dodgeTimer / s.dodgeCooldown, p.dodgeCharges > 0);
-    for (let i = 0; i < s.dodgeCharges; i++) g.fillStyle(i < p.dodgeCharges ? 0xffffff : 0x3a4a3a, 1).fillCircle(this.slotX(2) + 12 + i * 14, VIEW.h - 112, 4);
+    for (let i = 0; i < s.dodgeCharges; i++) { const dx = this.slotX(2) + SLOT / 2 - (s.dodgeCharges - 1) * 7 + i * 14; g.fillStyle(0x1c0f0a, 1).fillCircle(dx, SY - 8, 6); g.fillStyle(i < p.dodgeCharges ? 0x8fe3ff : 0x3a4a52, 1).fillCircle(dx, SY - 8, 4); }
     for (let i = 0; i < 3; i++) {
       const id = w.spells[i];
-      const gone = !!id && (p.erased[i] > 0 || p.stolen === i);
-      slot(3 + i, gone ? 0x1a1a1a : 0x2d3b2b, id ? p.cds[i] / p.cdMax[i] : 0, !!id && !gone && p.mana >= spellCost(w, i, id), !!id);
-      if (gone) { const sx = this.slotX(3 + i), sy = VIEW.h - 102; g.lineStyle(5, p.stolen === i ? 0xff6b5a : 0xe9e4d8, 0.9).lineBetween(sx + 8, sy + 8, sx + 48, sy + 48).lineBetween(sx + 48, sy + 8, sx + 8, sy + 48); }
-      if (id && p.dreamT > 0) { const sx = this.slotX(3 + i); g.fillStyle(0xff9ae6, 0.3 + 0.2 * Math.sin(this.clock * 6 + i)).fillRoundedRect(sx, VIEW.h - 102, 56, 56, 8); }
-      this.slotIcons[3 + i]?.setAlpha(id && p.cds[i] <= 0 && p.mana >= spellCost(w, i, id) ? 1 : 0.4);
+      const gone = !!id && (p.erased[i] > 0 || p.stolen === i), ready = !!id && !gone && p.mana >= spellCost(w, i, id);
+      slot(3 + i, gone ? 0x5a5a5a : id ? COLOR(SPELLS[id].element) : 0x5a5a5a, id ? p.cds[i] / p.cdMax[i] : 0, ready, !!id, id ? p.cds[i] : 0);
+      if (gone) { const sx = this.slotX(3 + i); g.lineStyle(5, p.stolen === i ? 0xff6b5a : 0xe9e4d8, 0.9).lineBetween(sx + 12, SY + 12, sx + SLOT - 12, SY + SLOT - 12).lineBetween(sx + SLOT - 12, SY + 12, sx + 12, SY + SLOT - 12); }
+      if (id && p.dreamT > 0) { const sx = this.slotX(3 + i); g.fillStyle(0xff9ae6, 0.3 + 0.2 * Math.sin(this.clock * 6 + i)).fillRoundedRect(sx + 5, SY + 5, SLOT - 10, SLOT - 10, 7); }
+      this.slotIcons[3 + i]?.setAlpha(id && p.cds[i] <= 0 && ready ? 1 : 0.38);
     }
-    const pet = w.pet;
-    slot(6, 0xb98452, pet ? pet.cd / (COMPANIONS[pet.id].cooldown * s.petCooldownMult) : 0, !!pet && pet.state !== 'down', !!pet);
+    const pet = w.pet, petCd = pet ? COMPANIONS[pet.id].cooldown * s.petCooldownMult : 1;
+    slot(6, 0xf2a65a, pet ? pet.cd / petCd : 0, !!pet && pet.state !== 'down', !!pet, pet ? pet.cd : 0);
+    this.slotIcons[6]?.setAlpha(pet && pet.cd <= 0 && pet.state !== 'down' ? 1 : 0.4);
     /* Supremo: enche com a luta; cheio, pisca */
     const full = p.supremo >= 100, sc = w.supremo ? Phaser.Display.Color.HexStringToColor(ELEMENTS[w.supremo].color).color : 0;
     slot(7, full && Math.floor(this.clock * 6) % 2 ? 0xffffff : sc, w.supremo ? 1 - p.supremo / 100 : 0, full, !!w.supremo);
     this.supIcon?.setAlpha(full ? 1 : 0.45);
-    if (w.supremo && full) g.lineStyle(4, 0xffd23f, 0.6 + 0.4 * Math.sin(this.clock * 8)).strokeRoundedRect(this.slotX(7) - 4, VIEW.h - 106, 64, 64, 10);
+    if (w.supremo && full) g.lineStyle(4, 0xffd23f, 0.6 + 0.4 * Math.sin(this.clock * 8)).strokeRoundedRect(this.slotX(7) - 3, SY - 3, SLOT + 6, SLOT + 6, 13);
 
     /* cabeçalho: fase, salas e tempo */
     const fl = this.stage.rooms[w.room]?.floor;
-    this.txtInfo.setText(isTowerId(this.stage.id) ? `Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}` : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`);
-    const x0 = 28, y0 = 58;
-    this.stage.rooms.forEach((r, i) => {
-      const x = x0 + i * 26, done = i < w.room || (i === w.room && (w.phase === 'cleared' || w.phase === 'won')), cur = i === w.room;
-      const col = done ? 0xffb238 : cur ? 0xffffff : 0x5a6a58, big = r.type === 'boss' || r.type === 'elite';
-      if (r.type === 'altar') { g.fillStyle(done ? 0xffb238 : cur ? 0x9be7c0 : 0x5a6a58, 1).fillTriangle(x - 7, y0, x, y0 - 8, x + 7, y0).fillTriangle(x - 7, y0, x, y0 + 8, x + 7, y0); }
-      else g.fillStyle(col, 1).fillCircle(x, y0, big ? 9 : 6);
-      if (cur) g.lineStyle(2, 0xffffff, 0.9).strokeCircle(x, y0, big ? 13 : 10);
-    });
-    const late = w.time > this.stage.starTime;
-    this.txtTime.setText(`${this.fmt(w.time)}   alvo ${this.fmt(this.stage.starTime).slice(0, 5)}`).setColor(late ? '#c9c4bd' : '#ffffff');
+    if (isTowerId(this.stage.id)) this.txtInfo.setText(`Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}`);
+    if (!this.training) {
+      const x0 = this.roomDotsX, y0 = 56;
+      this.stage.rooms.forEach((r, i) => {
+        const x = x0 + i * 26, done = i < w.room || (i === w.room && (w.phase === 'cleared' || w.phase === 'won')), cur = i === w.room;
+        const col = done ? 0xffb238 : cur ? 0xffffff : 0x8a6a4a, bigDot = r.type === 'boss' || r.type === 'elite';
+        if (r.type === 'altar') { g.fillStyle(0x1c0f0a, 1).fillCircle(x, y0, 10); g.fillStyle(done ? 0xffb238 : cur ? 0x9be7c0 : 0x8a6a4a, 1).fillTriangle(x - 6, y0, x, y0 - 7, x + 6, y0).fillTriangle(x - 6, y0, x, y0 + 7, x + 6, y0); }
+        else { g.fillStyle(0x1c0f0a, 1).fillCircle(x, y0, bigDot ? 10 : 7.5); g.fillStyle(col, 1).fillCircle(x, y0, bigDot ? 8 : 5.5); }
+        if (cur) g.lineStyle(2, 0xffffff, 0.9).strokeCircle(x, y0, bigDot ? 12 : 10);
+      });
+      const late = w.time > this.stage.starTime, target = this.stage.starTime > 0 ? `   alvo ${this.fmt(this.stage.starTime).slice(0, 5)}` : '';
+      this.txtTime.setText(`${this.fmt(w.time)}${target}`).setColor(late && target ? '#c9bfa6' : '#f6ead0');
+    } else this.txtTime.setText('Z zera o medidor  ·  Esc pausa');
 
     /* ouro achado, desafio da sala e efeitos de baú */
     const found = Math.round(w.loot.gold - this.goldAcc);
@@ -1408,40 +1612,46 @@ export class StageScene extends Phaser.Scene {
     if (ch) {
       const now = ch.kind === 'ligeiro' ? `${Math.ceil(challengeLeft(w))} s` : `${Math.min(ch.limit + 1, w.hitsTaken - ch.hits0)}/${ch.limit} golpes`;
       const txt = ch.state === 'ativo' ? `Desafio: ${now}` : ch.state === 'vencido' ? 'Desafio vencido' : 'Desafio perdido';
-      this.txtChallenge.setVisible(true).setText(txt).setColor(ch.state === 'ativo' ? '#ffd23f' : ch.state === 'vencido' ? '#9be7c0' : '#c9c4bd').setY(found > 0 ? 108 : 84);
+      this.txtChallenge.setVisible(true).setText(txt).setColor(ch.state === 'ativo' ? '#ffd23f' : ch.state === 'vencido' ? '#9be7c0' : '#c9c4bd').setY(found > 0 ? this.goldIcon.y + 16 : this.goldIcon.y - 10);
     } else this.txtChallenge.setVisible(false);
     this.drawBuffs(g);
 
     /* lua do Pampa */
     if (w.moon > 0) {
-      const mx = VIEW.w - 60, my = 90, r = 26;
+      const mx = VIEW.w - 60, my = 96, r = 26;
       g.fillStyle(0x1a1830, 0.85).fillCircle(mx, my, r + 4);
       g.fillStyle(0xe8e0ff, 1).fillCircle(mx, my, r);
       g.fillStyle(0x1a1830, 1).fillCircle(mx - r * 2 * w.moon, my, r);
       g.lineStyle(3, 0xc8a8ff, 0.9).strokeCircle(mx, my, r + 4);
     }
-    /* barra de elite ou de chefão */
-    const boss = w.enemies.find((e) => isBoss(e) && !e.fake) ?? w.enemies.find((e) => e.elite);
+    /* barra de elite ou de chefão, numa moldura */
+    const boss = this.training ? undefined : w.enemies.find((e) => isBoss(e) && !e.fake) ?? w.enemies.find((e) => e.elite);
     if (boss) {
-      const bw = 480, x = VIEW.w / 2 - bw / 2, y = 84, big = isBoss(boss);
-      g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y - 4, bw + 8, 24, 6);
-      g.fillStyle(0xd6402b, 1).fillRect(x, y, bw * Math.max(0, boss.hp / boss.maxHp), 16);
+      const bw = 480, x = VIEW.w / 2 - bw / 2, y = 88, bigBoss = isBoss(boss);
       const nb = isBossKind(boss.kind) ? BOSSES[boss.kind as BossKind] : null;
-      if (nb) {
-        for (const f of nb.phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
-        if (nb.posture) {
-          const P = nb.posture;
-          g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y + 22, bw + 8, 14, 5);
-          g.fillStyle(boss.state === 'downed' ? 0xffffff : 0xffd23f, 1).fillRect(x, y + 25, bw * (boss.state === 'downed' ? Math.max(0, 1 - boss.stateT / P.downed) : boss.posture / P.max), 8);
-        }
-      } else if (boss.kind === 'curupira' || boss.kind === 'iara') {
-        for (const f of ENEMY[boss.kind].phases) g.fillStyle(0xf1ebd8, 0.9).fillRect(x + bw * f - 1.5, y - 3, 3, 22);
-        const P = ENEMY[boss.kind].posture;
-        g.fillStyle(0x0a0f0a, 0.82).fillRoundedRect(x - 4, y + 22, bw + 8, 14, 5);
-        g.fillStyle(boss.state === 'downed' ? 0xffffff : 0xffd23f, 1).fillRect(x, y + 25, bw * (boss.state === 'downed' ? 1 - boss.stateT / P.downed : boss.posture / P.max), 8);
+      const legacy = boss.kind === 'curupira' || boss.kind === 'iara' ? ENEMY[boss.kind] : null;
+      const posture = nb?.posture ?? legacy?.posture ?? null, fh = posture ? 68 : 52;
+      g.fillStyle(0x1c0f0a, 0.94).fillRoundedRect(x - 14, y - 34, bw + 28, fh, 12);
+      g.fillStyle(0x4a2c1a, 0.96).fillRoundedRect(x - 12, y - 32, bw + 24, fh - 4, 10);
+      g.lineStyle(1.5, bigBoss ? 0xf2c14e : 0xb98352, 0.8).strokeRoundedRect(x - 11.5, y - 31.5, bw + 23, fh - 5, 10);
+      g.fillStyle(0x1c0f0a, 1).fillRoundedRect(x - 2, y - 2, bw + 4, 18, 6);
+      g.fillStyle(0x140b07, 1).fillRoundedRect(x, y, bw, 14, 4);
+      bar(x, y, bw, 14, boss.hp / boss.maxHp, 0xd6402b);
+      for (const f of nb?.phases ?? legacy?.phases ?? []) g.fillStyle(0xf6ead0, 0.95).fillRect(x + bw * f - 1.5, y - 3, 3, 20);
+      if (posture) {
+        const down = boss.state === 'downed';
+        g.fillStyle(0x1c0f0a, 1).fillRoundedRect(x - 2, y + 18, bw + 4, 12, 5);
+        g.fillStyle(0x140b07, 1).fillRoundedRect(x, y + 20, bw, 8, 3);
+        bar(x, y + 20, bw, 8, down ? Math.max(0, 1 - boss.stateT / posture.downed) : boss.posture / posture.max, down ? 0xffffff : 0xffd23f);
       }
-      this.txtBoss.setText(big ? ENEMY_NAMES[boss.kind] : `${ENEMY_NAMES[boss.kind]} · elite`).setVisible(true);
+      this.txtBoss.setText(bigBoss ? ENEMY_NAMES[boss.kind] : `${ENEMY_NAMES[boss.kind]} · elite`).setVisible(true);
     } else this.txtBoss.setVisible(false);
-    this.txtHelp.setAlpha(this.stage.number === 1 && w.room === 0 ? Math.max(0, 1 - Math.max(0, w.time - 12) / 3) : 0);
+    this.txtHelp.setAlpha(this.stage.number === 1 && w.room === 0 && !this.auto ? Math.max(0, 1 - Math.max(0, w.time - 12) / 3) : 0);
+
+    if (this.auto && this.autoChip) {
+      this.autoChip.setText(`AUTOMÁTICO  ·  ${this.auto.speed}x${this.auto.total > 1 ? `  ·  ${this.auto.index} de ${this.auto.total}` : ''}`);
+      this.autoHint?.setVisible(!boss);
+    }
+    if (this.training) this.drawMeter(g);
   }
 }

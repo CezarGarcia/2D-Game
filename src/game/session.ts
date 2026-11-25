@@ -5,7 +5,10 @@ import type { StageOutcome } from '../meta/rewards';
 export const session: {
   profile: Profile | null;
   onStageEnd: (outcome: StageOutcome) => void;
+  /** Velocidade da Caçada automática escolhida por último (a tecla V muda durante a fase). */
+  autoSpeed: number;
 } = {
   profile: null,
+  autoSpeed: 1,
   onStageEnd: () => undefined,
 };

@@ -17,6 +17,7 @@ import { bakeFx } from './fx';
 import { bakeLoot } from './loot';
 import { RAMP_ANIMS, type Kit, type Sheet } from './kit';
 import { TORRE } from './torre';
+import { drawBoneco } from './treino';
 
 /** As texturas são geradas com o dobro da resolução lógica, para continuarem nítidas em tela cheia. */
 export const BAKE = 2;
@@ -55,6 +56,8 @@ export const SHEETS = {
   iara: { key: 'iara', cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66, anims: { idle: 8, cast: 3, sing: 4, dive: 4, down: 2 } },
   iara_free: { key: 'iara_free', cellW: 236, cellH: 236, ox: 116, oy: 210, scale: 1.66, anims: { idle: 6 } },
   arara: { key: 'arara', cellW: 72, cellH: 72, ox: 40, oy: 58, scale: 1.15, anims: { fly: 6, caged: 1 } },
+  /* Terreiro de treino: um quadro por tipo de boneco (comum, blindado, elite) */
+  boneco: { key: 'boneco', cellW: 96, cellH: 150, ox: 48, oy: 134, scale: 1.8, anims: { idle: 1, armor: 1, elite: 1 } },
 } satisfies Record<string, Sheet>;
 
 function canvas(w: number, h: number): [HTMLCanvasElement, Ctx] {
@@ -275,6 +278,8 @@ export function bakeAll(scene: Phaser.Scene): void {
     ...cycle(SHEETS.onca.anims.walk, 'walk', (c, k) => drawOnca(c, 0, { walk: k * TAU })),
     ...ramp(SHEETS.onca.anims.pounce, 'pounce', (c, k) => drawOnca(c, 0, { pounce: 0.4 + k * 0.6 })),
   ]);
+
+  bakeSheet(scene, SHEETS.boneco, (['idle', 'armor', 'elite'] as const).map((kind) => [kind + '0', (c: Ctx) => drawBoneco(c, 0, { kind })] as [string, Draw]));
 
   simple(scene, 'shadow', 128, 48, (c) => {
     const g = c.createRadialGradient(64, 24, 2, 64, 24, 62);

@@ -13,6 +13,8 @@ import { ATTR_PER_LEVEL, MATERIAL_LABEL, MATERIAL_USE, knownSpells, talentFree, 
 import { claimableCount, restInfo, touchDay } from '../meta/daily';
 import { isForgeUnlocked, isTowerUnlocked, type StageRewards } from '../meta/rewards';
 import { deriveStats, powerOf } from '../meta/stats';
+import { claimableAchievements } from '../meta/achievements';
+import { renderAlmanaque } from './almanaque';
 import { renderCompanheiros } from './companheiros';
 import { renderDiario } from './diario';
 import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen, type ConfirmSpec, type Ctx, type Tab } from './ctx';
@@ -20,7 +22,7 @@ import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
 import { renderFerreiro } from './ferreiro';
 import { renderHeroi, renderItemMenu } from './heroi';
-import type { UiController, UiHost } from './host';
+import type { HuntSummary, UiController, UiHost } from './host';
 import { defaultStage, dismissStory, pendingStory, renderMapa } from './mapa';
 import { renderResultado } from './resultado';
 import { renderTalentos } from './talentos';
@@ -31,11 +33,12 @@ import { mountTips, tip } from './tip';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'mapa', label: 'Mapa' }, { id: 'heroi', label: 'Herói' }, { id: 'ferreiro', label: 'Ferreiro' },
   { id: 'talentos', label: 'Talentos' }, { id: 'feiticos', label: 'Feitiços' }, { id: 'companheiros', label: 'Companheiros' },
-  { id: 'torre', label: 'Torre' }, { id: 'diario', label: 'Diário' },
+  { id: 'torre', label: 'Torre' }, { id: 'diario', label: 'Diário' }, { id: 'almanaque', label: 'Almanaque' },
 ];
 /* o que abre cada aba trancada */
 const TAB_LOCK: Partial<Record<Tab, string>> = { ferreiro: 'Abre ao vencer a fase 1-2', torre: 'Abre ao libertar o Curupira (fase 1-12)' };
 const TOAST_MS = 2200;
+const NOTE_MS = 4200;
 
 type Draw = (g: CanvasRenderingContext2D, t: number) => void;
 
@@ -45,7 +48,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
 
   let st = newState();
   let mode: 'camp' | 'results' = 'camp';
-  let results: { stageId: string; rewards: StageRewards } | null = null;
+  let results: { stageId: string; rewards: StageRewards; hunt?: HuntSummary } | null = null;
   let scale = 1;
   let shownTab: string | null = null;
 
@@ -54,6 +57,9 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   const stage = h('div', 'enc-stage', view);
   const tips = mountTips(stage, VIEW_W, VIEW_H, () => scale);
   stage.appendChild(tips.el);
+  /* avisos que valem em qualquer tela (conquistas): ficam por cima e somem sozinhos */
+  const notes = h('div', { class: 'note-layer', 'aria-live': 'polite' });
+  stage.appendChild(notes);
   root.replaceChildren(stage);
 
   const layout = () => {
@@ -213,6 +219,8 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     if (unseen('companheiros', COMPANION_ORDER.filter((id) => p.companions[id])).length > 0) out.companheiros = { n: '!', why: 'Companheiro novo' };
     const daily = claimableCount(p);
     if (daily > 0) out.diario = { n: daily, why: daily === 1 ? 'Recompensa para pegar' : `${daily} recompensas para pegar` };
+    const ach = claimableAchievements(p).length;
+    if (ach > 0) out.almanaque = { n: ach, why: ach === 1 ? 'Conquista com prêmio para pegar' : `${ach} conquistas com prêmio para pegar` };
     return out;
   }
 
@@ -225,7 +233,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
         type: 'button', class: `dock-btn${on ? ' on' : ''}${locked ? ' locked' : ''}`, 'aria-current': on ? 'page' : null,
         'aria-label': t.label + (b ? `, ${b.why}` : ''), 'data-fk': `tab-${t.id}`, onclick: () => showCamp(t.id),
       },
-      h('span', 'dock-ico', ui(t.id, 42)),
+      h('span', 'dock-ico', ui(t.id, 38)),
       h('span', 'dock-label', t.label),
       b && !on && h('span', 'dock-badge', b.n),
       locked && h('span', 'dock-lock', ui('cadeado', 22))),
@@ -245,6 +253,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       case 'companheiros': return renderCompanheiros(ctx);
       case 'torre': return renderTorre(ctx);
       case 'diario': return renderDiario(ctx);
+      case 'almanaque': return renderAlmanaque(ctx);
       default: return renderMapa(ctx);
     }
   }
@@ -303,7 +312,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     const fk = focus ?? (had ? active.closest('[data-fk]')?.getAttribute('data-fk') : null);
     anims.clear();
 
-    if (mode === 'results' && results) { shownTab = null; view.replaceChildren(renderResultado(ctx, results.stageId, results.rewards)); }
+    if (mode === 'results' && results) { shownTab = null; view.replaceChildren(renderResultado(ctx, results.stageId, results.rewards, results.hunt)); }
     else view.replaceChildren(camp());
     st.forgeFx = null;
 
@@ -324,7 +333,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     const opening = root.hidden || mode !== 'camp';
     if (!opening && st.tab !== tab) seeTab(st.tab);
     mode = 'camp'; results = null;
-    if (st.tab !== tab || opening) { st.menu = null; st.options = false; st.confirm = null; st.forgeFx = null; st.spellSel = null; st.toast = null; }
+    if (st.tab !== tab || opening) { st.menu = null; st.options = false; st.builds = false; st.confirm = null; st.forgeFx = null; st.spellSel = null; st.toast = null; }
     st.tab = tab;
     if (tab === 'mapa' && (opening || !st.mapSel)) {
       const def = defaultStage(host.getProfile());
@@ -335,9 +344,16 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     render(opening ? undefined : `tab-${tab}`);
   }
 
-  function showResults(stageId: string, rewards: StageRewards): void {
+  function notify(text: string, icon = 'conquista'): void {
+    const el = h('div', { class: 'note', role: 'status' }, h('span', 'note-ico', ui(icon, 34)), h('span', 'note-text', text));
+    notes.appendChild(el);
+    sfx.play('perfect');
+    window.setTimeout(() => el.remove(), NOTE_MS);
+  }
+
+  function showResults(stageId: string, rewards: StageRewards, hunt?: HuntSummary): void {
     if (!root.hidden && mode === 'camp') seeTab(st.tab);
-    mode = 'results'; results = { stageId, rewards };
+    mode = 'results'; results = { stageId, rewards, hunt };
     st.confirm = null; st.options = false; st.menu = null;
     root.hidden = false;
     layout();
@@ -360,6 +376,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       if (st.confirm) { st.confirm = null; render(); e.preventDefault(); return; }
       if (st.options) { st.options = false; render('opcoes'); e.preventDefault(); return; }
       if (st.menu) { st.menu = null; render(); e.preventDefault(); return; }
+      if (st.builds) { st.builds = false; render('builds'); e.preventDefault(); return; }
       if (mode !== 'camp') return;
       if (st.tab === 'ferreiro' && st.forgeSel != null) { st.forgeSel = null; st.forgeFodder = []; st.forgeAffix = null; render(); e.preventDefault(); return; }
       if (st.tab === 'feiticos' && st.spellSel) { st.spellSel = null; render(); e.preventDefault(); return; }
@@ -375,7 +392,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   stage.addEventListener('contextmenu', (e) => e.preventDefault());
 
   return {
-    showCamp, showResults, hide,
+    showCamp, showResults, hide, notify,
     get visible() { return !root.hidden; },
   };
 }
