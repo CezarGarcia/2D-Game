@@ -1774,3 +1774,49 @@
 .enc-ui .ed-best { display: flex; align-items: center; gap: 6px; padding: 4px 8px; font-weight: 900; font-size: 16px; background: rgba(0, 0, 0, .35); border: 2px solid var(--ink); border-radius: 10px; }
 .enc-ui .ed-best i { font-style: normal; font-weight: 400; color: var(--cream2); }
 .enc-ui .ed-go { min-height: 50px; font-size: 24px; }
+
+/* ---------- conta e save na nuvem (src/ui/conta.ts) ---------- */
+.enc-ui .pop-col { display: flex; flex-direction: column; gap: 6px; }
+.enc-ui .pop-conta {
+  display: flex; align-items: center; gap: 8px; padding: 4px 10px; text-align: left; color: var(--cream);
+  background: linear-gradient(#3e5a78, #24384f); border: 2px solid var(--ink); border-radius: 10px; box-shadow: inset 0 2px 0 rgba(200, 230, 255, .25); transition: filter .08s;
+}
+.enc-ui .pop-conta:hover { filter: brightness(1.15); }
+.enc-ui .pc-text { display: flex; flex-direction: column; min-width: 0; max-width: 250px; }
+.enc-ui .pc-text b { font-weight: 900; font-size: 18px; line-height: 1.1; }
+.enc-ui .pc-text i { font-style: normal; font-size: 13px; color: #cfe2f5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.enc-ui .pop-conta.ok .pc-text i { color: var(--ok); }
+.enc-ui .pop-conta.bad .pc-text i { color: #ffb4a6; }
+.enc-ui .pop-conta.warn .pc-text i { color: var(--warn); }
+
+.enc-ui .modal.acc { position: relative; width: 520px; gap: 12px; }
+.enc-ui .acc-close { position: absolute; right: 12px; top: 12px; }
+.enc-ui .acc-google { align-self: stretch; }
+.enc-ui .acc-g { display: grid; place-items: center; width: 34px; height: 34px; font: 900 22px/1 Arial, sans-serif; color: #4285f4; background: #fff; border: 2px solid var(--ink); border-radius: 50%; }
+.enc-ui .acc-or { font-size: 15px; color: var(--dim); }
+.enc-ui .acc-row { display: flex; align-self: stretch; gap: 8px; margin: 0; }
+.enc-ui .acc-input {
+  flex: 1 1 auto; min-width: 0; height: 46px; padding: 0 14px; font: 400 19px/1 var(--f); color: var(--cream);
+  background: #1a120c; border: 3px solid var(--ink); border-radius: 12px; box-shadow: inset 0 3px 6px rgba(0, 0, 0, .6); user-select: text; -webkit-user-select: text;
+}
+.enc-ui .acc-input::placeholder { color: #7c6b55; }
+.enc-ui .acc-input:focus-visible { outline: 3px solid var(--gold); outline-offset: 1px; }
+.enc-ui .acc-msg { min-height: 20px; font-size: 16px; color: var(--warn); text-align: center; }
+.enc-ui .acc-privacy { font-size: 14px; color: #a9d4ff; }
+.enc-ui .acc-who { display: flex; align-items: center; gap: 12px; align-self: stretch; padding: 8px 14px; background: rgba(0, 0, 0, .35); border: 2px solid var(--ink); border-radius: 12px; }
+.enc-ui .acc-who div { display: flex; flex-direction: column; min-width: 0; text-align: left; }
+.enc-ui .acc-who b { font-weight: 900; font-size: 26px; line-height: 1.1; }
+.enc-ui .acc-who span { font-size: 14px; color: var(--dim); overflow: hidden; text-overflow: ellipsis; }
+.enc-ui .acc-sync { display: flex; align-items: center; gap: 8px; font-size: 17px; color: var(--cream2); }
+.enc-ui .acc-sync.ok { color: var(--ok); }
+.enc-ui .acc-sync.bad { color: #ffb4a6; }
+.enc-ui .acc-sync.warn { color: var(--warn); }
+.enc-ui .acc-delete { padding: 2px 8px; font-size: 14px; color: #ffb4a6; background: none; border: 0; text-decoration: underline; }
+.enc-ui .modal.acc.conflict { width: 640px; }
+.enc-ui .acc-saves { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-self: stretch; }
+.enc-ui .acc-save { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px; background: rgba(0, 0, 0, .35); border: 2px solid var(--ink); border-radius: 14px; }
+.enc-ui .acc-save > b { font-weight: 900; font-size: 20px; color: var(--gold); }
+.enc-ui .acc-save > div { display: flex; align-items: center; gap: 6px; font-size: 17px; }
+.enc-ui .acc-save-lv span { font-weight: 900; font-size: 26px; }
+.enc-ui .acc-save .dim { font-size: 14px; color: var(--dim); }
+.enc-ui .acc-save .btn { margin-top: 6px; }

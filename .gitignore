@@ -14,3 +14,7 @@ preview-*.html
 
 # cópias de trabalho temporárias
 .claude/worktrees/
+
+# chaves locais
+.env
+.env.local

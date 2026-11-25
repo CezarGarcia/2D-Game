@@ -14,7 +14,10 @@ import { ENCANTADOS_ID, dailyChallengeId, dailyOpen, dailySpec, encantadosOpen, 
 import { isTrainingId, trainingId } from './data/training';
 import { currentStageId, dreamContext, settleNode, type DreamContext } from './meta/dream';
 import { checkAchievements } from './meta/achievements';
-import { inventoryFull, loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
+import { inventoryFull, loadProfile, migrate, newProfile, saveProfile, wipeSave, type Profile } from './meta/profile';
+import { lazyBackend } from './online/backend';
+import { ONLINE_CONFIGURED, supabaseBackend } from './online/supabase';
+import { CloudSync, type KeyStore } from './online/sync';
 import { settleStage, touchDay } from './meta/daily';
 import { mountUi } from './ui/app';
 import type { HuntSummary } from './ui/host';
@@ -98,9 +101,42 @@ function launch(stageId: string, auto?: { speed: number; index: number; total: n
   game.scene.start('stage', { stageId, auto, dream, omens, brew, challenge });
 }
 
+/* ---------- conta e save na nuvem ---------- */
+/* Só existe quando o jogo é publicado com o endereço do Supabase (ou, no desenvolvimento, com ?nuvem=falsa). */
+const fakeCloud = import.meta.env.DEV && new URLSearchParams(location.search).get('nuvem') === 'falsa';
+const localStore: KeyStore = {
+  get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch { /* sem armazenamento */ } },
+  remove: (k) => { try { localStorage.removeItem(k); } catch { /* nada */ } },
+};
+const online: CloudSync | null = ONLINE_CONFIGURED || fakeCloud
+  ? new CloudSync(fakeCloud ? lazyBackend(() => import('./online/fake').then((m) => m.fakeBackend)) : supabaseBackend, {
+    getProfile: () => session.profile!,
+    replaceProfile: (perfil) => {
+      /* o save da nuvem pode ser de uma versão antiga do jogo: migra como o do navegador */
+      session.profile = migrate(perfil as Profile);
+      touchDay(session.profile);
+      saveProfile(session.profile);
+      game.scene.stop('camp'); game.scene.start('camp');
+      ui.showCamp('mapa');
+      ui.notify('Progresso da nuvem carregado');
+    },
+    canReplace: () => ready && game.scene.isActive('camp') && !game.scene.isActive('stage'),
+  }, localStore)
+  : null;
+
+/** Sobe o save um pouco depois da última mudança, para não mandar a cada clique. */
+let syncTimer = 0;
+function queueSync(): void {
+  if (!online?.account?.apelido) return;
+  window.clearTimeout(syncTimer);
+  syncTimer = window.setTimeout(() => { void online.syncNow(); }, 4000);
+}
+
 const ui = mountUi(document.getElementById('ui')!, {
   getProfile: () => session.profile!,
-  save: () => { saveProfile(session.profile!); },
+  online,
+  save: () => { saveProfile(session.profile!); queueSync(); },
   startStage: (stageId, opts) => {
     ui.hide();
     const a = opts?.auto;
@@ -138,8 +174,18 @@ const ui = mountUi(document.getElementById('ui')!, {
     session.profile = newProfile();
     saveProfile(session.profile);
     ui.showCamp('mapa');
+    /* com conta, recomeçar vale também na nuvem */
+    void online?.forcePush();
   },
 });
+
+if (online) {
+  void online.refresh();
+  online.onAuthChange(() => { void online.refresh(); });
+  /* de volta à aba, e de minuto em minuto no acampamento: pega o que outro aparelho jogou */
+  document.addEventListener('visibilitychange', () => { if (!document.hidden && online.account?.apelido && online.status !== 'conflito') void online.syncNow(); });
+  window.setInterval(() => { if (!document.hidden && online.account?.apelido && game.scene.isActive('camp')) void online.syncNow(); }, 60_000);
+}
 
 /** Aviso do fim de um desafio: resultado, se vale para o ranking e se é recorde. */
 function challengeNote(r: ChallengeSettled): string {
@@ -162,7 +208,7 @@ session.onStageEnd = (outcome) => {
   /* um nó do Sonho: volta para o mapa da noite, ou para o resumo se a noite acabou */
   if (isDreamId(outcome.stageId)) {
     const result = settleNode(profile, outcome);
-    saveProfile(profile);
+    saveProfile(profile); queueSync();
     afterStep(() => {
       game.scene.stop('stage'); game.scene.start('camp');
       ui.showDream(result);
@@ -173,7 +219,7 @@ session.onStageEnd = (outcome) => {
   /* desafio com ranking: guarda a tentativa e volta para a aba dele */
   if (isChallengeId(outcome.stageId)) {
     const r = settleChallenge(profile, outcome);
-    saveProfile(profile);
+    saveProfile(profile); queueSync();
     afterStep(() => {
       game.scene.stop('stage'); game.scene.start('camp');
       ui.showCamp(r?.kind === 'encantados' ? 'torre' : 'diario');
@@ -182,7 +228,7 @@ session.onStageEnd = (outcome) => {
     return;
   }
   const rewards = settleStage(profile, outcome);
-  saveProfile(profile);
+  saveProfile(profile); queueSync();
   const h = hunt;
   if (h) {
     const s = h.sum;

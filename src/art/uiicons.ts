@@ -49,6 +49,8 @@ export const UI_ICON_KEYS = [
   'sonho', 'lembranca', 'vintem', 'amuleto',
   // fase 4 do Sonho: Roda do Saci, Presságios e Cordéis
   'roda', 'gorro', 'olho', 'cordel',
+  // etapa 5: conta e save na nuvem
+  'conta',
 ] as const;
 export type UiIconKey = typeof UI_ICON_KEYS[number];
 
@@ -658,6 +660,10 @@ var I = {
   },
   seta: function (c) { P(c, function (c) { arrowP(c, 4.6, 20, 36.6, 20, 5, 12.4, 15); }, CRM, { k: 1.6, lw: 2.3 }); },
   fechar: function (c) { bar(c, [9.4, 9.4, 30.6, 30.6], CRM, 5.2); bar(c, [30.6, 9.4, 9.4, 30.6], CRM, 5.2); ln(c, [9.4, 9.4, 30.6, 30.6], CRM, 5.2); },
+  conta: function (c) {
+    P(c, function (c) { c.moveTo(10, 29); c.arc(11, 23.4, 5.6, Math.PI * .5, Math.PI * 1.4); c.arc(17.4, 16.6, 7.2, Math.PI * 1.05, Math.PI * 1.8); c.arc(26, 19.4, 6, Math.PI * 1.35, Math.PI * .1); c.arc(29.4, 24.4, 4.6, -Math.PI * .5, Math.PI * .5); c.closePath(); }, '#e8f2fb', { k: 1.2, lw: 2.2 });
+    bar(c, [20, 34.6, 20, 23.6], UP, 3.4); bar(c, [15.4, 27.4, 20, 22.6, 24.6, 27.4], UP, 3.4);
+  },
   som: function (c) {
     speaker(c);
     rope(c, function (c) { c.arc(20, 20, 7.4, -.8, .8); }, CRM, 2.5); rope(c, function (c) { c.arc(20, 20, 13.6, -.85, .85); }, CRM, 2.5);

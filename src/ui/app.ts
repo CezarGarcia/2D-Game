@@ -22,6 +22,7 @@ import { HUD_H, MAT_ICON, VIEW_H, VIEW_W, forgetSeen, markSeen, newState, unseen
 import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
 import { renderFerreiro } from './ferreiro';
+import { accountModal, conflictModal, syncLine } from './conta';
 import { renderHeroi, renderItemMenu } from './heroi';
 import type { HuntSummary, UiController, UiHost } from './host';
 import { defaultStage, dismissStory, pendingStory, renderMapa } from './mapa';
@@ -197,11 +198,25 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       pct);
   }
 
+  /** Conta e save na nuvem: só aparece quando o jogo foi publicado com servidor. */
+  function accountRow(): HTMLElement | null {
+    const o = host.online;
+    if (!o) return null;
+    const line = syncLine(o), acc = o.account;
+    return tip(h('button', {
+      type: 'button', class: `pop-conta ${line.tone}`, role: 'menuitem', 'data-fk': 'conta',
+      onclick: () => { st.options = false; st.account = true; render('conta-fechar'); },
+    }, ui('conta', 34), h('span', 'pc-text', h('b', null, acc?.apelido ?? (acc ? 'Escolher apelido' : 'Entrar')), h('i', null, line.text))),
+    { title: 'Conta', icon: ui('conta', 36), rows: [{ text: 'Guarda o progresso na nuvem, para jogar em outro aparelho e entrar nos rankings.' }, { text: 'Sem conta, o jogo continua salvo só neste navegador.', tone: 'dim' }] });
+  }
+
   function optionsMenu(): HTMLElement {
     return h('div', { class: 'pop options', role: 'menu' },
-      h('div', { class: 'pop-som', role: 'group', 'aria-label': 'Som' },
-        volumeRow('musica', 'Música', 'A música de fundo de cada capítulo, do acampamento e da Torre.'),
-        volumeRow('efeitos', 'Efeitos', 'Golpes, feitiços e avisos. Na fase, M liga e desliga todo o som.')),
+      h('div', 'pop-col',
+        accountRow(),
+        h('div', { class: 'pop-som', role: 'group', 'aria-label': 'Som' },
+          volumeRow('musica', 'Música', 'A música de fundo de cada capítulo, do acampamento e da Torre.'),
+          volumeRow('efeitos', 'Efeitos', 'Golpes, feitiços e avisos. Na fase, M liga e desliga todo o som.'))),
       tip(h('button', {
         type: 'button', class: 'pop-btn danger', role: 'menuitem', 'data-fk': 'recomecar',
         onclick: () => ctx.confirm({
@@ -295,7 +310,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     shownTab = st.tab;
     /* virou o dia com o jogo aberto: missões novas e descanso */
     if (touchDay(host.getProfile())) host.save();
-    const blocked = !!st.confirm;
+    const blocked = !!st.confirm || !!host.online?.conflict || (st.account && !!host.online);
     return h('div', `camp tab-${st.tab}`,
       h('div', { class: 'camp-in', inert: blocked },
         hud(),
@@ -305,6 +320,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
         st.options && optionsMenu(),
         st.menu && st.tab === 'heroi' && renderItemMenu(ctx),
         h('div', { class: 'toast-layer', 'aria-live': 'polite' }, toastNodes())),
+      !st.confirm && host.online?.conflict ? conflictModal(ctx, host.online) : !st.confirm && st.account && host.online ? accountModal(ctx, host.online) : null,
       st.confirm && confirmDialog(st.confirm));
   }
 
@@ -406,6 +422,9 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   });
   /* o menu do navegador não tem lugar dentro do jogo */
   stage.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  /* o estado da nuvem muda sozinho (sincronizou, caiu a rede, apareceu conflito): a tela acompanha */
+  host.online?.onChange(() => { if (!root.hidden && mode !== 'results') render(); });
 
   return {
     showCamp, showResults, showDream, hide, notify,

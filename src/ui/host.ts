@@ -4,6 +4,7 @@
  * chamam as funções de src/meta para alterá-lo e pedem para salvar.
  */
 import type { BrewId } from '../data/brews';
+import type { CloudSync } from '../online/sync';
 import type { WeaponKind } from '../data/items';
 import type { OmenPick } from '../data/omens';
 import type { Profile } from '../meta/profile';
@@ -30,6 +31,8 @@ export interface UiHost {
   startChallenge(kind: 'dia' | 'encantados', weapon?: WeaponKind): void;
   /** Apaga o progresso e recomeça do zero. */
   resetGame(): void;
+  /** Conta e save na nuvem; nulo quando o jogo foi publicado sem servidor. */
+  online: CloudSync | null;
 }
 
 export interface UiController {
