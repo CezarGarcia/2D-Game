@@ -258,9 +258,11 @@ export interface StageConfig {
   carry?: Carry;
   /** Multiplicadores de vida e de dano dos monstros (maldições de Causo e, depois, os Presságios). */
   /** Monstros mais fortes (maldição e Presságios): vida, dano, tempo de preparo do golpe, modificadores a mais nas elites e vida dos chefes. */
-  foes?: { hp: number; damage: number; windup?: number; eliteMods?: number; bossHp?: number };
+  foes?: { hp: number; damage: number; windup?: number; eliteMods?: number; bossHp?: number; /** Tamanho da Casca (1 = normal) e o multiplicador do dano em quem resiste (Presságio Maré Contrária). */ shell?: number; resist?: number };
   /** Quem tem Casca elemental nesta fase: ninguém, só o último inimigo (elite ou chefe do fim), ou toda elite e todo chefe. */
   shells?: 'boss' | 'all';
+  /** Elemento de toda Casca desta fase (o elemento da semana, na Torre). Sem ele, a Casca é do elemento do monstro. */
+  shellEl?: ElementId;
 }
 
 /** O que passa de uma sala do Sonho para a seguinte. As bênçãos já têm que estar contadas em `stats`. */

@@ -251,8 +251,8 @@ describe('Roda do Saci: na noite', () => {
 });
 
 describe('Presságios', () => {
-  it('doze Presságios; o Peso é a soma dos graus e rende Lembranças até o teto', () => {
-    expect(OMEN_ORDER).toHaveLength(12);
+  it('catorze Presságios; o Peso é a soma dos graus e rende Lembranças até o teto', () => {
+    expect(OMEN_ORDER).toHaveLength(14);
     for (const id of OMEN_ORDER) { expect(UI_ICON_KEYS).toContain(OMENS[id].icon); for (let g = 1; g <= OMENS[id].grades; g++) expect(OMENS[id].desc(g).length).toBeGreaterThan(10); }
     expect(omenWeight({})).toBe(0);
     expect(omenWeight({ luaCheia: 2, fome: 1, chefeTeimoso: 1 })).toBe(2 + 2 + 3);
@@ -261,7 +261,7 @@ describe('Presságios', () => {
     const all = Object.fromEntries(OMEN_ORDER.map((id) => [id, OMENS[id].grades]));
     expect(omenWeight(all)).toBeGreaterThanOrEqual(OMEN.marks[3]);
     expect(omenMemories(all)).toBe(OMEN.maxBonus);
-    expect(Object.keys(cleanOmens(all, true)).sort()).toEqual(['bando', 'chefeTeimoso', 'fome', 'luaCheia', 'maoPesada']);
+    expect(Object.keys(cleanOmens(all, true)).sort()).toEqual(['bando', 'cascaGrossa', 'chefeTeimoso', 'fome', 'luaCheia', 'mareContraria', 'maoPesada'].sort());
   });
 
   it('os de combate deixam os monstros mais fortes na sala', () => {

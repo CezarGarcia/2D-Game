@@ -5,10 +5,12 @@
  */
 import { affinityOf, affinitySign, attackElement } from '../data/affinity';
 import type { EnemyKind } from '../data/balance';
+import { BREW, BREWS, type BrewId } from '../data/brews';
 import { ELEMENTS, ELEMENT_ORDER, SPELLS, type ElementId, type SpellId } from '../data/content';
 import type { StageDef } from '../data/stages';
 import { killsOf } from './life';
 import type { Profile } from './profile';
+import type { StatBoost } from './stats';
 
 export type Seal = 'verde' | 'amarelo' | 'vermelho' | 'cinza';
 
@@ -86,4 +88,32 @@ export function adaptedLoadout(known: SpellId[], kinds: EnemyKind[], current: (S
     return best && per(SPELLS[best].element) > per(SPELLS[cur].element) ? best : cur;
   };
   return [pickFor(0, 'Projétil'), pickFor(1, 'Área'), pickFor(2, 'Controle')];
+}
+
+/* ---------- Garrafadas ---------- */
+
+/** A Têmpera de um elemento só existe depois que o Encantado dele foi libertado. A de proteção, sempre: serve para o capítulo que vem. */
+export function brewUnlocked(p: Profile, id: BrewId): boolean {
+  const b = BREWS[id];
+  return !!b && (b.kind === 'res' || p.supremos.includes(b.el));
+}
+
+/** Dá para fazer esta garrafada agora (liberada e com material)? */
+export function canBrew(p: Profile, id: BrewId): boolean {
+  const c = BREWS[id]?.cost;
+  return !!c && brewUnlocked(p, id) && p.materials.mata >= (c.mata ?? 0) && p.materials.po >= (c.po ?? 0);
+}
+
+/** Gasta o material da garrafada (ao entrar na fase com ela). Devolve false, sem gastar nada, se não der. */
+export function payBrew(p: Profile, id: BrewId): boolean {
+  if (!canBrew(p, id)) return false;
+  const c = BREWS[id].cost;
+  p.materials.mata -= c.mata ?? 0; p.materials.po -= c.po ?? 0;
+  return true;
+}
+
+/** O que a garrafada muda no herói durante a fase. */
+export function brewBoost(id: BrewId): StatBoost {
+  const b = BREWS[id];
+  return !b ? {} : b.kind === 'res' ? { res: { [b.el]: BREW.res } } : { weaponEl: b.el };
 }

@@ -3,6 +3,7 @@
  * As telas são HTML por cima do canvas do jogo. Elas nunca decidem regra: leem o perfil,
  * chamam as funções de src/meta para alterá-lo e pedem para salvar.
  */
+import type { BrewId } from '../data/brews';
 import type { OmenPick } from '../data/omens';
 import type { Profile } from '../meta/profile';
 import type { NodeResult } from '../meta/dream';
@@ -19,7 +20,7 @@ export interface UiHost {
   /** Grava o perfil. Chame depois de qualquer alteração. */
   save(): void;
   /** Fecha os menus e começa a fase. Com `auto`, a Caçada automática joga a fase `runs` vezes seguidas. */
-  startStage(stageId: string, opts?: { auto?: { runs: number; speed: number }; omens?: OmenPick }): void;
+  startStage(stageId: string, opts?: { auto?: { runs: number; speed: number }; omens?: OmenPick; brew?: BrewId }): void;
   /** Abre o Terreiro de treino. */
   startTraining(): void;
   /** Joga a sala do nó em que o herói do Sonho está. */

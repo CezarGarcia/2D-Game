@@ -1,13 +1,15 @@
 /** Afinidades elementais (docs/gdd/11): a Roda, a conta do dano, a Casca, os afixos de elemento e a leitura da fase. */
 import { describe, expect, it } from 'vitest';
-import { AFFINITY, BEATS, affinityMult, affinityOf, affinitySign, kindElement, stageShells, wheelAffinity } from '../src/data/affinity';
+import { AFFINITY, BEATS, affinityMult, affinityOf, affinitySign, kindElement, stageShells, towerElement, wheelAffinity } from '../src/data/affinity';
 import { BOSSES, MONSTERS } from '../src/data/bestiary';
 import type { EnemyKind } from '../src/data/balance';
 import { ELEMENT_ORDER, SPELLS, SPELL_ORDER, type ElementId } from '../src/data/content';
 import { BEATEN_BY, PACT_COST, affixText, makeItem, rollAffix } from '../src/data/items';
 import { makeRng } from '../src/data/rng';
 import { STAGES, STAGE_BY_ID } from '../src/data/stages';
-import { adaptedLoadout, prepFor, readStage } from '../src/meta/afinidade';
+import { BREW, BREWS, BREW_ORDER } from '../src/data/brews';
+import { OMEN_FOES, omenFoes } from '../src/data/omens';
+import { adaptedLoadout, brewBoost, brewUnlocked, canBrew, payBrew, prepFor, readStage } from '../src/meta/afinidade';
 import { currentTrecho, dreamContext, enterNode, startNight } from '../src/meta/dream';
 import { migrate, newProfile, type Profile } from '../src/meta/profile';
 import { deriveStats, referenceProfile } from '../src/meta/stats';
@@ -318,5 +320,118 @@ describe('a fase avisa: Ameaça e Preparo', () => {
     const early = SPELL_ORDER.filter((id) => SPELLS[id].unlock <= 5);
     expect(adaptedLoadout(early, STAGE_BY_ID.get('1-5')!.kinds, ['dardo', 'sementes', 'cipo'])).toEqual(['dardo', 'sementes', 'cipo']);
     expect(adaptedLoadout(known, stage.kinds, ['dardo', null, null])).toEqual([smart[0], null, null]);
+  });
+});
+
+describe('Garrafadas', () => {
+  it('catorze: uma de proteção e uma de têmpera por elemento, pagas em material ao entrar', () => {
+    expect(BREW_ORDER).toHaveLength(14);
+    for (const el of ELEMENT_ORDER) { expect(BREWS[`res-${el}`].kind).toBe('res'); expect(BREWS[`arma-${el}`].el).toBe(el); }
+    const p = newProfile(3);
+    p.materials.mata = BREW.cost.res.mata! - 1; p.materials.po = 0;
+    expect(canBrew(p, 'res-fogo')).toBe(false);
+    expect(payBrew(p, 'res-fogo')).toBe(false);
+    expect(p.materials.mata).toBe(BREW.cost.res.mata! - 1); // não gastou nada
+    p.materials.mata = 25; p.materials.po = 9;
+    expect(payBrew(p, 'res-fogo')).toBe(true);
+    expect(p.materials.mata).toBe(25 - BREW.cost.res.mata!);
+    /* a Têmpera pede o Encantado do elemento já libertado */
+    expect(brewUnlocked(p, 'res-agua')).toBe(true);
+    expect(brewUnlocked(p, 'arma-agua')).toBe(false);
+    expect(payBrew(p, 'arma-agua')).toBe(false);
+    expect(p.materials.po).toBe(9);
+    p.supremos = ['natureza', 'agua'];
+    expect(payBrew(p, 'arma-agua')).toBe(true);
+    expect(p.materials.po).toBe(9 - BREW.cost.arma.po!);
+  });
+
+  it('a de proteção dá resistência ao elemento, até o teto; a de têmpera põe o elemento nos golpes de arma', () => {
+    const p = referenceProfile(30), base = deriveStats(p);
+    const shielded = deriveStats(p, [], [], brewBoost('res-fogo'));
+    expect(shielded.res.fogo).toBeCloseTo(Math.min(AFFINITY.maxRes, base.res.fogo + BREW.res));
+    expect(shielded.res.agua).toBe(base.res.agua);
+    expect(base.weaponEl).toBeNull();
+    expect(deriveStats(p, [], [], brewBoost('arma-agua')).weaponEl).toBe('agua');
+    /* na sala: o golpe de arma com Água pega a fraqueza da formiga, e o de Fogo sofre a resistência */
+    const w = arena(), neutral = hit(w, 'formiga', null, 'melee');
+    w.stats.weaponEl = 'agua';
+    w.events.length = 0;
+    expect(hit(w, 'formiga', null, 'melee') / neutral).toBeCloseTo(AFFINITY.weak, 1);
+    expect(w.events.find((e) => e.type === 'hit')).toMatchObject({ aff: 1, el: 'agua' });
+    w.stats.weaponEl = 'fogo';
+    expect(hit(w, 'formiga', null, 'melee') / neutral).toBeCloseTo(AFFINITY.resist, 1);
+    /* e não muda o elemento de um feitiço */
+    expect(hit(w, 'formiga', 'agua') / neutral).toBeCloseTo(AFFINITY.weak, 1);
+  });
+});
+
+describe('o que mais mexe nas afinidades', () => {
+  it('Aspecto de elemento muda o elemento da arma; os dois sem elemento, não; a Garrafada de têmpera passa na frente', () => {
+    const p = referenceProfile(30);
+    p.aspects = { owned: ['facaoCurupira', 'facaoVaqueiro'], equipped: { facao: 'facaoCurupira' } };
+    expect(deriveStats(p).weaponEl).toBe('natureza');
+    expect(deriveStats(p, [], [], brewBoost('arma-fogo')).weaponEl).toBe('fogo');
+    p.aspects.equipped.facao = 'facaoVaqueiro';
+    expect(deriveStats(p).weaponEl).toBeNull();
+  });
+
+  it('os amuletos de afinidade: Faro, Teimosia, Casca mais fraca, Exposto mais fundo e a fraqueza do Supremo', () => {
+    const p = referenceProfile(30), s = deriveStats(p, [], ['lenteDeGarimpeiro', 'pedraDeAmolar', 'marreta', 'cristalDeRocha', 'olhoDeVidro']);
+    expect([s.faro, s.teimosia, s.shellBreak, s.exposeBonus]).toEqual([0.3, 0.35, 1.6, 0.3]);
+    expect(s.extraWeak).toBe(s.supremo);
+    expect(deriveStats(p).extraWeak).toBeNull();
+    /* a Marreta gasta a Casca mais rápido */
+    const plain = arena({ shells: 'all' }), heavy = arena({ shells: 'all' });
+    heavy.stats.shellBreak = 1.6;
+    const a = foe(plain, 'formiga', true), b = foe(heavy, 'formiga', true);
+    damageEnemy(plain, a, 100, 'melee', 0); damageEnemy(heavy, b, 100, 'melee', 0);
+    expect((b.shellMax - b.shell) / (a.shellMax - a.shell)).toBeCloseTo(1.6, 1);
+    /* o Olho de Vidro: com o Supremo de Natureza, até quem resiste a Natureza vira fraco a ela */
+    const w = arena(), neutral = hit(w, 'formiga', null, 'melee');
+    w.stats.extraWeak = 'natureza';
+    expect(hit(w, 'formiga', 'natureza') / neutral).toBeCloseTo(AFFINITY.weak, 1);
+    /* o Cristal: Exposto recebe ainda mais */
+    const e = foe(plain, 'formiga', true), f = foe(plain, 'formiga', true);
+    e.shell = 0; e.exposeT = 3; f.shell = 0; f.exposeT = 3;
+    const base = damageEnemy(plain, e, 100, 'melee', 0);
+    plain.stats.exposeBonus = 0.3;
+    expect(damageEnemy(plain, f, 100, 'melee', 0) / base).toBeCloseTo((1.5 + 0.3) / 1.5, 1);
+  });
+
+  it('Presságio Casca Grossa aumenta a Casca; Maré Contrária aumenta o castigo de quem resiste', () => {
+    expect(omenFoes({ cascaGrossa: 2 }).shell).toBeCloseTo(1 + 2 * OMEN_FOES.shell);
+    expect(omenFoes({}).resist).toBeUndefined();
+    const big = arena({ shells: 'all' });
+    big.cfg.foes = { hp: 1, damage: 1, shell: 1.8 };
+    const plain = arena({ shells: 'all' });
+    expect(foe(big, 'formiga', true).shellMax / foe(plain, 'formiga', true).shellMax).toBeCloseTo(1.8, 1);
+    const w = arena(), neutral = hit(w, 'formiga', null, 'melee');
+    w.cfg.foes = { hp: 1, damage: 1, resist: omenFoes({ mareContraria: 1 }).resist };
+    expect(hit(w, 'formiga', 'fogo') / neutral).toBeCloseTo(OMEN_FOES.resist, 1);
+    expect(hit(w, 'formiga', 'agua') / neutral).toBeCloseTo(AFFINITY.weak, 1); // a fraqueza continua igual
+    /* no Sonho, a Casca Grossa põe Casca em toda elite já no primeiro trecho */
+    const p = newProfile(5); p.level = 30;
+    for (const s of STAGES) if (s.chapter <= 3) p.stages[s.id] = { cleared: true, stars: [true, true, true], bestTime: 60, pity: 0, clears: 1 };
+    p.supremos = ['natureza', 'agua', 'tempestade']; p.dream.nights = 1;
+    const run = startNight(p, { weapon: 'facao', spells: ['dardo', null, null], companion: null, supremo: null, omens: { cascaGrossa: 1 } }, 77)!;
+    enterNode(p, 0);
+    expect(dreamContext(run).shells).toBe('all');
+    expect(dreamContext(run).foes.shell).toBeCloseTo(1 + OMEN_FOES.shell);
+  });
+
+  it('na Torre, a Casca do bloco de andares tem o elemento da semana, e traz a fraqueza que a Roda dá a ele', () => {
+    expect(towerElement('2026-W48', 21)).toBe(towerElement('2026-W48', 30)); // o bloco de dez andares é um só
+    const weeks = new Set(Array.from({ length: 30 }, (_, i) => towerElement(`2026-W${i}`, 25)));
+    expect(weeks.size).toBeGreaterThan(3);
+    const blocks = new Set(Array.from({ length: 8 }, (_, i) => towerElement('2026-W48', 21 + i * 10)));
+    expect(blocks.size).toBeGreaterThan(1);
+    const w = arena({ shells: 'all' });
+    w.cfg.shellEl = 'terra';
+    const e = foe(w, 'formiga', true);
+    expect(e.shellEl).toBe('terra');
+    expect(e.weakEl).toBe('natureza'); // Natureza racha Terra
+    expect(affinitySign('formiga', 'natureza', e.weakEl)).toBe(1); // mesmo a formiga, que resiste a Natureza
+    w.cfg.shellEl = 'fogo';
+    expect(foe(w, 'formiga', true).weakEl).toBeNull(); // Casca do elemento do próprio monstro não muda nada
   });
 });

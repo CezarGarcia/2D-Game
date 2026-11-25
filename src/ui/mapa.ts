@@ -11,6 +11,7 @@ import { applyBuild, buildMatches, type Profile } from '../meta/profile';
 import { STAR_CHESTS, isChapterOpen, stageInfo, totalStars, type StageInfo, type StageTag } from '../meta/rewards';
 import { MAIN_H, MAIN_W, markSeen, unseen, type Ctx } from './ctx';
 import { backdrop, clock, h, num, pct, star, trimBackdrops, ui } from './dom';
+import { brewChip, brewPopup } from './garrafada';
 import { omenRows } from './sonhoprep';
 import { tip, type TipRow, type TipSpec } from './tip';
 
@@ -147,7 +148,7 @@ export function renderMapa(c: Ctx): HTMLElement {
   /* Presságios da campanha: só nas fases que já têm as 3 estrelas, depois que o Sonho abre */
   const omens = cleanOmens(c.st.omens, true), dreamOpen = isDreamUnlocked(p);
   const omenOk = (id: string) => dreamOpen && !!infos.find((i) => i.stage.id === id)?.record.stars.every(Boolean);
-  const play = (id: string) => c.host.startStage(id, omenOk(id) && omenWeight(omens) > 0 ? { omens } : undefined);
+  const play = (id: string) => { const brew = c.st.brew ?? undefined; c.st.brew = null; c.st.brewOpen = false; c.host.startStage(id, { ...(omenOk(id) && omenWeight(omens) > 0 ? { omens } : {}), ...(brew ? { brew } : {}) }); };
   const hunt = (id: string) => c.host.startStage(id, { auto: { runs: c.st.huntRuns, speed: c.st.huntSpeed } });
   const pick = (info: StageInfo) => {
     if (!info.unlocked) { c.toast('Vença a fase anterior', 'bad'); return; }
@@ -212,7 +213,7 @@ export function renderMapa(c: Ctx): HTMLElement {
       st3 && dreamOpen && tip(h('button', { type: 'button', class: `chip hunt-chip omen-chip${peso ? ' on' : ''}`, 'data-fk': 'pressagios', 'aria-label': `Presságios: Peso ${peso}`, onclick: () => { c.st.omenOpen = true; c.redraw('omen-fechar'); } }, ui('olho', 20), peso ? `Peso ${peso}` : 'Presságios'),
         () => ({ title: 'Presságios', icon: ui('olho', 36), color: '#c8a8ff', sub: peso ? `+${pct(OMEN.rarityPerPoint * peso)} de chance de raridade maior, +${pct(OMEN.goldPerPoint * peso)} de ouro` : 'Deixe a fase mais difícil e melhore o saque', subColor: peso ? '#86e07a' : undefined,
           rows: [{ text: 'Valem só ao jogar na mão, nas fases que já têm as 3 estrelas.' }, sel.record.omen ? { icon: 'coroa', text: 'Maior Peso já vencido aqui', value: String(sel.record.omen) } : null] }))) : null;
-    const tall = (huntRow ? 100 : 52) + 44, left = Math.max(210, Math.min(MAIN_W - 210, pt.x));
+    const tall = (huntRow ? 100 : 52) + 44, left = Math.max(270, Math.min(MAIN_W - 270, pt.x));
     const under = pt.y + r + 26 + tall <= MAIN_H - 6;
     void below;
     /* Preparo: o selo do herói atual contra a fase, e as builds salvas com o selo de cada uma, para trocar ali mesmo */
@@ -238,7 +239,8 @@ export function renderMapa(c: Ctx): HTMLElement {
         ] })),
       reading.weak.slice(0, 3).map((e) => h('span', { class: 'prep-el weak', style: `--ec:${ELEMENTS[e].color}`, title: '' }, ui(e, 18))),
       reading.resist.slice(0, 3).map((e) => h('span', { class: 'prep-el resist', style: `--ec:${ELEMENTS[e].color}` }, ui(e, 18))),
-      builds) : null;
+      builds,
+      brewChip(c)) : null;
     playPop = h('div', { class: `play-pop${under ? '' : ' above'}`, style: `left:${left}px;top:${under ? pt.y + r + 26 : pt.y - r - 10 - tall}px` },
       h('button', { type: 'button', class: 'btn primary big play', 'data-fk': 'jogar', onclick: () => play(sel.stage.id) }, ui('dano', 30), 'Jogar'),
       prepRow,
@@ -303,6 +305,7 @@ export function renderMapa(c: Ctx): HTMLElement {
     chapters,
     chest,
     story && storyCard(c, story),
+    sel ? brewPopup(c, { threat: readStage(p, sel.stage).threat, weak: readStage(p, sel.stage).weak }) : null,
     c.st.omenOpen && h('div', { class: 'omen-pop', onclick: (e: Event) => { if (e.target === e.currentTarget) { c.st.omenOpen = false; c.redraw('pressagios'); } } },
       h('div', { class: 'panel omen-pop-in', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Presságios da fase' },
         h('div', 'omen-pop-title', ui('olho', 34), 'Presságios', h('span', null, `Peso ${omenWeight(omens)} de ${OMEN.campaignMax}`)),

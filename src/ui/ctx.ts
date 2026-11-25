@@ -5,6 +5,7 @@
 import type { AchievementGroup } from '../data/achievements';
 import type { EnemyKind } from '../data/balance';
 import type { ElementId, SpellId } from '../data/content';
+import type { BrewId } from '../data/brews';
 import type { OmenPick } from '../data/omens';
 import type { NightChoice, NightEnd } from '../meta/dream';
 import type { Profile } from '../meta/profile';
@@ -92,6 +93,8 @@ export interface UiState {
   };
   /** Presságios marcados para a próxima fase da campanha, e se a janelinha deles está aberta. */
   omens: OmenPick; omenOpen: boolean;
+  /** Garrafada escolhida para a próxima fase (gasta ao entrar), e se a janelinha delas está aberta. */
+  brew: BrewId | null; brewOpen: boolean;
   options: boolean;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
@@ -102,7 +105,7 @@ export function newState(): UiState {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
     web: null, spellSel: null, spellEl: null, compFilter: null,
-    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false }, omens: {}, omenOpen: false,
+    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false }, omens: {}, omenOpen: false, brew: null, brewOpen: false,
     options: false, confirm: null, toast: null,
   };
 }

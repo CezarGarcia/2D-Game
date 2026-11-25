@@ -12,7 +12,9 @@ import { isTrainingId } from '../data/training';
 import { AMULETS, type AmuletId } from '../data/amulets';
 import { isDreamId, parseDreamId } from '../data/dream';
 import type { DreamContext } from '../meta/dream';
-import type { Profile } from '../meta/profile';
+import { weekKey, type Profile } from '../meta/profile';
+import { brewBoost } from '../meta/afinidade';
+import type { BrewId } from '../data/brews';
 import { boitataBody } from '../sim/bosses';
 import {
   BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, ELEMENT_ORDER, PATRONS, PATRON_STEPS, PATRON_TIERS, REACTIONS, SPELLS, SUPREMOS, blessingCounts,
@@ -21,7 +23,7 @@ import {
 import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
-import { AFFINITY, stageShells } from '../data/affinity';
+import { AFFINITY, stageShells, towerElement } from '../data/affinity';
 import { cleanOmens, omenFoes, omenWeight, type OmenPick } from '../data/omens';
 import { deriveStats, type StatBoost } from '../meta/stats';
 import { HUMAN, makeBot } from '../sim/bot';
@@ -174,14 +176,15 @@ export class StageScene extends Phaser.Scene {
 
   constructor() { super('stage'); }
 
-  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext; omens?: OmenPick }): void {
+  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext; omens?: OmenPick; brew?: BrewId }): void {
     this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
     this.training = isTrainingId(this.stage.id);
     this.dream = isDreamId(this.stage.id) ? data.dream ?? null : null;
     this.auto = data.auto && !this.training && !this.dream ? { ...data.auto } : null;
     /* Presságios da campanha: só os de combate, e só em fase comum */
     this.omens = !this.training && !this.dream && !this.auto && this.stage.index >= 0 ? cleanOmens(data.omens, true) : {};
-    this.boost = this.dream?.boost ?? {};
+    /* Garrafada: só fora do Sonho e do treino, e nunca na Caçada automática */
+    this.boost = this.dream?.boost ?? (data.brew && !this.training && !this.auto ? brewBoost(data.brew) : {});
   }
 
   create(): void {
@@ -194,6 +197,7 @@ export class StageScene extends Phaser.Scene {
       stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets, this.boost), seed,
       ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : omenWeight(this.omens) > 0 ? { foes: omenFoes(this.omens) } : {}),
       shells: D ? D.shells : this.training ? undefined : stageShells(this.stage, omenWeight(this.omens)),
+      ...(isTowerId(this.stage.id) && stageShells(this.stage) ? { shellEl: towerElement(weekKey(), Number(this.stage.id.split('-')[1]) || 1) } : {}),
     });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };

@@ -38,6 +38,10 @@ export interface HeroStats {
   res: Record<ElementId, number>;
   /** Afinidades (docs/gdd/11): Faro aumenta o bônus contra quem é fraco ao elemento; Teimosia diminui o castigo contra quem resiste. */
   faro: number; teimosia: number;
+  /** Elemento dos golpes de arma (Aspecto de elemento ou Garrafada de têmpera), ou nulo: golpe sem elemento. */
+  weaponEl: ElementId | null;
+  /** A Casca dos monstros se gasta este tanto mais rápido; dano a mais em quem está Exposto; e um elemento a que todo monstro passa a ser fraco. */
+  shellBreak: number; exposeBonus: number; extraWeak: ElementId | null;
   /** Dano extra por elemento (feitiços e golpes com aquele elemento). */
   elemDamage: Record<ElementId, number>;
   /** Gema da arma: aplica o efeito do elemento com esta chance a cada golpe. */
@@ -179,7 +183,11 @@ export function totalAttrs(p: Profile, blessings: BlessingId[] = []): Record<Att
 }
 
 /** O que os Cordéis da noite somam ao herói (só o Sonho tem). */
-export interface StatBoost { hp?: number; damage?: number; cooldown?: number; crit?: number; potions?: number }
+export interface StatBoost {
+  hp?: number; damage?: number; cooldown?: number; crit?: number; potions?: number;
+  /** Garrafadas: resistência a mais por elemento, e o elemento que os golpes de arma ganham. */
+  res?: Partial<Record<ElementId, number>>; weaponEl?: ElementId | null;
+}
 
 /** Amuletos da fase 4 e Cordéis: entram por cima dos números prontos, para não espalhar mais termos nas fórmulas. */
 function nightExtras(s: HeroStats, amulets: AmuletId[], boost: StatBoost): void {
@@ -203,6 +211,14 @@ function nightExtras(s: HeroStats, amulets: AmuletId[], boost: StatBoost): void 
   if (boost.cooldown) s.cooldownMult *= 1 - boost.cooldown;
   if (boost.crit) s.critChance = Math.min(0.85, s.critChance + boost.crit);
   if (boost.potions) s.potions += boost.potions;
+  /* afinidades: amuletos e Garrafadas */
+  if (am('lenteDeGarimpeiro')) s.faro += 0.3;
+  if (am('pedraDeAmolar')) s.teimosia += 0.35;
+  if (am('marreta')) s.shellBreak *= 1.6;
+  if (am('cristalDeRocha')) s.exposeBonus += 0.3;
+  if (am('olhoDeVidro')) s.extraWeak = s.supremo;
+  if (boost.res) for (const el of ELEMENT_ORDER) if (boost.res[el]) s.res[el] = Math.max(-0.5, Math.min(0.75, s.res[el] + boost.res[el]!));
+  if (boost.weaponEl) s.weaponEl = boost.weaponEl;
 }
 
 /** Números de combate do herói. `blessings` são as bênçãos da fase; `amulets` e `boost`, os amuletos e os Cordéis da noite (só o Sonho tem). */
@@ -334,6 +350,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
     reactionMult: (rank('catalisador') ? 1.4 : 1) * (has('receita') ? 1.4 : 1) * (syn('encanto', 2) ? 1.4 : 1) * (am('chocalho') ? 1.3 : 1),
     res, elemDamage, weaponGem, sets,
     faro: pct('faro'), teimosia: pct('teimosia'),
+    weaponEl: aspect ? ASPECTS[aspect].element : null, shellBreak: 1, exposeBonus: 0, extraWeak: null,
     statusDuration: (set('benzedeira', 4) ? 2 : 1) * (1 + 0.25 * bl('unha') + 0.6 * bl('brasaDormida')),
     supremoRate: set('lembranca', 6) ? 2 : 1,
     passives: {

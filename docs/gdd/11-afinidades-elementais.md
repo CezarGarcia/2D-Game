@@ -1,6 +1,6 @@
 # 11 · Afinidades elementais
 
-**Estado:** os passos 1 e 2 estão no jogo. O que entrou, o que ficou diferente da proposta e o que falta está em "O que foi feito", logo abaixo. O resto do documento é a proposta como foi aprovada.
+**Estado:** os três passos e as Garrafadas estão no jogo. Faltam o ramo de talentos e os conjuntos por elemento. O que entrou, o que ficou diferente da proposta e o que falta está em "O que foi feito", logo abaixo. O resto do documento é a proposta como foi aprovada.
 
 ## O que foi feito
 
@@ -24,6 +24,12 @@ Decisões tomadas: peso leve na campanha e cheio no conteúdo opcional; as fraqu
 - **A fase avisa.** O painel de jogar ganhou o selo de Preparo (verde, amarelo, vermelho, ou cinza para monstros ainda desconhecidos), as fraquezas e resistências da fase e as builds salvas, cada uma com o seu selo, para trocar com um clique. O tooltip da fase e a ficha do Bestiário mostram o mesmo por monstro.
 - **Itens.** Os afixos de resistência e de dano valem para os sete elementos; a resistência puxa para o elemento do capítulo seguinte e o dano sai entre os elementos que o jogador já tem. Afixos novos: Faro, Teimosia e o item com preço (dano de um elemento em troca de resistência ao que o vence). A resistência do herói vai de −50% a 75%.
 
+- **Garrafadas** (`src/data/brews.ts`). Uma por fase, escolhida no painel de jogar (campanha e Torre) e paga em material ao entrar. A de **proteção** dá +30% de resistência a um elemento e custa 10 de Resina. A de **têmpera** põe um elemento nos golpes de arma e custa 4 de Pó de Assombro; só existe para os elementos dos Encantados já libertados. Não valem na Caçada automática nem no Sonho.
+- **Arma com elemento.** O golpe de arma sem elemento é neutro; com elemento, pega fraqueza, sofre resistência e gasta a Casca como um feitiço. O elemento vem da Garrafada de têmpera ou de um **Aspecto**: os dez Aspectos que têm elemento (facão do Curupira, arco da Iara...) agora também mudam o elemento dos golpes. O do Vaqueiro e o de Lampião continuam sem elemento.
+- **Amuletos de afinidade** (são 45 agora): Lente de Garimpeiro (Faro), Pedra de Amolar (Teimosia), Marreta de Quebra-Coco (a Casca gasta 60% mais rápido), Cristal de Rocha (+30% de dano em quem está Exposto) e Olho de Vidro (todo monstro fica fraco ao elemento do seu Supremo).
+- **Presságios de afinidade** (são 14 agora): Casca Grossa (toda elite e chefe tem Casca, 40% maior por grau) e Maré Contrária (o elemento a que o monstro resiste causa só 45% do dano). Valem no Sonho e na campanha.
+- **Casca da semana na Torre.** Do andar 21 em diante, as Cascas de cada bloco de dez andares têm um elemento que muda toda segunda-feira, e a fraqueza que a Roda dá a ele. A tela da Torre mostra qual é.
+
 **Diferente da proposta:**
 
 - **"Peso cheio" virou os Presságios.** A proposta falava em terceira estrela e Caçada automática; o jogo não sabe quando alguém está atrás da terceira estrela, e castigar quem repete fase seria estranho. Quem quer a campanha com toda elite de Casca liga um Presságio.
@@ -36,14 +42,13 @@ Decisões tomadas: peso leve na campanha e cheio no conteúdo opcional; as fraqu
 | Antes das afinidades | 805 de 960 (84%) |
 | Agora, sem nunca trocar de feitiço | 786 de 960 (82%) |
 | Agora, trocando para o elemento que a fase teme | 824 de 960 (86%) |
+| Trocando, e com a Têmpera do elemento certo (entre os já ganhos) | 843 de 960 (88%) |
 
-A diferença se concentra onde a fraqueza está à mão: no capítulo 7, 74% sem trocar contra 100% trocando. No capítulo 4 é pequena (87% contra 89%), porque o herói de referência causa a maior parte do dano com a arma, que não tem elemento. `npx vite-node tests/calib-afinidade.ts` refaz a conta.
+A diferença se concentra onde a fraqueza está à mão: no capítulo 7, 74% sem trocar contra 100% trocando. No capítulo 4 é pequena (87% contra 89%), porque o herói de referência causa a maior parte do dano com a arma, que não tem elemento. É aí que a Têmpera pesa: com a de Água, o capítulo 4 vai a 97%. `npx vite-node tests/calib-afinidade.ts` refaz a conta.
 
 **Ainda não foi feito:**
 
-- Garrafadas (o consumível por fase).
 - O ramo de talentos de preparo, e os conjuntos novos por elemento.
-- O passo 3 inteiro: Presságios, Aspectos e amuletos de elemento no Sonho, e andares de elemento na Torre.
 - Dano físico por tipo (corte, impacto, perfuração), se os elementos funcionarem bem com quem joga.
 
 **A ideia, em uma frase:** cada monstro tem elementos a que é fraco e elementos a que resiste; cada fase avisa o que vem; e o jogador ganha (ou sofre) por montar o herói pensando nisso.

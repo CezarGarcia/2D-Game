@@ -133,3 +133,10 @@ export function stageShells(stage: { id: string; chapter: number; number: number
   if (omenWeight > 0) return 'all';
   return stage.chapter >= 3 && stage.number >= 11 ? 'boss' : undefined;
 }
+
+/** Elemento das Cascas de um bloco de dez andares da Torre: muda toda semana, para a build do ranking não ser sempre a mesma. */
+export function towerElement(week: string, floor: number): ElementId {
+  let v = 2166136261;
+  for (const ch of `${week}|${Math.floor((Math.max(1, floor) - 1) / 10)}`) v = Math.imul(v ^ ch.charCodeAt(0), 16777619);
+  return ELEMENT_ORDER[(v >>> 0) % ELEMENT_ORDER.length];
+}

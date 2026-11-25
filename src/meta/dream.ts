@@ -377,7 +377,7 @@ export interface DreamContext {
   amulets: AmuletId[];
   boost: StatBoost;
   carry: Carry;
-  foes: { hp: number; damage: number; windup: number; eliteMods: number; bossHp: number };
+  foes: { hp: number; damage: number; windup: number; eliteMods: number; bossHp: number; shell: number; resist?: number };
   /** Casca elemental (docs/gdd/11): no primeiro trecho, só no chefe; do segundo em diante, em toda elite e chefe. */
   shells: 'all' | undefined;
   /** Para o HUD: trecho, total de trechos e vinténs. */
@@ -389,7 +389,7 @@ export function dreamContext(run: DreamRun): DreamContext {
   return {
     profile: runProfile(run, true), amulets: run.amulets.slice(), boost: runBoost(run),
     carry: { blessings: run.blessings.slice(), hpFrac: Math.max(0.01, run.hpFrac * (trial ? 0.7 : 1)), potions: run.potions, altarDry: run.altarDry, revives: run.revives, supremo: run.charge },
-    foes: runFoes(run), shells: node?.kind === 'chefe' || run.trecho >= 1 ? 'all' : undefined,
+    foes: runFoes(run), shells: node?.kind === 'chefe' || run.trecho >= 1 || omenGrade(run.omens, 'cascaGrossa') > 0 ? 'all' : undefined,
     trecho: run.trecho + 1, of: run.map.trechos.length, vintem: run.vintem,
   };
 }

@@ -20,13 +20,15 @@ export interface AspectDef {
   /** "do Curupira", "do Vaqueiro"... */
   name: string;
   desc: string;
-  /** Elemento que dá a cor (e o selo) do Aspecto. */
+  /** Elemento do Aspecto: dá a cor e o selo, e é o elemento dos golpes da arma enquanto ele está em uso (nulo = golpe sem elemento). */
   element: ElementId | null;
   /** Lembranças para comprar. */
   cost: number;
 }
 
-const A = (id: AspectId, weapon: WeaponKind, name: string, element: ElementId | null, cost: number, desc: string): AspectDef => ({ id, weapon, name, element, cost, desc });
+const EL_NAME: Record<ElementId, string> = { natureza: 'Natureza', agua: 'Água', tempestade: 'Tempestade', fogo: 'Fogo', terra: 'Terra', sombra: 'Sombra', encanto: 'Encanto' };
+/* um Aspecto de elemento também muda o elemento dos golpes da arma (docs/gdd/11): pega fraqueza, sofre resistência e gasta a Casca */
+const A = (id: AspectId, weapon: WeaponKind, name: string, element: ElementId | null, cost: number, desc: string): AspectDef => ({ id, weapon, name, element, cost, desc: element ? `${desc} Os golpes da arma passam a ser de ${EL_NAME[element]}.` : desc });
 
 export const ASPECTS: Record<AspectId, AspectDef> = {
   facaoCurupira: A('facaoCurupira', 'facao', 'do Curupira', 'natureza', 120, 'Aparar um golpe solta espinhos em volta: ferem e prendem por 1 s quem estiver perto.'),

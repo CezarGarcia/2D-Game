@@ -4,7 +4,7 @@
  * Os de combate também valem nas fases da campanha já vencidas com 3 estrelas, onde melhoram o saque.
  */
 
-export type OmenId = 'luaCheia' | 'fome' | 'maoPesada' | 'bando' | 'chefeTeimoso' | 'poucasVelas' | 'feiraCara' | 'rodaViciada' | 'semPadrinho' | 'pressa' | 'esquecimento' | 'juizo';
+export type OmenId = 'luaCheia' | 'fome' | 'maoPesada' | 'bando' | 'chefeTeimoso' | 'cascaGrossa' | 'mareContraria' | 'poucasVelas' | 'feiraCara' | 'rodaViciada' | 'semPadrinho' | 'pressa' | 'esquecimento' | 'juizo';
 
 export interface OmenDef {
   id: OmenId;
@@ -25,7 +25,7 @@ export type OmenPick = Partial<Record<OmenId, number>>;
 export const HURRY_SECONDS = [0, 300, 240, 180];
 
 /** Quanto cada grau dos Presságios de combate muda nos monstros (calibrado com tests/calib-sonho.ts). */
-export const OMEN_FOES = { hp: 0.12, damage: 0.1, haste: 0.07, bossHp: 0.3 };
+export const OMEN_FOES = { hp: 0.12, damage: 0.1, haste: 0.07, bossHp: 0.3, shell: 0.4, resist: 0.45 };
 const pc = (frac: number) => Math.round(frac * 100);
 
 const O = (id: OmenId, name: string, icon: string, grades: number, weight: number, combat: boolean, desc: (g: number) => string): OmenDef => ({ id, name, icon, grades, weight, combat, desc });
@@ -36,6 +36,9 @@ export const OMENS: Record<OmenId, OmenDef> = {
   maoPesada: O('maoPesada', 'Mão Pesada', 'velAtaque', 3, 1, true, (g) => `Os monstros atacam ${pc(OMEN_FOES.haste * g)}% mais rápido`),
   bando: O('bando', 'Bando', 'elite', 2, 2, true, (g) => `Elites ganham ${g === 1 ? 'um modificador' : 'dois modificadores'} a mais`),
   chefeTeimoso: O('chefeTeimoso', 'Chefe Teimoso', 'coroa', 1, 3, true, () => `Os chefes têm ${pc(OMEN_FOES.bossHp)}% mais vida`),
+  /* afinidades (docs/gdd/11) */
+  cascaGrossa: O('cascaGrossa', 'Casca Grossa', 'escudo', 2, 2, true, (g) => `Toda elite e todo chefe tem Casca, e ela é ${pc(OMEN_FOES.shell * g)}% maior`),
+  mareContraria: O('mareContraria', 'Maré Contrária', 'resistencia', 1, 1, true, () => `O elemento a que o monstro resiste causa só ${pc(OMEN_FOES.resist)}% do dano`),
   poucasVelas: O('poucasVelas', 'Poucas Velas', 'cura', 2, 1, false, (g) => (g === 1 ? 'As Fontes curam a metade' : 'As Fontes não curam: só devolvem as poções')),
   feiraCara: O('feiraCara', 'Feira Cara', 'vender', 3, 1, false, (g) => `Os preços da Feira ficam ${30 * g}% maiores`),
   rodaViciada: O('rodaViciada', 'Roda Viciada', 'roda', 1, 2, false, () => 'A Roda do Saci tem um padrinho a menos e mais Olhos'),
@@ -74,13 +77,15 @@ export function cleanOmens(pick: OmenPick | undefined, combatOnly = false): Omen
 }
 
 /** O que os Presságios de combate fazem com os monstros (vai em `StageConfig.foes`). */
-export function omenFoes(pick: OmenPick | undefined): { hp: number; damage: number; windup: number; eliteMods: number; bossHp: number } {
+export function omenFoes(pick: OmenPick | undefined): { hp: number; damage: number; windup: number; eliteMods: number; bossHp: number; shell: number; resist?: number } {
   return {
     hp: 1 + OMEN_FOES.hp * omenGrade(pick, 'luaCheia'),
     damage: 1 + OMEN_FOES.damage * omenGrade(pick, 'fome'),
     windup: 1 / (1 + OMEN_FOES.haste * omenGrade(pick, 'maoPesada')),
     eliteMods: omenGrade(pick, 'bando'),
     bossHp: omenGrade(pick, 'chefeTeimoso') ? 1 + OMEN_FOES.bossHp : 1,
+    shell: 1 + OMEN_FOES.shell * omenGrade(pick, 'cascaGrossa'),
+    ...(omenGrade(pick, 'mareContraria') ? { resist: OMEN_FOES.resist } : {}),
   };
 }
 

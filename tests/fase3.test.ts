@@ -521,8 +521,8 @@ describe('acordar', () => {
 });
 
 describe('amuletos, causos e conquistas', () => {
-  it('40 amuletos e 20 causos, todos com ícone, texto e história', () => {
-    expect(AMULET_ORDER).toHaveLength(40);
+  it('45 amuletos e 20 causos, todos com ícone, texto e história', () => {
+    expect(AMULET_ORDER).toHaveLength(45);
     for (const id of AMULET_ORDER) {
       const a = AMULETS[id];
       expect(UI_ICON_KEYS).toContain(a.icon);

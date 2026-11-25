@@ -150,10 +150,11 @@ export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quie
   };
   /* Casca elemental: em toda elite e chefe, ou só no inimigo do fim da fase */
   if (!opts.fake && (elite || boss) && def.kind !== 'boneco' && (w.cfg.shells === 'all' || (w.cfg.shells === 'boss' && w.room >= w.cfg.rooms.length - 1))) {
-    let el = kindElement(def.kind);
-    /* quem não tem elemento ganha uma Casca de um elemento sorteado, e a fraqueza que a Roda dá a ele */
-    if (!el) { el = ELEMENT_ORDER[Math.floor(rand(w) * ELEMENT_ORDER.length)]; e.weakEl = wheelAffinity(el).weak[0] ?? null; }
-    e.shellEl = el; e.shellMax = Math.round(hp * (boss ? AFFINITY.shell.boss : AFFINITY.shell.elite)); e.shell = e.shellMax;
+    let el = w.cfg.shellEl ?? kindElement(def.kind);
+    /* quem não tem elemento ganha uma Casca de um elemento sorteado; Casca de elemento que não é o do monstro traz a fraqueza que a Roda dá a ela */
+    if (!el) el = ELEMENT_ORDER[Math.floor(rand(w) * ELEMENT_ORDER.length)];
+    if (el !== kindElement(def.kind)) e.weakEl = wheelAffinity(el).weak[0] ?? null;
+    e.shellEl = el; e.shellMax = Math.round(hp * (boss ? AFFINITY.shell.boss : AFFINITY.shell.elite) * (foes?.shell ?? 1)); e.shell = e.shellMax;
   }
   const armored = def.kind === 'tronco' || def.kind === 'caramujo' || (isMonster(def.kind) && MONSTERS[def.kind].armored);
   if (armored && !mods.includes('blindado')) e.mods = [...mods, 'blindado'];
@@ -235,14 +236,17 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   if (B.rootCrack && e.rootT > 0) e.crackT = Math.max(e.crackT, 3);
   const open = isOpen(e);
   const weapon = source === 'melee' || source === 'arrow' || source === 'roll';
+  /* golpe de arma com elemento: de um Aspecto ou de uma Garrafada de têmpera */
+  if (!element && weapon && s.weaponEl) element = s.weaponEl;
   if (element) dmg *= 1 + s.elemDamage[element];
   /* afinidade: o elemento do golpe contra as fraquezas e resistências do monstro. Veneno é Natureza, faísca é Tempestade,
      o companheiro bate com o elemento dele, e a reação vale pelo melhor dos dois elementos que a causaram. */
   const affEl: ElementId | null = element ?? (source === 'poison' ? 'natureza' : source === 'spark' ? 'tempestade' : source === 'pet' && s.companion ? COMPANIONS[s.companion].element : null);
   let sign: -1 | 0 | 1 = affEl ? affinitySign(e.kind, affEl, e.weakEl) : 0;
   if (source === 'reaction' && w.reacting) sign = Math.max(affinitySign(e.kind, w.reacting[0], e.weakEl), affinitySign(e.kind, w.reacting[1], e.weakEl)) as -1 | 0 | 1;
-  if (sign) dmg *= affinityMult(sign, s.faro, s.teimosia);
-  if (e.exposeT > 0) dmg *= 1 + AFFINITY.exposed.bonus;
+  if (affEl && s.extraWeak === affEl) sign = 1;
+  if (sign) dmg *= sign < 0 && w.cfg.foes?.resist ? 1 - (1 - w.cfg.foes.resist) * (1 - Math.min(AFFINITY.maxTeimosia, s.teimosia)) : affinityMult(sign, s.faro, s.teimosia);
+  if (e.exposeT > 0) dmg *= 1 + AFFINITY.exposed.bonus + s.exposeBonus;
   if (w.buffs.length) dmg *= 1 + buffPower(w, 'furia');
   if (e.mods.includes('blindado')) {
     if (!open && !(weapon && s.ignoreArmor)) { dmg *= e.kind === 'caramujo' ? ENEMY.caramujo.armor : ENEMY.tronco.armor; armored = true; }
@@ -289,7 +293,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   /* Casca elemental: segura parte do dano e se gasta mais rápido com o elemento certo. Quebrada, o monstro fica Exposto. */
   let broke = false;
   if (e.shell > 0) {
-    const eat = dmg * (sign > 0 ? AFFINITY.shell.weak : sign < 0 ? AFFINITY.shell.resist : 1);
+    const eat = dmg * (sign > 0 ? AFFINITY.shell.weak : sign < 0 ? AFFINITY.shell.resist : 1) * s.shellBreak;
     dmg *= 1 - AFFINITY.shell.guard; armored = true;
     e.shell = Math.max(0, e.shell - eat);
     if (e.shell <= 0) {

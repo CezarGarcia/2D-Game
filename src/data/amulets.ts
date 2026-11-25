@@ -11,7 +11,9 @@ export type AmuletId =
   /* fase 4 */
   | 'cabacaDoSaci' | 'galhoDeArruda' | 'terco' | 'alpercata' | 'cuia' | 'fumoDeRolo' | 'bentinho' | 'pedraDeRaio'
   | 'moedaFurada' | 'apitoDeTaquara' | 'berrante' | 'lamparina' | 'rosario' | 'gibaoVelho' | 'tamborim' | 'balaio'
-  | 'caldeiraoDaCuca' | 'estrelaDoBoi' | 'dadoViciado' | 'espelhoQuebrado';
+  | 'caldeiraoDaCuca' | 'estrelaDoBoi' | 'dadoViciado' | 'espelhoQuebrado'
+  /* afinidades (docs/gdd/11) */
+  | 'lenteDeGarimpeiro' | 'pedraDeAmolar' | 'marreta' | 'cristalDeRocha' | 'olhoDeVidro';
 
 /** Comum, raro, lendário, ou figa torta (dá muito e cobra um preço). */
 export type AmuletRarity = 'comum' | 'raro' | 'lendario' | 'figa';
@@ -79,6 +81,12 @@ export const AMULETS: Record<AmuletId, AmuletDef> = {
   /* figas tortas */
   dadoViciado: A('dadoViciado', 'Dado Viciado', 'figa', 'sorte', '#e0344c', 'Feira e Roda custam a metade, mas você recebe 25% mais dano', 'Cai sempre no mesmo número. O problema é quando descobrem.'),
   espelhoQuebrado: A('espelhoQuebrado', 'Espelho Quebrado', 'figa', 'espelho', '#9fe0fa', '+30% de chance de crítico, mas 25% menos vida máxima', 'Sete anos de azar, dizem. Em cada caco, um você mais afiado.'),
+  /* ---- afinidades ---- */
+  lenteDeGarimpeiro: A('lenteDeGarimpeiro', 'Lente de Garimpeiro', 'comum', 'critico', '#9fe0fa', 'Faro: +30% no bônus contra fraquezas', 'Quem acha ouro em cascalho acha o ponto fraco de qualquer coisa.'),
+  pedraDeAmolar: A('pedraDeAmolar', 'Pedra de Amolar', 'comum', 'perfurar', '#a9a6a0', 'Teimosia: −35% no castigo contra quem resiste', 'De tanto passar na pedra, até faca cega corta.'),
+  marreta: A('marreta', 'Marreta de Quebra-Coco', 'raro', 'borduna', '#c9a26b', 'A Casca dos monstros se gasta 60% mais rápido', 'As quebradeiras de babaçu abrem o coco mais duro com um golpe só, no lugar certo.'),
+  cristalDeRocha: A('cristalDeRocha', 'Cristal de Rocha', 'raro', 'gema', '#e9e1f2', 'Monstros Expostos recebem mais 30% de dano', 'Limpo como água. Mostra a rachadura que ninguém via.'),
+  olhoDeVidro: A('olhoDeVidro', 'Olho de Vidro', 'lendario', 'olho', '#ff7ad9', 'Todo monstro passa a ser fraco ao elemento do seu Supremo', 'Olho que não pisca. Vê em cada bicho o que ele mais teme.'),
   ferraduraVirada: A('ferraduraVirada', 'Ferradura Virada', 'figa', 'ferreiro', '#a9a6a0', 'Bênçãos comuns sobem 2 níveis de uma vez, mas os altares só trazem bênçãos comuns', 'Com as pontas para cima a ferradura guarda a sorte. Virada, ela escorre.'),
 };
 

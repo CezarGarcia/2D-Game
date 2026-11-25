@@ -2,6 +2,8 @@
  * Torre dos Cem Andares: a torre pintada no fundo, um medalhão a cada dez andares subindo por ela,
  * os recordes em ícone + número e o botão de subir, que sempre parte do marco atual.
  */
+import { stageShells, towerElement, wheelAffinity } from '../data/affinity';
+import { brewChip, brewPopup } from './garrafada';
 import { paintTowerBackdrop } from '../art/backdrops';
 import { COMPANIONS, ELEMENTS } from '../data/content';
 import { CHAPTERS, ENEMY_NAMES } from '../data/stages';
@@ -126,7 +128,9 @@ export function renderTorre(c: Ctx): HTMLElement {
     }));
 
   /* ---------- próxima subida ---------- */
-  const go = () => c.host.startStage(`torre-${t.checkpoint}`);
+  const go = () => { const brew = c.st.brew ?? undefined; c.st.brew = null; c.st.brewOpen = false; c.host.startStage(`torre-${t.checkpoint}`, brew ? { brew } : undefined); };
+  /* Cascas da semana: do andar 21 em diante, as elites e os chefes deste bloco têm Casca de um elemento que muda toda segunda */
+  const shells = stageShells({ id: `torre-${cur.start}`, chapter: 1, number: 0, index: -1 }), shellEl = shells ? towerElement(weekKey(), cur.start) : null, shellWeak = shellEl ? wheelAffinity(shellEl).weak[0] : null;
   const reward = (icon: string, value: string | null, title: string) => tip(h('span', { class: 'trew', tabindex: 0 }, ui(icon, 30), value && h('b', null, value)), { title, icon: ui(icon, 36) });
   const climb = h('div', 'tower-climb',
     tip(h('div', { class: 'tc-head', tabindex: 0 }, h('b', null, `${cur.start}–${cur.end}`)), () => runTip(c.p, cur, 'now')),
@@ -134,7 +138,10 @@ export function renderTorre(c: Ctx): HTMLElement {
       tip(stat('xp', `Nv ${towerLevel(cur.start)}–${towerLevel(cur.end)}`, { size: 26 }), { title: 'Nível dos monstros', icon: ui('xp', 36), rows: [{ icon: 'poder', text: 'Sobe um pouco a cada andar.', tone: 'dim' }] }),
       tip(h('span', { class: 'stat', tabindex: 0 }, runChapters(cur).map((f) => ui(chapterIcon(f), 26))),
         { title: 'Monstros', icon: ui(chapterIcon(cur.start), 36), rows: runChapters(cur).flatMap((f): TipRow[] => [{ icon: chapterIcon(f), text: chapterOf(f).name, value: f === cur.start ? null : `${f}º+`, color: chapterColor(f) }, { icon: 'mapa', text: chapterOf(f).terrain, tone: 'dim' }]) }),
-      tip(h('span', { class: 'stat', tabindex: 0 }, ui('caveira', 26), h('b', null, cur.end)), { title: `Chefe: ${bossName(cur.start)}`, color: '#ff7b6b', icon: ui('caveira', 36), rows: [{ text: `No ${cur.end}º andar.`, tone: 'dim' }] })),
+      tip(h('span', { class: 'stat', tabindex: 0 }, ui('caveira', 26), h('b', null, cur.end)), { title: `Chefe: ${bossName(cur.start)}`, color: '#ff7b6b', icon: ui('caveira', 36), rows: [{ text: `No ${cur.end}º andar.`, tone: 'dim' }] }),
+      shellEl && shellWeak && tip(h('span', { class: 'stat tower-shell', tabindex: 0, style: `--ec:${ELEMENTS[shellEl].color}` }, ui('escudo', 24), ui(shellEl, 24)),
+        { title: `Casca de ${ELEMENTS[shellEl].name}`, color: ELEMENTS[shellEl].color, icon: ui(shellEl, 36), sub: 'Nesta semana, nestes andares', rows: [{ text: shells === 'all' ? 'Toda elite e todo chefe destes andares tem Casca deste elemento.' : 'O chefe destes andares tem Casca deste elemento.' }, { icon: shellWeak, text: `Quebra três vezes mais rápido com ${ELEMENTS[shellWeak].name}`, tone: 'ok' }, { text: 'O elemento muda toda segunda-feira.', tone: 'dim' }] }),
+      brewChip(c)),
     h('div', 'tc-rewards',
       reward('ouro', null, 'Ouro a cada andar'), reward('xp', null, 'Experiência a cada andar'),
       reward('tomo', 'x2', 'Tomo a cada 5 andares'), reward('gema', 'x2', `Gemas no ${cur.end}º andar`), reward('item', 'x1', `Item no ${cur.end}º andar`),
@@ -144,5 +151,5 @@ export function renderTorre(c: Ctx): HTMLElement {
       rows: [{ text: 'Cair encerra a subida, mas os andares vencidos ficam. Vencendo os dez, o próximo marco abre.', tone: 'dim' }],
     }));
 
-  return h('div', 'torre', bg, trail, medals, records, climb);
+  return h('div', 'torre', bg, trail, medals, records, climb, brewPopup(c, shellWeak ? { weak: [shellWeak] } : {}));
 }
