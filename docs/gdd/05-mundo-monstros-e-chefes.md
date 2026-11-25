@@ -18,7 +18,7 @@ Cada capítulo tem 12 fases: 10 normais, 1 de elite (fase 11) e 1 de chefão (fa
 ## Uma fase
 
 - 5 a 7 salas ligadas. Cada sala fecha até os inimigos caírem.
-- Tipos de sala: combate, emboscada, corredor de armadilhas, sala do **altar** (escolha 1 de 3 bênçãos que valem até o fim da fase), sala secreta (precisa ser encontrada), sala final.
+- Tipos de sala: combate, emboscada, corredor de armadilhas, sala do **altar** (escolha 1 de 3 bênçãos que valem até o fim da fase; padrinhos, sinergias, Despertar e Compadrio estão no [09](09-sonho-e-rejogabilidade.md)), sala secreta (precisa ser encontrada), sala final.
 - As salas de cada fase são fixas, para o tempo no ranking ser comparável. A composição exata de inimigos varia um pouco dentro de uma lista.
 
 ### Achados dentro da fase

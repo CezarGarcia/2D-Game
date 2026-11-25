@@ -81,6 +81,8 @@ export interface Player {
   heldT: number;
   /** Golpes desde o último tremor (conjunto do Seringueiro) e tempo de luta (conjunto da Lua). */
   hitCount: number; fightT: number; frenzyT: number;
+  /** Bênçãos: chão andado desde o último fogo do Rastro Aceso; pressa depois da esquiva; abates seguidos da Lua Ventosa e o tempo que falta; o fôlego da Iara já usado nesta sala. */
+  trailD: number; hasteT: number; windStacks: number; windT: number; secondWind: boolean;
 }
 
 export type EnemyState =
@@ -270,6 +272,8 @@ export interface World {
   blessings: BlessingId[];
   /** Bênçãos oferecidas na sala de altar atual. */
   altar: BlessingId[] | null;
+  /** Altares seguidos só com bênçãos comuns (azar com limite: o próximo garante uma rara). */
+  altarDry: number;
   revives: number; deaths: number; deadT: number;
   kills: number; perfects: number; hitsTaken: number; roomsCleared: number;
   /** Tempo de luta contra o chefão, para a fúria. */

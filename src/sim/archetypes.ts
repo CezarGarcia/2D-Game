@@ -218,11 +218,13 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
         moveToward(e, T.x, T.y, d.speed * sp * 0.3, dt);
         e.tele.x = e.x; e.tele.y = e.y; e.tele.t = e.stateT;
         if (e.stateT >= e.tele.dur) {
-          emit(w, { type: 'explode', x: e.x, y: e.y, value: e.tele.r, kind: d.element ?? 'vazio' });
+          /* o raio fica guardado: o golpe pode ser devolvido (esquiva perfeita, espinhos) e derrubar quem explodiu, o que apaga a marca */
+          const blast = e.tele.r;
+          emit(w, { type: 'explode', x: e.x, y: e.y, value: blast, kind: d.element ?? 'vazio' });
           strike(w, e.tele, d.damage * e.dmg, 340, { src: e });
-          if (d.leaves === 'fogo') w.zones.push({ id: w.nextId++, kind: 'fire', x: e.x, y: e.y, r: e.tele.r * 0.8, t: 0, dur: 3, tick: 0.5, power: d.damage * e.dmg * 0.18, hostile: true });
-          if (d.leaves === 'sombra') w.zones.push({ id: w.nextId++, kind: 'curse', x: e.x, y: e.y, r: e.tele.r * 0.85, t: 0, dur: 3.5, tick: 0.5, power: d.damage * e.dmg * 0.12, hostile: true });
-          if (d.leaves === 'vazio') w.zones.push({ id: w.nextId++, kind: 'void', x: e.x, y: e.y, r: e.tele.r * 1.6, t: 0, dur: 1.4, tick: 0.5, power: d.damage * e.dmg * 0.1, hostile: true });
+          if (d.leaves === 'fogo') w.zones.push({ id: w.nextId++, kind: 'fire', x: e.x, y: e.y, r: blast * 0.8, t: 0, dur: 3, tick: 0.5, power: d.damage * e.dmg * 0.18, hostile: true });
+          if (d.leaves === 'sombra') w.zones.push({ id: w.nextId++, kind: 'curse', x: e.x, y: e.y, r: blast * 0.85, t: 0, dur: 3.5, tick: 0.5, power: d.damage * e.dmg * 0.12, hostile: true });
+          if (d.leaves === 'vazio') w.zones.push({ id: w.nextId++, kind: 'void', x: e.x, y: e.y, r: blast * 1.6, t: 0, dur: 1.4, tick: 0.5, power: d.damage * e.dmg * 0.1, hostile: true });
           e.tele = null; e.hp = 0;
           emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id });
         }

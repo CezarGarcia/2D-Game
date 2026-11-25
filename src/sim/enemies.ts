@@ -232,9 +232,10 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       moveToward(e, T.x, T.y, M.speed * sp * 0.3, dt);
       e.tele.x = e.x; e.tele.y = e.y; e.tele.t = e.stateT;
       if (e.stateT >= e.tele.dur) {
-        emit(w, { type: 'explode', x: e.x, y: e.y, value: e.tele.r });
+        const blast = e.tele.r;
+        emit(w, { type: 'explode', x: e.x, y: e.y, value: blast });
         strike(w, e.tele, M.damage * e.dmg, 340, { src: e, nature: true });
-        w.zones.push({ id: w.nextId++, kind: 'cloud', x: e.x, y: e.y, r: e.tele.r * 0.85, t: 0, dur: M.cloud, tick: M.cloudEvery, power: M.cloudTick * e.dmg });
+        w.zones.push({ id: w.nextId++, kind: 'cloud', x: e.x, y: e.y, r: blast * 0.85, t: 0, dur: M.cloud, tick: M.cloudEvery, power: M.cloudTick * e.dmg });
         e.tele = null; e.hp = 0;
         emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id });
       }

@@ -10,7 +10,7 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 |---|---|
 | 0 · Preparação | **Feita** |
 | 1 · Conveniências e coleção | **Feita** |
-| 2 · Bênçãos com padrinho | A fazer |
+| 2 · Bênçãos com padrinho | **Feita** |
 | 3 · O Sonho, o núcleo | A fazer |
 | 4 · Roda, Presságios, Cordéis e Aspectos | A fazer |
 | 5 · Aldeia, companheiros, pós-jogo e exagero | A fazer |
@@ -25,6 +25,18 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 - **Filtro de saque.** Além de conjunto e item com nome, também nunca desmonta o que aumenta o Poder.
 - **Builds.** Guardam também atributos e talentos, e trocar é sempre grátis: o custo de redistribuir já foi pago ao montar cada build.
 - **Fora do plano: HUD da fase.** A vida, a mana, a barra de ações, o cabeçalho, a barra de chefe e as cartas de bênção foram redesenhados em placas de madeira, no estilo dos menus (`src/game/hudart.ts`).
+
+### O que mudou em relação ao plano na fase 2
+
+- **Despertar sem escolha em dois passos.** As duas formas ocupam dois lugares do altar, em vez de um lugar que abriria uma segunda escolha. É mais rápido e não precisa de tela nova.
+- **A forma desperta se soma à bênção**, em vez de trocar as cópias dela. Os bônus da bênção no máximo continuam valendo e a forma só acrescenta o efeito novo.
+- **Despertares: 20 bênçãos (40 formas) agora.** As outras 22 bênçãos com máximo maior que 1 ganham forma junto com o Sonho. As receitas secretas dependem dos amuletos e também ficam para lá.
+- **Compadrios: 8** (o plano pedia 7), para o Mapinguari também aparecer em dois pares.
+- **Lendária é a raridade das formas despertas e dos Compadrios.** Nenhuma sai do sorteio comum.
+- **Efeitos.** Tudo o que muda regra fica em `HeroStats.bless` (`src/meta/stats.ts`) e é lido em poucos pontos da simulação: o dano no inimigo, o golpe no herói, a esquiva, o último golpe da sequência e a poção.
+- **Bênção redundante sai do sorteio:** a que só ligaria um efeito que um talento ou conjunto já liga.
+- **Calibração.** Com o jogador automático de referência, 10 partidas em cada uma das 96 fases: 787 vitórias antes e 805 depois (82% e 84%). Ficou dentro da variação entre sementes, e nenhum número de fase foi mexido.
+- **Erro antigo corrigido.** Um monstro que explode (Cogumelo-Estouro, Taturana, Fogo-Fátuo, Vazio) derrubava o jogo se o golpe voltasse e o derrubasse no mesmo instante, por exemplo com a esquiva perfeita que molha em volta. Era raro com o conjunto do Ribeirinho e ficaria comum com a Onda Mansa.
 
 ## O que o código atual já dá
 

@@ -100,67 +100,187 @@ Salvar: a noite é salva **entre nós** do mapa. Fechar o jogo no meio de uma sa
 
 ### Padrinhos e bênçãos
 
-Os sete Encantados libertados viram **padrinhos**. Cada altar é de um padrinho, e só aparecem os que a campanha já libertou. Isso liga os dois modos: avançar na campanha abre bênçãos novas no Sonho.
+Os sete Encantados libertados viram **padrinhos**. Toda bênção de altar é de um padrinho, ou é neutra.
 
-| Padrinho | Elemento | Estilo das bênçãos | Exemplos |
-|---|---|---|---|
-| Curupira | Natureza | Prender, espinhos, enganar | **Pegadas Trocadas:** a esquiva deixa um rastro que confunde quem passa por cima. **Couro de Ouriço** (já existe). |
-| Iara | Água | Cura, encanto, puxar | **Canto da Iara:** o primeiro golpe em cada inimigo o deixa encantado por 1 s. **Fruta Madura** (já existe). |
-| Saci | Tempestade | Velocidade, esquiva, redemoinho | **Pé de Vento** e **Fôlego de Onça** (já existem). **Redemoinho:** a esquiva perfeita solta um pequeno redemoinho. |
-| Boitatá | Fogo | Queimar, explodir | **Estouro** (já existe). **Rastro Aceso:** correr deixa fogo no chão. |
-| Mapinguari | Terra | Defesa, quebrar armadura, golpe carregado | **Couro Duro** (já existe). **Pisada:** o golpe carregado atordoa em área. |
-| Lobisomem | Sombra | Crítico, roubo de vida, abates | **Olho de Gavião** e **Sanguessuga** (já existem). **Faro:** inimigos com pouca vida recebem +30% de dano. |
-| Cuca | Encanto | Feitiços, recarga, ilusão | **Mandinga Forte** e **Reza Ligeira** (já existem). **Caldeirão:** cada feitiço tem 15% de chance de não gastar mana. |
+- **No Sonho**, cada altar é de um padrinho só, e só aparecem os que a campanha já libertou. Avançar na campanha abre bênçãos novas no Sonho.
+- **Na campanha**, o altar das fases continua oferecendo 3 bênçãos quaisquer. Cada carta mostra de quem é, e todas contam para as sinergias.
 
-As 30 bênçãos de hoje são distribuídas entre os padrinhos. Algumas ficam **neutras**, como as de ouro, XP e atributo, que aparecem em Feiras e Causos. A meta na estreia do Sonho é **8 por padrinho mais 8 neutras (64)**.
+São **64 bênçãos**: 8 de cada padrinho e 8 neutras. Feito na fase 2; os dados estão em `src/data/content.ts`.
 
-Na campanha nada muda para o jogador: o altar das fases continua oferecendo 3 bênçãos quaisquer, mas cada uma passa a mostrar o ícone do seu padrinho e conta para as sinergias.
+**Curupira** (veneno, espinhos e enganar)
 
-**Raridades:** Comum, Rara, Épica (como hoje) e **Lendária**, que só sai do jackpot da Roda, de Compadrio ou de Causo raro.
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Peçonha | Rara | 1 | Todo golpe de arma envenena |
+| Ouriço | Rara | 2 | A cada 4 s você dispara espinhos em todas as direções |
+| Couro de Ouriço | Comum | 2 | Quem te acerta de perto recebe 35% do dano de volta |
+| Seiva Viva | Rara | 3 | Recupera 1% da vida por segundo |
+| Ponta Dura | Rara | 1 | Flechas e espinhos atravessam os inimigos |
+| Pegadas Trocadas | Rara | 1 | A esquiva levanta poeira: quem entra nela erra os golpes |
+| Cipoal | Rara | 2 | Golpes de arma têm 12% de chance de prender o inimigo por 1 s |
+| Mata Viva | Épica | 1 | Inimigos presos, lentos ou envenenados recebem 25% mais dano |
 
-**Azar com limite nos altares** (hoje não existe): se dois altares seguidos não oferecem nada raro ou melhor, o próximo oferece pelo menos uma rara. Vale no Sonho e na campanha.
+**Iara** (cura, mana e encanto)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Fruta Madura | Comum | 9 | Cura 60% da vida e devolve as poções |
+| Olho-d’Água | Comum | 2 | Feitiços custam 30% menos mana |
+| Seiva Grossa | Comum | 4 | +20% de vida máxima, e cura esse tanto agora |
+| Canto da Iara | Rara | 1 | O primeiro golpe em cada inimigo o deixa encantado por 1,5 s: ele ataca os outros |
+| Maré Cheia | Comum | 3 | +15% de cura recebida |
+| Remanso | Comum | 3 | +30% de recuperação de mana |
+| Água Benta | Rara | 2 | Golpes de arma têm 20% de chance de molhar o inimigo |
+| Onda Mansa | Rara | 1 | A esquiva perfeita molha quem está perto e cura 5% da vida |
+
+**Saci** (velocidade, esquiva e redemoinho)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Pé de Vento | Comum | 3 | +12% de velocidade de movimento |
+| Fôlego de Onça | Rara | 1 | +1 esquiva guardada |
+| Passo Leve | Comum | 3 | A esquiva recarrega 25% mais rápido |
+| Mãos Ligeiras | Comum | 4 | +12% de velocidade de ataque |
+| Mais Um | Épica | 3 | +1 projétil: mais uma flecha por tiro e mais um espinho por Dardo |
+| Pião | Rara | 1 | A esquiva perfeita solta um redemoinho que arrasta os inimigos |
+| Corisco | Rara | 2 | Golpes de arma têm 20% de chance de deixar o inimigo Carregado |
+| Gorro Vermelho | Épica | 1 | Feitiços têm 20% de chance de não entrar em recarga |
+
+**Boitatá** (dano e fogo)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Estouro | Épica | 1 | Inimigos derrotados explodem e ferem quem está perto |
+| Fúria | Comum | 5 | +15% de dano de arma |
+| Rastro Aceso | Rara | 1 | Correr durante a luta deixa fogo no chão |
+| Tição | Rara | 2 | Golpes de arma têm 20% de chance de queimar o inimigo |
+| Lenha Seca | Comum | 3 | Inimigos queimando recebem 15% mais dano |
+| Brasa Viva | Rara | 1 | Críticos de arma queimam o inimigo |
+| Chama Alta | Comum | 5 | +8% de dano de arma e de feitiço |
+| Cinzas Quentes | Rara | 1 | Derrotar um inimigo queimando devolve 8 de mana e 2% da vida |
+
+**Mapinguari** (defesa e golpes pesados)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Couro Duro | Comum | 3 | Recebe 12% menos dano |
+| Amparo | Rara | 1 | Em cada sala, o primeiro golpe que você tomaria não causa dano |
+| Braço Comprido | Rara | 2 | +25% de alcance dos golpes e de área dos feitiços |
+| Braço Forte | Comum | 5 | +6 de Força |
+| Pisada | Épica | 1 | A cada 8 golpes de arma, um tremor fere todos em volta de você |
+| Mão de Pilão | Comum | 3 | +15% de dano no último golpe da sequência e no golpe carregado |
+| Quebra-Pedra | Rara | 1 | Seus golpes de arma ignoram a blindagem |
+| Rachadura | Rara | 2 | Golpes de arma têm 20% de chance de rachar o inimigo |
+
+**Lobisomem** (crítico, roubo de vida e abates)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Olho de Gavião | Comum | 4 | +10% de chance de crítico |
+| Ferocidade | Rara | 3 | +35% de dano crítico |
+| Sanguessuga | Rara | 3 | Golpes de arma devolvem 4% do dano como vida |
+| Faro | Rara | 2 | Inimigos com menos de 30% de vida recebem 25% mais dano |
+| Sede de Sangue | Rara | 1 | Cada inimigo derrotado dá +4% de dano de arma por 6 s, até 5 vezes |
+| Lua Cheia | Épica | 1 | A cada 20 s de luta você entra em fúria por 5 s: +40% de dano de arma e roubo de vida |
+| Mordida | Rara | 2 | Golpes de arma têm 20% de chance de amaldiçoar o inimigo |
+| Carniceiro | Comum | 3 | Derrotar um inimigo cura 2% da vida |
+
+**Cuca** (feitiços e reações)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Mandinga Forte | Comum | 5 | +20% de dano de feitiço |
+| Reza Ligeira | Comum | 3 | Feitiços recarregam 20% mais rápido |
+| Cabeça Fria | Comum | 5 | +6 de Inteligência |
+| Caldeirão | Rara | 2 | Feitiços têm 15% de chance de não gastar mana |
+| Quebranto | Rara | 2 | Golpes de arma têm 20% de chance de confundir o inimigo |
+| Olho Gordo | Comum | 3 | +10% de chance de crítico dos feitiços |
+| Receita Antiga | Épica | 1 | Reações de elementos causam 40% mais dano |
+| Unha de Bruxa | Comum | 3 | Os efeitos de elemento que você aplica duram 25% mais |
+
+**Neutras** (sem padrinho)
+
+| Bênção | Raridade | Vezes | O que faz |
+|---|---|---:|---|
+| Pote de Ouro | Comum | 2 | +40% de ouro nesta fase |
+| Lição da Mata | Comum | 2 | +25% de experiência nesta fase |
+| Fartura | Épica | 1 | +1 item no baú desta fase |
+| Parceria | Rara | 2 | Seu companheiro causa e aguenta 50% mais |
+| Corpo Leve | Comum | 5 | +6 de Agilidade |
+| Cantil Cheio | Comum | 2 | +1 poção, e ganha uma agora |
+| Corpo Fechado | Épica | 1 | Uma vez por fase, o golpe que derrubaria você te deixa com 1 de vida e 2 s sem poder ser ferido |
+| Trevo | Comum | 2 | +15 de Sorte para os itens desta fase |
+
+
+**Raridades:** Comum, Rara e Épica saem do sorteio do altar (pesos 60, 30 e 12). **Lendária** não sai do sorteio: são as formas despertas e os Compadrios, e no Sonho também o jackpot da Roda e alguns Causos.
+
+**Azar com limite nos altares:** depois de dois altares seguidos só com bênçãos comuns, o terceiro traz pelo menos uma rara. Vale no Sonho e na campanha.
+
+**Bênção que não mudaria nada não aparece.** Se um talento ou um conjunto já liga o mesmo efeito (Sede de Briga, por exemplo), a bênção sai do sorteio daquele herói.
 
 ### Sinergia de padrinho
 
-Ter várias bênçãos do mesmo padrinho dá um bônus por faixa, mostrado no HUD como as sinergias de um auto-battler. O companheiro do mesmo elemento conta como +1.
+Ter várias bênçãos do mesmo padrinho acende faixas, em 3, 5 e 7. Cada escolha conta uma vez (a mesma bênção repetida conta de novo), a forma desperta conta, o Compadrio conta para os dois padrinhos, e o companheiro do mesmo elemento conta como +1. As faixas se somam.
 
-| Bênçãos | Exemplo: Saci |
-|---|---|
-| 3 | +1 esquiva guardada |
-| 5 | A esquiva perfeita solta um redemoinho que arrasta inimigos |
-| 7 | Durante 3 s depois de cada esquiva, ataques são 40% mais rápidos |
+| Padrinho | Com 3 | Com 5 | Com 7 |
+|---|---|---|---|
+| Curupira | Seu veneno causa 30% mais dano | A esquiva perfeita solta espinhos em todas as direções | Inimigos envenenados, presos, lentos ou cegos causam 25% menos dano a você |
+| Iara | +20% de cura recebida | A esquiva perfeita molha quem está perto e cura 5% da vida | Uma vez por sala, ao cair abaixo de 30% de vida, você recupera 35% |
+| Saci | +1 esquiva guardada | A esquiva perfeita solta um redemoinho que arrasta os inimigos | Por 3 s depois de cada esquiva, seus ataques são 40% mais rápidos |
+| Boitatá | +20% de dano de Fogo | Críticos de arma queimam o inimigo | Inimigos queimando explodem ao cair e espalham o fogo |
+| Mapinguari | Recebe 10% menos dano | Inimigos rachados recebem 30% mais dano, em vez de 15% | Com mais de 80% da vida, +30% de dano de arma |
+| Lobisomem | +10% de chance de crítico | Derrotar um inimigo cura 3% da vida | +50% de dano crítico, e críticos de arma curam 1% da vida |
+| Cuca | Feitiços custam 20% menos mana | Reações de elementos causam 40% mais dano | Feitiços têm 25% de chance de sair de graça e 25% de não entrar em recarga |
 
-Vale no Sonho e na campanha (onde chegar a 5 é raro e chegar a 7, quase impossível; isso é de propósito).
+Na tela, uma coluna à esquerda mostra uma medalha por padrinho, com a contagem e as três faixas; a pausa lista o que está aceso e o que falta. Vale no Sonho e na campanha (onde chegar a 5 é raro e chegar a 7, quase impossível; isso é de propósito).
 
 ### Despertar
 
-Quando uma bênção chega ao **máximo**, o próximo altar daquele padrinho oferece, no lugar de uma das três opções, o **Despertar**: a bênção vira uma de **duas formas** à escolha.
+Quando uma bênção chega ao **máximo**, o próximo altar traz o **Despertar** dela: as **duas formas ocupam dois dos três lugares** do altar, e o terceiro é uma bênção comum. Escolher uma forma fecha a outra. A forma se soma à bênção (os bônus dela continuam valendo) e toma o lugar dela na fileira de ícones.
 
-| Bênção (máximo) | Forma A | Forma B |
-|---|---|---|
-| Fúria (5) | **Fúria do Mapinguari:** golpes carregados racham armadura em área | **Fúria Cega:** +60% de dano de arma e −30% de defesa |
-| Pé de Vento (3) | **Corisco:** correr 2 s seguidos dá um golpe elétrico no próximo inimigo tocado | **Assobio do Saci:** +1 esquiva guardada e a esquiva atravessa projéteis |
-| Mandinga Forte (5) | **Feitiçaria:** feitiços de área ficam 40% maiores | **Reza Brava:** feitiços de alvo único causam o dobro em quem tem efeito de elemento |
+Nesta primeira leva são **20 bênçãos que despertam (40 formas)**, de duas a três por padrinho:
 
-Há também **Despertares secretos**, feitos por receita: bênção no máximo + um amuleto específico. Exemplo: Estouro + Cabaça de Pólvora vira **Fogueira de São João**, em que cada inimigo derrotado deixa uma fogueira que queima por 4 s. Quem descobre uma receita a vê no Almanaque para sempre.
+| Padrinho | Bênção (máximo) | Forma A | Forma B |
+|---|---|---|---|
+| Curupira | Ouriço (2) | **Ouriço-Cacheiro:** Os espinhos do Ouriço saem a cada 2 s | **Espinho Comprido:** Os espinhos do Ouriço atravessam os inimigos e causam 60% mais dano |
+| Curupira | Couro de Ouriço (2) | **Abraço de Mandacaru:** Quem te acerta de perto fica preso por 1,5 s | **Casca Grossa:** Devolve o dobro do dano e você recebe 10% menos dano |
+| Curupira | Cipoal (2) | **Cipoal Fechado:** Quem fica preso pelo Cipoal fica 2 s e também é envenenado | **Laço Certeiro:** +16% de chance de prender com golpes de arma |
+| Iara | Seiva Grossa (4) | **Água Funda:** +25% de vida máxima | **Sangue Frio:** Abaixo de 35% de vida, você recebe 30% menos dano |
+| Iara | Maré Cheia (3) | **Garrafada:** As poções curam 40% a mais | **Água de Cheiro:** Recupera 1,5% da vida por segundo |
+| Iara | Água Benta (2) | **Enxurrada:** +30% de chance de molhar com golpes de arma | **Remanso Fundo:** Inimigos molhados recebem 20% mais dano |
+| Saci | Pé de Vento (3) | **Vendaval:** A esquiva deixa um redemoinho que arrasta e fere os inimigos | **Pé de Moleque:** +15% de velocidade de movimento e +10% de velocidade de ataque |
+| Saci | Passo Leve (3) | **Assobio do Saci:** +1 esquiva guardada | **Sumiço:** Depois de esquivar, seu próximo golpe de arma é crítico |
+| Saci | Mãos Ligeiras (4) | **Mão Leve:** +20% de velocidade de ataque | **Ventania:** Críticos de arma adiantam a esquiva e a recarga dos feitiços |
+| Boitatá | Fúria (5) | **Fúria do Boitatá:** Todo golpe de arma queima o inimigo | **Fúria Cega:** +60% de dano de arma, mas você recebe 30% mais dano |
+| Boitatá | Chama Alta (5) | **Labareda:** +25% de dano de feitiço, e a área dos feitiços fica 15% maior | **Ferro em Brasa:** +25% de dano de arma e +20% de dano crítico |
+| Boitatá | Tição (2) | **Fogo que Anda:** Inimigos queimando explodem ao cair e espalham o fogo | **Brasa Dormida:** Os efeitos de elemento que você aplica duram 60% mais |
+| Mapinguari | Couro Duro (3) | **Couro de Anta:** Recebe 15% menos dano | **Pé Fincado:** Golpes não te empurram nem interrompem o que você está fazendo |
+| Mapinguari | Mão de Pilão (3) | **Mão de Pedra:** O último golpe da sequência e o golpe carregado racham o inimigo | **Braço de Ferro:** +30% de dano no último golpe da sequência e no golpe carregado |
+| Mapinguari | Braço Comprido (2) | **Braço de Gigante:** +30% de alcance dos golpes e de área dos feitiços | **Abraço do Mapinguari:** O último golpe da sequência acerta todos em volta de você |
+| Lobisomem | Olho de Gavião (4) | **Olho de Lobo:** +15% de chance de crítico, e críticos de arma amaldiçoam o inimigo | **Golpe Baixo:** +60% de dano crítico |
+| Lobisomem | Sanguessuga (3) | **Chupa-Sangue:** Golpes de arma devolvem mais 6% do dano como vida | **Sangue Fervendo:** Abaixo de 35% de vida: +40% de dano de arma e de velocidade de ataque |
+| Lobisomem | Faro (2) | **Bote Final:** Golpes de arma em inimigos com menos de 25% de vida são sempre críticos | **Caçador da Noite:** +15% de dano contra elites e chefões |
+| Cuca | Mandinga Forte (5) | **Feitiçaria:** A área dos feitiços fica 40% maior | **Reza Brava:** Feitiços causam 35% mais dano em inimigos com algum efeito de elemento |
+| Cuca | Reza Ligeira (3) | **Reza da Meia-Noite:** Feitiços recarregam 25% mais rápido | **Eco da Cuca:** Feitiços têm 25% de chance de não entrar em recarga |
 
-Meta na estreia: um Despertar com duas formas para cada bênção que tem máximo maior que 1, e 6 receitas secretas.
+As outras bênçãos com máximo maior que 1 ganham suas formas junto com o Sonho. Também ficam para o Sonho os **Despertares secretos**, feitos por receita (bênção no máximo + um amuleto específico) e registrados no Almanaque por quem descobre.
 
 ### Compadrio
 
-Com **pelo menos 2 bênçãos de cada um de dois padrinhos**, o altar de qualquer um deles pode oferecer uma bênção de **Compadrio**, que só existe para aquele par. Elas se apoiam nas reações de elemento que o jogo já tem.
+Com **pelo menos 2 bênçãos de cada um de dois padrinhos**, o altar pode trazer a bênção de **Compadrio** do par (metade das vezes, no lugar de uma das três). Cada Compadrio só pode ser escolhido uma vez. Eles se apoiam nas reações de elemento e nos efeitos que o jogo já tem.
 
-| Par | Compadrio |
-|---|---|
-| Iara e Boitatá | **Vapor:** a reação de Molhado com Queimado deixa uma névoa que cega por 2 s |
-| Saci e Curupira | **Molecagem:** a esquiva deixa um sósia que atrai os inimigos por 2 s |
-| Lobisomem e Cuca | **Pesadelo:** críticos em inimigos com efeito de Encanto os fazem fugir |
-| Mapinguari e Boitatá | **Magma:** o chão rachado pelo golpe carregado pega fogo |
-| Iara e Curupira | **Igarapé:** a cura também solta raízes em volta |
-| Saci e Lobisomem | **Lua Ventosa:** cada abate dá +5% de velocidade por 4 s, acumulando até 5 vezes |
-| Cuca e Iara | **Acalanto:** inimigos encantados ficam lentos depois que o encanto acaba |
+| Par | Compadrio | O que faz |
+|---|---|---|
+| Iara e Boitatá | **Banho-Maria** | A reação Vapor também fere quem está dentro da nuvem, a cada meio segundo |
+| Saci e Curupira | **Molecagem** | A esquiva deixa um sósia que atrai os inimigos por 2 s |
+| Lobisomem e Cuca | **Pesadelo** | Críticos de arma em inimigos confusos os fazem fugir por 2 s |
+| Mapinguari e Boitatá | **Magma** | O último golpe da sequência e o golpe carregado deixam fogo no chão |
+| Iara e Curupira | **Igarapé** | Beber uma poção prende por 2 s e envenena os inimigos em volta |
+| Saci e Lobisomem | **Lua Ventosa** | Cada inimigo derrotado dá +5% de velocidade de movimento e de ataque por 4 s, até 5 vezes |
+| Cuca e Iara | **Acalanto** | Inimigos confusos ou encantados ficam lentos quando você os acerta |
+| Mapinguari e Curupira | **Raiz de Pedra** | Inimigos presos ficam Rachados: perdem a blindagem e recebem mais dano |
 
-São 21 pares possíveis. Começamos com 7 (cada padrinho em pelo menos dois) e completamos depois.
+São 21 pares possíveis. Estes 8 cobrem cada padrinho pelo menos duas vezes; os outros 13 entram depois.
 
 ### Roda do Saci
 

@@ -88,26 +88,47 @@ export function bakeHud(scene: Phaser.Scene): void {
     rr(g, 1, 1, 42, 18, 7); g.strokeStyle = 'rgba(185,131,82,.55)'; g.lineWidth = 1.2; g.stroke();
   });
   /* cartas de bênção, uma por raridade */
-  TIER_COLORS.forEach((color, i) => make(scene, `hud_card${i + 1}`, CARD.w, CARD.h, (g) => {
-    const { w, h } = CARD;
-    g.save(); g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 14; g.shadowOffsetY = 6; rr(g, 6, 4, w - 12, h - 14, 16); g.fillStyle = EDGE; g.fill(); g.restore();
-    rr(g, 6, 4, w - 12, h - 14, 16); g.fillStyle = color; g.fill();
-    plate(g, 10, 8, w - 20, h - 22, 13, { rim: color });
-    /* faixa da raridade */
-    g.save(); rr(g, 10, 8, w - 20, h - 22, 13); g.clip();
-    const q = g.createLinearGradient(0, 8, 0, 44); q.addColorStop(0, color); q.addColorStop(1, 'rgba(0,0,0,0)');
-    g.globalAlpha = 0.9; g.fillStyle = color; g.fillRect(10, 8, w - 20, 30);
-    g.globalAlpha = 0.25; g.fillStyle = '#000'; g.fillRect(10, 35, w - 20, 3);
-    g.globalAlpha = 0.18; g.fillStyle = q; g.fillRect(10, 38, w - 20, 90);
-    g.restore();
-    /* medalhão do ícone */
-    const cx = w / 2, cy = 92;
-    g.beginPath(); g.arc(cx, cy, 43, 0, Math.PI * 2); g.fillStyle = EDGE; g.fill();
-    g.beginPath(); g.arc(cx, cy, 40, 0, Math.PI * 2); g.fillStyle = color; g.fill();
-    const q3 = g.createRadialGradient(cx - 8, cy - 10, 4, cx, cy, 36); q3.addColorStop(0, '#fff6dc'); q3.addColorStop(1, '#e2c88e');
-    g.beginPath(); g.arc(cx, cy, 35, 0, Math.PI * 2); g.fillStyle = q3; g.fill();
-    g.strokeStyle = 'rgba(60,30,10,.55)'; g.lineWidth = 1.5; g.stroke();
-  }));
+  TIER_COLORS.forEach((color, i) => make(scene, `hud_card${i + 1}`, CARD.w, CARD.h, (g) => paintCard(g, color, color, i === 3)));
+  /* medalha das sinergias de padrinho, na coluna da esquerda */
+  make(scene, 'hud_patron', 48, 48, (g) => {
+    g.beginPath(); g.arc(24, 24, 22, 0, Math.PI * 2); g.fillStyle = EDGE; g.fill();
+    const q = g.createRadialGradient(24, 18, 3, 24, 24, 20); q.addColorStop(0, '#6b4226'); q.addColorStop(1, '#2a1810');
+    g.beginPath(); g.arc(24, 24, 19.5, 0, Math.PI * 2); g.fillStyle = q; g.fill();
+  });
+}
+
+/** Uma carta de bênção. Com duas cores, a moldura e a faixa vão de uma para a outra (Compadrio). `rays` põe raios atrás do medalhão. */
+function paintCard(g: G, a: string, b: string, rays = false): void {
+  const { w, h } = CARD, duo = (y0: number, y1: number) => { const q = g.createLinearGradient(10, y0, w - 10, y1); q.addColorStop(0, a); q.addColorStop(0.42, a); q.addColorStop(0.58, b); q.addColorStop(1, b); return q; };
+  g.save(); g.shadowColor = 'rgba(0,0,0,.55)'; g.shadowBlur = 14; g.shadowOffsetY = 6; rr(g, 6, 4, w - 12, h - 14, 16); g.fillStyle = EDGE; g.fill(); g.restore();
+  rr(g, 6, 4, w - 12, h - 14, 16); g.fillStyle = duo(0, 0); g.fill();
+  plate(g, 10, 8, w - 20, h - 22, 13, { rim: a });
+  /* faixa da raridade */
+  g.save(); rr(g, 10, 8, w - 20, h - 22, 13); g.clip();
+  g.globalAlpha = 0.92; g.fillStyle = duo(0, 0); g.fillRect(10, 8, w - 20, 30);
+  g.globalAlpha = 0.25; g.fillStyle = '#000'; g.fillRect(10, 35, w - 20, 3);
+  const q = g.createLinearGradient(0, 38, 0, 128); q.addColorStop(0, 'rgba(255,255,255,.16)'); q.addColorStop(1, 'rgba(255,255,255,0)');
+  g.globalAlpha = 1; g.fillStyle = q; g.fillRect(10, 38, w - 20, 90);
+  const cx = w / 2, cy = 92;
+  if (rays) {
+    /* raios atrás do medalhão: a carta que muda a build */
+    g.globalAlpha = 0.2; g.fillStyle = a;
+    for (let i = 0; i < 12; i++) { const an = (i / 12) * Math.PI * 2, d = 0.13; g.beginPath(); g.moveTo(cx, cy); g.lineTo(cx + Math.cos(an - d) * 150, cy + Math.sin(an - d) * 150); g.lineTo(cx + Math.cos(an + d) * 150, cy + Math.sin(an + d) * 150); g.closePath(); g.fill(); }
+  }
+  g.restore();
+  /* medalhão do ícone */
+  g.beginPath(); g.arc(cx, cy, 43, 0, Math.PI * 2); g.fillStyle = EDGE; g.fill();
+  g.beginPath(); g.arc(cx, cy, 40, 0, Math.PI * 2); g.fillStyle = duo(0, 0); g.fill();
+  const q3 = g.createRadialGradient(cx - 8, cy - 10, 4, cx, cy, 36); q3.addColorStop(0, '#fff6dc'); q3.addColorStop(1, '#e2c88e');
+  g.beginPath(); g.arc(cx, cy, 35, 0, Math.PI * 2); g.fillStyle = q3; g.fill();
+  g.strokeStyle = 'rgba(60,30,10,.55)'; g.lineWidth = 1.5; g.stroke();
+}
+
+/** Carta de Compadrio nas cores dos dois padrinhos. Gerada uma vez por par; devolve a chave da textura. */
+export function duoCardTexture(scene: Phaser.Scene, a: string, b: string): string {
+  const key = `hud_card_${a.replace('#', '')}_${b.replace('#', '')}`;
+  make(scene, key, CARD.w, CARD.h, (g) => paintCard(g, a, b, true));
+  return key;
 }
 
 /** Placa de madeira do tamanho pedido (títulos, relógio, avisos). Gerada uma vez por tamanho; devolve a chave da textura. */

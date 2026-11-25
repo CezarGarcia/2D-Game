@@ -4,7 +4,10 @@
  * Isso permite testar as regras sem tela e, mais adiante, gravar partidas e conferi-las no servidor.
  */
 import { ARENA, ENEMY, PLAYER, WAVE_DELAY, WAVE_OVERLAP } from '../data/balance';
-import { BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, blessingCounts, type BlessingId } from '../data/content';
+import {
+  ALTAR_PITY, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, awakeningsFor, blessingCounts, compadriosFor,
+  type BaseBlessingId, type BlessingId, type ElementId,
+} from '../data/content';
 import { levelCombatModifiers } from '../data/progression';
 import type { HeroStats } from '../meta/stats';
 import { clampArena, emit, healPlayer, max0, rand, spawnEnemy, wet } from './core';
@@ -34,6 +37,7 @@ function newPlayer(stats: HeroStats): Player {
     surfKind: 'dodge', critNext: false, stoneT: 0, wolfT: 0, orbT: 0, orbHit: {}, orbPower: 0, lastElement: 'natureza',
     burnT: 0, burnTick: 0, poisonT: 0, poisonTick: 0, curseT: 0, crackT: 0, confuseT: 0, wetT: 0, sleepT: 0,
     erased: [0, 0, 0], stolen: -1, dreamT: 0, spellMap: [0, 1, 2], heldT: 0, hitCount: 0, fightT: 0, frenzyT: 0,
+    trailD: 0, hasteT: 0, windStacks: 0, windT: 0, secondWind: false,
   };
 }
 
@@ -45,7 +49,7 @@ export function createWorld(cfg: StageConfig): World {
     enemies: [], projectiles: [], hazards: [], zones: [], events: [],
     wave: -1, waveTimer: 0, nextId: 1, rng: cfg.seed | 0,
     dealt: mods.dealt, taken: mods.taken,
-    blessings: [], altar: null,
+    blessings: [], altar: null, altarDry: 0,
     revives: cfg.stats.revives, deaths: 0, deadT: 0,
     kills: 0, perfects: 0, hitsTaken: 0, roomsCleared: 0, bossTime: 0,
     spells: cfg.stats.loadout.slice(0, 3),
@@ -79,6 +83,7 @@ function startRoom(w: World, index: number, revive = false): void {
   startRoomLoot(w, room, index, revive);
   p.shield = w.stats.firstHitShield; p.surf = 0; p.surfKind = 'dodge';
   p.erased = [0, 0, 0]; p.stolen = -1; p.dreamT = 0; p.spellMap = [0, 1, 2]; p.heldT = 0; p.sleepT = 0; p.confuseT = 0;
+  p.secondWind = false; p.windStacks = 0; p.windT = 0; p.hasteT = 0; p.trailD = 0;
   p.x = ARENA.x0 + 100; p.y = (ARENA.y0 + ARENA.y1) / 2;
   p.kx = p.ky = 0; p.state = 'idle'; p.stateT = 0; p.charge = 0; p.slowT = 0; p.iframes = 0; p.hurtInv = 0;
   const pet = w.pet;
@@ -93,22 +98,74 @@ function startRoom(w: World, index: number, revive = false): void {
   emit(w, { type: 'roomStart', x: p.x, y: p.y, value: index, kind: room.type });
 }
 
-/** Sorteia as bênçãos do altar: as mais fortes saem menos, e nenhuma passa do limite de vezes. */
-function rollBlessings(w: World): BlessingId[] {
-  const have = blessingCounts(w.blessings), s = w.stats, picks: BlessingId[] = [];
-  const pool = BLESSING_ORDER.filter((b) => {
+/** Chance de um Compadrio já liberado aparecer num altar. */
+export const COMPADRIO_CHANCE = 0.5;
+
+/** Bênção que não mudaria nada: um talento, um conjunto ou outra bênção já liga o mesmo efeito. */
+function redundant(s: HeroStats, b: BaseBlessingId): boolean {
+  switch (b) {
+    case 'perfurar': return s.pierce;
+    case 'pegadas': return s.passives.dodgeDust;
+    case 'ondaMansa': return s.passives.perfectWave;
+    case 'piao': return s.passives.perfectWhirl;
+    case 'brasaViva': return s.passives.critBurn;
+    case 'quebraPedra': return s.ignoreArmor;
+    case 'sedeDeSangue': return s.talents.sedeDeBriga;
+    case 'luaCheia': return s.passives.frenzy;
+    case 'segundaChance': return s.talents.cascaDeJabuti;
+    case 'amparo': return s.firstHitShield;
+    default: return false;
+  }
+}
+
+/** Bênçãos comuns que este herói pode receber agora (sem as que já estão no máximo nem as que não mudariam nada). */
+export function blessingPool(w: World, patron: ElementId | null = null): BaseBlessingId[] {
+  const have = blessingCounts(w.blessings), s = w.stats;
+  return BLESSING_ORDER.filter((b) => {
     if ((have[b] ?? 0) >= BLESSINGS[b].max) return false;
+    if (patron && BLESSINGS[b].patron !== patron) return false;
     if (b === 'parceria' && !s.companion) return false;
     if (b === 'cura' && w.player.hp > s.maxHp * 0.8 && w.player.potions >= s.potions) return false;
-    return true;
+    return !have[b] ? !redundant(s, b) : true;
   });
-  while (picks.length < s.altarChoices && pool.length) {
-    let total = 0;
-    for (const b of pool) total += BLESSING_WEIGHT[BLESSINGS[b].tier];
-    let roll = rand(w) * total, at = 0;
-    for (let i = 0; i < pool.length; i++) { roll -= BLESSING_WEIGHT[BLESSINGS[pool[i]].tier]; if (roll <= 0) { at = i; break; } }
-    picks.push(pool.splice(at, 1)[0]);
+}
+
+function weighted<T extends BlessingId>(w: World, pool: T[]): number {
+  let total = 0;
+  for (const b of pool) total += BLESSING_WEIGHT[BLESSINGS[b].tier];
+  let roll = rand(w) * total;
+  for (let i = 0; i < pool.length; i++) { roll -= BLESSING_WEIGHT[BLESSINGS[pool[i]].tier]; if (roll <= 0) return i; }
+  return 0;
+}
+
+export interface AltarOpts {
+  /** Altar de um padrinho só (o Sonho): as bênçãos saem todas dele. */
+  patron?: ElementId | null;
+}
+
+/**
+ * Sorteia as bênçãos do altar: as mais fortes saem menos, e nenhuma passa do limite de vezes.
+ * - Despertar: se alguma bênção chegou ao máximo e ainda não despertou, as duas formas dela ocupam dois lugares.
+ * - Compadrio: com duas bênçãos de cada padrinho de um par, a bênção do par pode ocupar um lugar.
+ * - Azar com limite: depois de `ALTAR_PITY` altares só com comuns, este traz pelo menos uma rara.
+ */
+export function rollBlessings(w: World, opts: AltarOpts = {}): BlessingId[] {
+  const s = w.stats, patron = opts.patron ?? null, picks: BlessingId[] = [];
+  const mine = (id: BlessingId) => { const d = BLESSINGS[id]; return !patron || d.patron === patron || !!d.pair?.includes(patron); };
+  const awake = awakeningsFor(w.blessings).filter(([a]) => mine(a));
+  if (awake.length) { const forms = awake[Math.floor(rand(w) * awake.length)]; picks.push(forms[0], forms[1]); }
+  else {
+    const comp = compadriosFor(w.blessings).filter(mine);
+    if (comp.length && rand(w) < COMPADRIO_CHANCE) picks.push(comp[Math.floor(rand(w) * comp.length)]);
   }
+  const special = picks.length, pool: BlessingId[] = blessingPool(w, patron);
+  while (picks.length < s.altarChoices && pool.length) picks.push(pool.splice(weighted(w, pool), 1)[0]);
+  const good = (id: BlessingId) => BLESSINGS[id].tier >= 2;
+  if (w.altarDry >= ALTAR_PITY && picks.length > special && !picks.some(good)) {
+    const rare = pool.filter(good);
+    if (rare.length) picks[picks.length - 1] = rare[weighted(w, rare)];
+  }
+  w.altarDry = picks.some(good) ? 0 : w.altarDry + 1;
   return picks;
 }
 
@@ -133,13 +190,15 @@ export function chooseOffer(w: World, index: number, restat: (blessings: Blessin
 }
 
 function grantBlessing(w: World, id: BlessingId, restat: (blessings: BlessingId[]) => HeroStats, from?: string): void {
-  const p = w.player, before = w.stats.maxHp;
+  const p = w.player, before = w.stats.maxHp, dodges = w.stats.dodgeCharges;
   w.blessings.push(id);
   w.stats = restat(w.blessings);
-  if (id === 'vigor') healPlayer(w, w.stats.maxHp - before, true);
-  if (id === 'cura') { healPlayer(w, w.stats.maxHp * 0.6, true); p.potions = w.cfg.stats.potions; }
+  /* quem ganha vida máxima cura a diferença; quem ganha esquiva ou poção já sai com ela */
+  if (w.stats.maxHp > before) healPlayer(w, w.stats.maxHp - before, true);
+  if (id === 'cura') { healPlayer(w, w.stats.maxHp * 0.6, true); p.potions = w.stats.potions; }
+  if (id === 'cantil') p.potions = Math.min(w.stats.potions, p.potions + 1);
   if (id === 'amparo') p.shield = true;
-  if (id === 'folego') p.dodgeCharges = w.stats.dodgeCharges;
+  if (w.stats.dodgeCharges > dodges) p.dodgeCharges = Math.min(w.stats.dodgeCharges, p.dodgeCharges + w.stats.dodgeCharges - dodges);
   p.hp = Math.min(p.hp, w.stats.maxHp); p.mana = Math.min(p.mana, w.stats.maxMana);
   emit(w, { type: 'blessing', x: p.x, y: p.y, kind: id, text: from });
 }

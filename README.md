@@ -4,7 +4,10 @@ RPG de ação 2D para navegador. Os seres do folclore brasileiro estão sendo es
 
 Estado atual: **campanha completa jogável** (etapa 3). Oito capítulos e 96 fases, do Curupira ao Esquecimento, com final; seis armas, sete elementos e 35 feitiços com reações entre eles, 16 companheiros, conjuntos, gemas, itens com nome e a Torre dos Cem Andares. Acampamento com inventário, ferreiro, atributos e teia de talentos. O progresso fica salvo no navegador; a parte online (contas, rankings, mercado) vem depois.
 
-Em andamento, a **etapa 4** (`docs/gdd/09` e `10`): um modo rejogável de sessão curta, o Sonho. As duas primeiras fases dela já estão no jogo: Almanaque do Folclore com conquistas e bestiário, Terreiro de treino com medidor de dano, Caçada automática nas fases com 3 estrelas, filtro de saque, builds salvas e troca de missão do dia.
+Em andamento, a **etapa 4** (`docs/gdd/09` e `10`): um modo rejogável de sessão curta, o Sonho. As três primeiras fases dela já estão no jogo:
+
+- Almanaque do Folclore com conquistas e bestiário, Terreiro de treino com medidor de dano, Caçada automática nas fases com 3 estrelas, filtro de saque, builds salvas e troca de missão do dia.
+- Bênçãos com padrinho: 64 bênçãos de altar (8 de cada Encantado e 8 neutras), sinergia com 3, 5 e 7 bênçãos do mesmo padrinho, Despertar das bênçãos que chegam ao máximo e Compadrios entre dois padrinhos. Na fase, Esc pausa e mostra as sinergias acesas.
 
 ## Rodar
 

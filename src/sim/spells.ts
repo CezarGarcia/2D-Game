@@ -232,7 +232,14 @@ export function updateNewZone(w: World, z: Zone, dt: number): boolean | undefine
       }
       return z.t < z.dur;
     }
-    case 'vapor': for (const e of w.enemies) if (hittable(e) && !isBoss(e) && Math.hypot(e.x - z.x, e.y - z.y) < z.r) e.blindT = Math.max(e.blindT, 0.3); return z.t < z.dur;
+    case 'vapor':
+      for (const e of w.enemies) if (hittable(e) && !isBoss(e) && Math.hypot(e.x - z.x, e.y - z.y) < z.r) e.blindT = Math.max(e.blindT, 0.3);
+      if (z.power > 0) {
+        /* Banho-Maria: a nuvem também fere */
+        z.tick -= dt;
+        if (z.tick <= 0) { z.tick += 0.5; for (const e of w.enemies) if (hittable(e) && Math.hypot(e.x - z.x, e.y - z.y) < z.r + e.radius * 0.5) damageEnemy(w, e, z.power, 'reaction', 0); }
+      }
+      return z.t < z.dur;
     case 'dust': for (const e of w.enemies) if (hittable(e) && !isBoss(e) && Math.hypot(e.x - z.x, e.y - z.y) < z.r) e.blindT = Math.max(e.blindT, 0.8); return z.t < z.dur;
     case 'fire': case 'curse': case 'void': {
       z.tick -= dt;
@@ -361,7 +368,14 @@ export function onDodge(w: World): void {
   const p = w.player, s = w.stats;
   if (s.passives.dodgeDust) zone(w, { kind: 'dust', x: p.x, y: p.y, r: 80, t: 0, dur: 2, tick: 0, power: 0 });
   if (s.uniques.crinaDaMula) zone(w, { kind: 'fire', x: p.x, y: p.y, r: 46, t: 0, dur: 3, tick: 0.5, power: s.weaponDamage * s.damageMult * 0.4 });
-  if (s.uniques.alpercatasDoRedemoinho) zone(w, { kind: 'redemoinho', x: p.x, y: p.y, r: 90, t: 0, dur: 1.2, tick: 0, power: s.weaponDamage * s.damageMult * 0.5 });
+  if (s.uniques.alpercatasDoRedemoinho || s.bless.dodgeWhirl) zone(w, { kind: 'redemoinho', x: p.x, y: p.y, r: 90, t: 0, dur: 1.2, tick: 0, power: s.weaponDamage * s.damageMult * 0.5 });
+  if (s.bless.dodgeCrit) p.critNext = true;
+  if (s.bless.dodgeHaste) p.hasteT = 3;
+  if (s.bless.dodgeDecoy) {
+    /* Molecagem: um sósia fica para trás e chama a atenção por um instante */
+    w.allies = w.allies.filter((a) => a.kind !== 'decoy');
+    w.allies.push({ id: w.nextId++, kind: 'decoy', x: p.x, y: p.y, hp: s.maxHp * 0.3, maxHp: s.maxHp * 0.3, t: 0, dur: 2, cd: 0, facing: p.facing, target: 0, walk: 0, moving: false, power: 0 });
+  }
 }
 export function onPerfect(w: World, power: number): void {
   const p = w.player, s = w.stats;

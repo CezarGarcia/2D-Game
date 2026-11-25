@@ -3,7 +3,7 @@
  * nos números que o combate usa. Fórmulas de docs/gdd/02-personagem-e-talentos.md.
  */
 import { knowledgeMap } from './life';
-import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
+import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, patronCounts, patronTier, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
 import { makeRng } from '../data/rng';
 import { ATTRS, ATTR_BASE, addTalent, newProfile, spellLevel, type AttrKey, type Profile } from './profile';
@@ -69,6 +69,11 @@ export interface HeroStats {
   onHitPoison: boolean; onKillExplode: boolean; firstHitShield: boolean;
   /** Quantas bênçãos Ouriço: dispara espinhos em volta a cada 4 s. */
   nova: number;
+  /** Efeitos de bênçãos, Despertares, Compadrios e sinergias de padrinho que mudam regras (lidos pela simulação). */
+  bless: BlessEffects;
+  /** Bênçãos de cada padrinho (com o companheiro) e a faixa de sinergia acesa, de 0 a 3. */
+  patrons: Record<ElementId, number>;
+  patronTiers: Record<ElementId, number>;
   /** Conhecer o inimigo: dano a mais contra cada tipo de monstro já muito enfrentado (não vale com ranking). */
   knowledge: Partial<Record<string, number>>;
   talents: {
@@ -82,6 +87,47 @@ export interface HeroStats {
     couroDoCapelobo: boolean; garraDoMapinguari: boolean; pedraDaTeiniagua: boolean; denteDoLobisomem: boolean; toucaDaPisadeira: boolean;
     colherDaCuca: boolean; fioDoEsquecimento: boolean;
   };
+}
+
+export interface BlessEffects {
+  /** Golpes de arma aplicam o elemento com esta chance (somada por elemento). */
+  hitElements: { el: ElementId; chance: number }[];
+  /** Chance de um golpe de arma prender, por quanto tempo, e se também envenena. */
+  rootChance: number; rootDur: number; rootPoison: boolean;
+  /** Dano a mais contra presos, lentos ou envenenados; contra quem tem menos de 30% de vida; contra quem queima; e o extra do Rachado. */
+  mataViva: number; lowHpBonus: number; burnBonus: number; crackBonus: number;
+  /** Dano a mais dos feitiços em quem tem algum efeito de elemento. */
+  spellStatusBonus: number;
+  /** O primeiro golpe em cada inimigo o deixa encantado por este tempo (segundos). */
+  firstHitCharm: number;
+  /** Correr na luta deixa fogo no chão. */
+  fireTrail: boolean;
+  /** Um tremor a cada tantos golpes de arma (0 = nunca). */
+  quakeHits: number;
+  /** Ouriço: intervalo dos espinhos, multiplicador de dano e se atravessam. */
+  novaEvery: number; novaMult: number; novaPierce: boolean;
+  /** Quem acerta o herói de perto fica preso por este tempo. */
+  thornRoot: number;
+  /** Fração a menos de dano recebido abaixo de 35% de vida. */
+  lowHpGuard: number;
+  /** Esquiva: redemoinho, próximo golpe crítico, ataques mais rápidos por 3 s (fração), sósia. */
+  dodgeWhirl: boolean; dodgeCrit: boolean; dodgeHaste: number; dodgeDecoy: boolean;
+  /** Críticos de arma: amaldiçoam, curam esta fração da vida, espantam os confusos. */
+  critCurse: boolean; critHeal: number; critFear: boolean;
+  /** Último golpe da sequência e golpe carregado: racham o inimigo, deixam fogo no chão. */
+  lastCrack: boolean; lastFire: boolean;
+  /** Derrotar quem queima devolve mana e vida; cada abate acelera o herói por um tempo. */
+  killBurn: boolean; killHaste: boolean;
+  /** Golpes não empurram nem interrompem o herói. */
+  steadfast: boolean;
+  /** Dano de arma a mais com mais de 80% da vida. */
+  fullHpDamage: number;
+  /** Fração a menos de dano vindo de inimigos envenenados, presos, lentos ou cegos. */
+  safeFrom: number;
+  /** Uma vez por sala, ao cair abaixo de 30% de vida, cura esta fração. */
+  secondWind: number;
+  /** Poção prende e envenena em volta; o Vapor fere; confusos e encantados ficam lentos; presos ficam rachados. */
+  potionRoot: boolean; vaporBurn: boolean; charmSlow: boolean; rootCrack: boolean;
 }
 
 export const BASE_MOVE_SPEED = 250;
@@ -140,17 +186,53 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
   const pct = (k: AffixKey) => (a[k] || 0) / 100;
   const uniq = (key: string) => items.some((i) => i.unique === key);
 
+  /* sinergia de padrinho: quantas bênçãos de cada um (o companheiro do mesmo elemento conta) e a faixa acesa */
+  const patrons = patronCounts(blessings, companion ? COMPANIONS[companion].element : null);
+  const patronTiers = {} as Record<ElementId, number>;
+  for (const el of ELEMENT_ORDER) patronTiers[el] = patronTier(patrons[el]);
+  const syn = (el: ElementId, n: number) => patronTiers[el] >= n;
+  const has = (b: BlessingId) => bl(b) > 0;
+  const hitElements: BlessEffects['hitElements'] = [];
+  const hitEl = (el: ElementId, chance: number) => { if (chance > 0) hitElements.push({ el, chance: Math.min(1, chance) }); };
+  hitEl('agua', 0.2 * bl('aguaBenta') + 0.3 * bl('enxurrada'));
+  hitEl('tempestade', 0.2 * bl('corisco'));
+  hitEl('fogo', has('furiaDoBoitata') ? 1 : 0.2 * bl('ticao'));
+  hitEl('terra', 0.2 * bl('rachadura'));
+  hitEl('sombra', 0.2 * bl('mordida'));
+  hitEl('encanto', 0.2 * bl('quebranto'));
+  const bless: BlessEffects = {
+    hitElements,
+    rootChance: (uniq('ferraoDeArraia') ? 0.15 : 0) + 0.12 * bl('cipoal') + 0.16 * bl('lacoCerteiro'), rootDur: has('cipoalFechado') ? 2 : 1, rootPoison: has('cipoalFechado'),
+    mataViva: 0.25 * bl('mataViva'), lowHpBonus: 0.25 * bl('faro'), burnBonus: 0.15 * bl('lenha'), crackBonus: syn('terra', 2) ? 0.15 : 0,
+    spellStatusBonus: 0.35 * bl('rezaBrava'),
+    firstHitCharm: has('canto') ? 1.5 : 0,
+    fireTrail: has('rastro'),
+    quakeHits: set('seringueiro', 6) ? (has('pisada') ? 6 : 10) : has('pisada') ? 8 : 0,
+    novaEvery: has('ouricoCacheiro') ? 2 : 4, novaMult: has('espinhoComprido') ? 1.6 : 1, novaPierce: has('espinhoComprido'),
+    thornRoot: has('mandacaru') ? 1.5 : 0,
+    lowHpGuard: has('sangueFrio') ? 0.3 : 0,
+    dodgeWhirl: has('vendaval'), dodgeCrit: has('sumico'), dodgeHaste: syn('tempestade', 3) ? 0.4 : 0, dodgeDecoy: has('molecagem'),
+    critCurse: has('olhoDeLobo'), critHeal: syn('sombra', 3) ? 0.01 : 0, critFear: has('pesadelo'),
+    lastCrack: has('maoDePedra'), lastFire: has('magma'),
+    killBurn: has('cinzas'), killHaste: has('luaVentosa'),
+    steadfast: has('peFincado'),
+    fullHpDamage: syn('terra', 3) ? 0.3 : 0,
+    safeFrom: syn('natureza', 3) ? 0.25 : 0,
+    secondWind: syn('agua', 3) ? 0.35 : 0,
+    potionRoot: has('igarape'), vaporBurn: has('banhoMaria'), charmSlow: has('acalanto'), rootCrack: has('raizDePedra'),
+  };
+
   const mainAttr = weapon === 'arco' || weapon === 'peixeiras' ? attrs.agilidade : weapon === 'zagaia' ? (attrs.forca + attrs.agilidade) * 0.55 : weapon === 'cajado' ? attrs.inteligencia : attrs.forca;
   const damageMult = (1 + 0.012 * mainAttr)
     * (1 + pct('dano') + 0.03 * rank('maoPesada') + (rank('eloForcaVitalidade') ? 0.02 : 0) + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaCacador')
-      + (quiver ? 0.08 : 0) + (bow ? 0.03 * rank('flechaCerteira') : 0) + 0.15 * bl('furia') + (set('tropeiro', 2) ? 0.08 : 0) + (pet('tamandua') ? 0.06 : 0));
+      + (quiver ? 0.08 : 0) + (bow ? 0.03 * rank('flechaCerteira') : 0) + 0.15 * bl('furia') + 0.08 * bl('chama') + 0.6 * bl('furiaCega') + 0.25 * bl('ferroEmBrasa') + (set('tropeiro', 2) ? 0.08 : 0) + (pet('tamandua') ? 0.06 : 0));
 
   let defense = 0.2 * attrs.vitalidade;
   for (const it of items) if (ITEM_TYPES[it.type].base === 'defesa') defense += baseValue(it);
   defense *= 1 + pct('defesa') + 0.03 * rank('couroCurtido') + (set('seringueiro', 2) ? 0.12 : 0) + (set('sentinela', 4) ? 0.1 : 0) + (pet('tatu') ? 0.08 : 0);
 
   const hpFlat = 190 + 10 * p.level + 12 * attrs.vitalidade + (a.vida || 0) + (rank('eloForcaVitalidade') ? 15 : 0) + (rank('eloVitalidadeEspirito') ? 10 : 0);
-  const maxHp = Math.round(hpFlat * (1 + 0.04 * rank('folego') + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaMonge') + (companion === 'capivara' ? 0.08 : 0) + 0.2 * bl('vigor')
+  const maxHp = Math.round(hpFlat * (1 + 0.04 * rank('folego') + 0.02 * rank('joiaGuerreiro') + 0.02 * rank('joiaMonge') + (companion === 'capivara' ? 0.08 : 0) + 0.2 * bl('vigor') + 0.25 * bl('aguaFunda')
     + (set('mateiro', 2) ? 0.08 : 0) + (set('sentinela', 2) ? 0.1 : 0)));
   const manaFlat = 60 + 3 * attrs.espirito + (a.mana || 0) + (rank('eloVitalidadeEspirito') ? 6 : 0) + (rank('eloInteligenciaEspirito') ? 6 : 0);
   const maxMana = Math.round(manaFlat * (1 + 0.05 * rank('fonte') + 0.03 * rank('joiaMonge') + 0.03 * rank('joiaRezador') + (chest === 'manto' ? 0.2 : 0) + (set('ribeirinho', 2) ? 0.12 : 0)));
@@ -163,6 +245,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
   res.natureza += pct('resNatureza');
   elemDamage.natureza += pct('danoNatureza');
   if (uniq('olhoDoBoitata')) elemDamage.fogo += 0.3;
+  if (syn('fogo', 1)) elemDamage.fogo += 0.2;
   let weaponGem: HeroStats['weaponGem'] = null;
   for (const it of items) {
     if (!it.gem) continue;
@@ -174,63 +257,65 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
 
   return {
     level: p.level, attrs, maxHp, maxMana,
-    manaRegen: (2 + 0.04 * attrs.espirito) * (1 + 0.12 * rank('menteCalma') + (pet('vagalume') ? 0.25 : 0)),
+    manaRegen: (2 + 0.04 * attrs.espirito) * (1 + 0.12 * rank('menteCalma') + (pet('vagalume') ? 0.25 : 0) + 0.3 * bl('remanso')),
     weapon, hasShield,
     weaponDamage: weaponItem ? baseValue(weaponItem) : 6,
     damageMult,
-    attackSpeed: 1 + 0.004 * attrs.agilidade + pct('velAtaque') + haste + 0.02 * rank('maosRapidas') + 0.01 * rank('joiaCacador') + 0.12 * bl('pressa')
+    attackSpeed: 1 + 0.004 * attrs.agilidade + pct('velAtaque') + haste + 0.02 * rank('maosRapidas') + 0.01 * rank('joiaCacador') + 0.12 * bl('pressa') + 0.2 * bl('maoLeve') + 0.1 * bl('peDeMoleque')
       + (set('lunar', 2) ? 0.06 : 0) + (pet('carcara') ? 0.06 : 0),
     critChance: Math.min(0.85, 0.05 + 0.0015 * attrs.agilidade + pct('critico') + 0.02 * rank('golpeCerteiro') + 0.01 * rank('joiaMalandro')
-      + (chest === 'gibao' ? 0.03 : 0) + (companion === 'onca' ? 0.05 : 0) + 0.1 * bl('olho')),
-    critMult: 1.5 + pct('danoCritico') + 0.06 * rank('brutalidade') + 0.35 * bl('ferocidade'),
+      + (chest === 'gibao' ? 0.03 : 0) + (companion === 'onca' ? 0.05 : 0) + 0.1 * bl('olho') + 0.15 * bl('olhoDeLobo') + (syn('sombra', 1) ? 0.1 : 0)),
+    critMult: 1.5 + pct('danoCritico') + 0.06 * rank('brutalidade') + 0.35 * bl('ferocidade') + 0.6 * bl('golpeBaixo') + 0.2 * bl('ferroEmBrasa') + (syn('sombra', 3) ? 0.5 : 0),
     defense: Math.round(defense * 10) / 10,
-    damageTaken: Math.pow(0.88, bl('couro')),
-    moveSpeed: BASE_MOVE_SPEED * (1 + 0.02 * rank('peLigeiro') + haste + 0.12 * bl('vento') + (uniq('escamaDaIara') ? 0.12 : 0) + pct('movimento')
+    damageTaken: Math.pow(0.88, bl('couro')) * (has('cascaGrossa') ? 0.9 : 1) * (has('couroDeAnta') ? 0.85 : 1) * (has('furiaCega') ? 1.3 : 1) * (syn('terra', 1) ? 0.9 : 1),
+    moveSpeed: BASE_MOVE_SPEED * (1 + 0.02 * rank('peLigeiro') + haste + 0.12 * bl('vento') + 0.15 * bl('peDeMoleque') + (uniq('escamaDaIara') ? 0.12 : 0) + pct('movimento')
       + (set('vaqueiro', 2) ? 0.1 : 0) + (pet('loboguara') ? 0.06 : 0)),
     dodgeCooldown: BASE_DODGE_COOLDOWN * (1 - 0.04 * rank('reflexo')) * Math.pow(0.75, bl('passo')),
     dodgeDistance: chest === 'couraca' ? 0.8 : 1,
-    dodgeCharges: 1 + (rank('segundaEsquiva') ? 1 : 0) + bl('folego'),
+    dodgeCharges: 1 + (rank('segundaEsquiva') ? 1 : 0) + bl('folego') + bl('assobio') + (syn('tempestade', 1) ? 1 : 0),
     spellPower: (1 + 0.012 * attrs.inteligencia)
-      * (1 + pct('danoFeitico') + 0.03 * rank('palavraForte') + (rank('eloInteligenciaEspirito') ? 0.03 : 0) + 0.02 * rank('joiaRezador') + (rank('arquimago') ? 0.25 : 0) + 0.2 * bl('mandinga')
+      * (1 + pct('danoFeitico') + 0.03 * rank('palavraForte') + (rank('eloInteligenciaEspirito') ? 0.03 : 0) + 0.02 * rank('joiaRezador') + (rank('arquimago') ? 0.25 : 0) + 0.2 * bl('mandinga') + 0.08 * bl('chama') + 0.25 * bl('labareda')
         + (set('benzedeira', 2) ? 0.1 : 0) + (pet('coruja') ? 0.08 : 0)),
-    spellCrit: 0.05 + 0.02 * rank('foco'),
+    spellCrit: 0.05 + 0.02 * rank('foco') + 0.1 * bl('olhoGordo'),
     spellCritMult: rank('sobrecarga') ? 2.5 : 1.5,
-    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * Math.pow(0.8, bl('ligeireza')) * (weapon === 'cajado' ? 0.8 : 1) * (pet('tuiuiu') ? 0.92 : 1),
-    manaCostMult: (rank('arquimago') ? 0.8 : 1) * Math.pow(0.7, bl('fonte')),
-    spellArea: 1 + 0.05 * rank('alcanceMagico') + 0.25 * bl('gigante'),
-    poisonMult: 1 + 0.1 * rank('venenoForte'),
+    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * Math.pow(0.8, bl('ligeireza')) * (has('rezaDaMeiaNoite') ? 0.75 : 1) * (weapon === 'cajado' ? 0.8 : 1) * (pet('tuiuiu') ? 0.92 : 1),
+    manaCostMult: (rank('arquimago') ? 0.8 : 1) * Math.pow(0.7, bl('fonte')) * (syn('encanto', 1) ? 0.8 : 1),
+    spellArea: 1 + 0.05 * rank('alcanceMagico') + 0.25 * bl('gigante') + 0.3 * bl('bracoDeGigante') + 0.15 * bl('labareda') + 0.4 * bl('feiticaria'),
+    poisonMult: 1 + 0.1 * rank('venenoForte') + (syn('natureza', 1) ? 0.3 : 0),
     durationMult: 1 + 0.06 * rank('duracao'),
-    freeCast: Math.max(rank('fluxo') ? 0.25 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0),
-    echo: Math.max(rank('eco') ? 0.2 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0),
-    reactionMult: rank('catalisador') ? 1.4 : 1,
+    freeCast: Math.min(0.7, Math.max(rank('fluxo') ? 0.25 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0) + 0.15 * bl('caldeirao') + (syn('encanto', 3) ? 0.25 : 0)),
+    echo: Math.min(0.7, Math.max(rank('eco') ? 0.2 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0) + 0.2 * bl('gorro') + 0.25 * bl('ecoDaCuca') + (syn('encanto', 3) ? 0.25 : 0)),
+    reactionMult: (rank('catalisador') ? 1.4 : 1) * (has('receita') ? 1.4 : 1) * (syn('encanto', 2) ? 1.4 : 1),
     res, elemDamage, weaponGem, sets,
-    statusDuration: set('benzedeira', 4) ? 2 : 1,
+    statusDuration: (set('benzedeira', 4) ? 2 : 1) * (1 + 0.25 * bl('unha') + 0.6 * bl('brasaDormida')),
     supremoRate: set('lembranca', 6) ? 2 : 1,
     passives: {
-      rootedBonus: pet('sucuri') ? 0.1 : 0, bossDamage: pet('jacarezinho') ? 0.1 : 0, wetBonus: set('ribeirinho', 4) ? 0.15 : 0, armoredBonus: set('seringueiro', 4) ? 0.25 : 0,
-      perfectNova: set('mateiro', 6), perfectWave: set('ribeirinho', 6), perfectWhirl: set('vaqueiro', 6), dodgeDust: set('vaqueiro', 4),
-      critBurn: set('tropeiro', 4), burnExplode: set('tropeiro', 6), quake: set('seringueiro', 6), killHeal: set('lunar', 4) ? 0.02 : 0, frenzy: set('lunar', 6),
+      rootedBonus: pet('sucuri') ? 0.1 : 0, bossDamage: pet('jacarezinho') ? 0.1 : 0, wetBonus: (set('ribeirinho', 4) ? 0.15 : 0) + 0.2 * bl('remansoFundo'), armoredBonus: set('seringueiro', 4) ? 0.25 : 0,
+      perfectNova: set('mateiro', 6) || syn('natureza', 2), perfectWave: set('ribeirinho', 6) || has('ondaMansa') || syn('agua', 2), perfectWhirl: set('vaqueiro', 6) || has('piao') || syn('tempestade', 2),
+      dodgeDust: set('vaqueiro', 4) || has('pegadas'),
+      critBurn: set('tropeiro', 4) || has('brasaViva') || syn('fogo', 2), burnExplode: set('tropeiro', 6) || has('fogoQueAnda') || syn('fogo', 3), quake: bless.quakeHits > 0,
+      killHeal: (set('lunar', 4) ? 0.02 : 0) + 0.02 * bl('carniceiro') + (syn('sombra', 2) ? 0.03 : 0), frenzy: set('lunar', 6) || has('luaCheia'),
       reactionBonus: set('benzedeira', 6) ? 0.6 : 0,
     },
-    lifesteal: pct('rouboVida') + 0.04 * bl('sanguessuga'),
-    thorns: (rank('espinhoVivo') ? 0.25 : 0) + 0.35 * bl('espinhos'),
-    regen: 0.0015 * rank('sangueBom') + 0.01 * bl('seiva'),
-    healMult: 1 + 0.06 * rank('curaMaior') + (pet('botinho') ? 0.1 : 0),
+    lifesteal: pct('rouboVida') + 0.04 * bl('sanguessuga') + 0.06 * bl('chupaSangue'),
+    thorns: (rank('espinhoVivo') ? 0.25 : 0) + 0.35 * bl('espinhos') + 0.7 * bl('cascaGrossa'),
+    regen: 0.0015 * rank('sangueBom') + 0.01 * bl('seiva') + 0.015 * bl('aguaDeCheiro'),
+    healMult: 1 + 0.06 * rank('curaMaior') + (pet('botinho') ? 0.1 : 0) + 0.15 * bl('mare') + (syn('agua', 1) ? 0.2 : 0),
     goldMult: 1 + pct('ouro') + 0.002 * attrs.sorte + 0.03 * rank('olhoVivo') + 0.02 * rank('joiaCurioso') + 0.02 * rank('joiaMalandro') + (companion === 'arara' || companion === 'graxaim' ? 0.1 : 0) + (set('andarilho', 2) ? 0.1 : 0),
     xpMult: 1 + 0.04 * rank('sabedoria') + 0.02 * rank('joiaCurioso') + (set('andarilho', 4) ? 0.15 : 0),
-    luck: attrs.sorte + 4 * rank('boaEstrela'),
-    eliteDamage: 1 + 0.05 * rank('quebraCasca') + (pet('jacarezinho') ? 0.1 : 0),
-    thirdHitMult: 1 + 0.06 * rank('pesoDoGolpe'),
-    reachMult: 1 + 0.25 * bl('gigante'),
-    comboWide: !!rank('golpeLargo'), ignoreArmor: !!rank('arrombar'),
+    luck: attrs.sorte + 4 * rank('boaEstrela') + 15 * bl('trevo'),
+    eliteDamage: 1 + 0.05 * rank('quebraCasca') + (pet('jacarezinho') ? 0.1 : 0) + 0.15 * bl('cacadorDaNoite'),
+    thirdHitMult: 1 + 0.06 * rank('pesoDoGolpe') + 0.15 * bl('pilao') + 0.3 * bl('bracoDeFerro'),
+    reachMult: 1 + 0.25 * bl('gigante') + 0.3 * bl('bracoDeGigante'),
+    comboWide: !!rank('golpeLargo') || has('abraco'), ignoreArmor: !!rank('arrombar') || has('quebraPedra'),
     doubleArrow: !!rank('flechaDupla'), projectiles: bl('projetil'), pierce: bl('perfurar') > 0,
     perfectBonus: rank('contraAtaque') ? 2.5 : 1.5,
     perfectWindow: BASE_PERFECT_WINDOW * (1 + 0.08 * rank('olhoAberto')),
-    critHaste: !!rank('olhoDeOnca'),
+    critHaste: !!rank('olhoDeOnca') || has('ventania'),
     manaPerHitMult: rank('mare') ? 2 : 1, manaOnKill: rank('sopro') ? 6 : 0, manaOnElite: !!rank('pocoFundo'),
     revives: 1 + (rank('segundoFolego') ? 1 : 0),
-    potions: Math.min(p.potions, MAX_POTIONS + (rank('cantilCheio') ? 1 : 0)),
-    potionHeal: (POTION_HEAL + 0.06 * rank('pocaoForte')) * (pet('preguica') ? 1.25 : 1),
+    potions: Math.min(p.potions, MAX_POTIONS + (rank('cantilCheio') ? 1 : 0)) + bl('cantil'),
+    potionHeal: (POTION_HEAL + 0.06 * rank('pocaoForte')) * (pet('preguica') ? 1.25 : 1) * (has('garrafada') ? 1.4 : 1),
     altarChoices: 3 + (rank('bencaoFarta') ? 1 : 0) + (set('andarilho', 6) ? 1 : 0),
     companion,
     companionMult: 1 + 0.05 * rank('bomTrato') + 0.5 * bl('parceria'),
@@ -241,10 +326,11 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
     supremo: p.supremo && p.supremos.includes(p.supremo) ? p.supremo : null,
     onHitPoison: bl('peconha') > 0, onKillExplode: bl('estouro') > 0, firstHitShield: bl('amparo') > 0 || set('sentinela', 6),
     nova: bl('ourico'),
+    bless, patrons, patronTiers,
     knowledge: p.life ? knowledgeMap(p.life) : {},
     talents: {
-      sedeDeBriga: !!rank('sedeDeBriga'), execucao: !!rank('execucao'), contragolpe: !!rank('contragolpe'),
-      cascaDeJabuti: !!rank('cascaDeJabuti'), rolamentoCortante: !!rank('rolamentoCortante'), sangueQuente: !!rank('sangueQuente'),
+      sedeDeBriga: !!rank('sedeDeBriga') || has('sedeDeSangue'), execucao: !!rank('execucao') || has('boteFinal'), contragolpe: !!rank('contragolpe'),
+      cascaDeJabuti: !!rank('cascaDeJabuti') || has('segundaChance'), rolamentoCortante: !!rank('rolamentoCortante'), sangueQuente: !!rank('sangueQuente') || has('sangueFervendo'),
     },
     uniques: {
       mandibulaDaRainha: uniq('mandibulaDaRainha'), presaDaCaipora: uniq('presaDaCaipora'), coroaDeCipo: uniq('coroaDeCipo'),

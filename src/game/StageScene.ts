@@ -10,7 +10,10 @@ import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
 import { artChaptersOf, findStage, isTowerId } from '../data/tower';
 import { isTrainingId } from '../data/training';
 import { boitataBody } from '../sim/bosses';
-import { BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, REACTIONS, SPELLS, SUPREMOS, blessingCounts, type BlessingId, type ElementId } from '../data/content';
+import {
+  BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, ELEMENT_ORDER, PATRONS, PATRON_STEPS, PATRON_TIERS, REACTIONS, SPELLS, SUPREMOS, blessingCounts,
+  type BlessingId, type ElementId,
+} from '../data/content';
 import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
@@ -20,7 +23,7 @@ import { isBoss } from '../sim/core';
 import { challengeLeft } from '../sim/loot';
 import { comboOf, spellCost } from '../sim/player';
 import { chooseBlessing, chooseOffer, createWorld, exitZone, step, type Buff, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
-import { CARD, HUD_SCALE, SLOT, TIER_COLORS, VITALS, bakeHud, plateTexture } from './hudart';
+import { CARD, HUD_SCALE, SLOT, TIER_COLORS, VITALS, bakeHud, duoCardTexture, plateTexture } from './hudart';
 import { music, unlockAudio } from './music';
 import { session } from './session';
 import { sfx } from './sfx';
@@ -149,6 +152,11 @@ export class StageScene extends Phaser.Scene {
   private hpLag = 1;
   private slotCd: Phaser.GameObjects.Text[] = [];
   private roomDotsX = 0;
+  /** Faixas de sinergia já avisadas, por padrinho. */
+  private synTiers: Partial<Record<ElementId, number>> = {};
+  private txtPause!: Phaser.GameObjects.Text;
+  private pauseVeil!: Phaser.GameObjects.Rectangle;
+  private synY = 170;
 
   constructor() { super('stage'); }
 
@@ -164,7 +172,7 @@ export class StageScene extends Phaser.Scene {
     const seed = 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
     this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed, ranked: isTowerId(this.stage.id) });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
-    this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = [];
+    this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
     this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
     if (this.auto) this.tally.auto = true;
     this.views.clear(); this.shots.clear(); this.cards = [];
@@ -266,6 +274,24 @@ export class StageScene extends Phaser.Scene {
     music.duck(v);
     if (v) this.banner('PAUSADO', this.training ? 'Esc continua  ·  X volta ao acampamento' : this.auto ? 'Esc continua  ·  X encerra a caçada' : 'Esc continua  ·  X abandona a fase', '#f1ebd8');
     else { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); }
+    /* pausado, o título sobe para a lista das sinergias caber embaixo dele */
+    const list = v ? this.synergyText() : '';
+    this.txtBanner.setY(v && list ? 150 : VIEW.h / 2 - 50);
+    if (v && list) this.txtSub.setY(232);
+    this.txtPause.setVisible(v).setText(list);
+    this.pauseVeil.setVisible(v);
+  }
+
+  /** Para a tela de pausa: as bênçãos de cada padrinho, o que já está aceso e o que falta para a próxima faixa. */
+  private synergyText(): string {
+    const s = this.world.stats, lines: string[] = [];
+    for (const el of ELEMENT_ORDER) {
+      const n = s.patrons[el] ?? 0, t = s.patronTiers[el] ?? 0;
+      if (n <= 0) continue;
+      const on = PATRON_TIERS[el].slice(0, t).join('  ·  '), next = t < 3;
+      lines.push(`${PATRONS[el].name} (${n}):  ${on || 'nenhuma faixa acesa'}${next ? `\n      com ${PATRON_STEPS[t]} bênçãos: ${PATRON_TIERS[el][t]}` : ''}`);
+    }
+    return lines.length ? `BÊNÇÃOS POR PADRINHO\n${lines.join('\n')}` : '';
   }
 
   /* ---------- laço ---------- */
@@ -413,6 +439,12 @@ export class StageScene extends Phaser.Scene {
         this.number(p.x, p.y - 140, BLESSINGS[e.kind as BlessingId].name, BLESSING_TIER_COLOR[BLESSINGS[e.kind as BlessingId].tier], 32, 1.5);
         this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: 0, dur: 0.5, r0: 20, r1: 130, color: 0x9be7c0, width: 7 });
         sfx.play('perfect');
+        if (BLESSINGS[e.kind as BlessingId].tier === 4) {
+          /* Despertar e Compadrio: a tela pisca e sobem anéis dourados */
+          this.cameras.main.flash(220, 255, 226, 150);
+          for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: -i * 0.14, dur: 0.6, r0: 24, r1: 190, color: 0xffd23f, width: 9 });
+        }
+        this.announceSynergy();
         break;
       case 'dodge':
         this.fx.push({ kind: 'puff', x: e.x, y: e.y - 4, t: 0, dur: 0.3, color: 0xcdbf9a, n: 5, seed: w.tick });
@@ -788,16 +820,28 @@ export class StageScene extends Phaser.Scene {
   private showCards(opts: BlessingId[], title: string): void {
     const have = blessingCounts(this.world.blessings);
     const cw = CARD.w, ch = CARD.h, gap = opts.length > 3 ? 4 : 14;
+    const style = (size: number, color: string, stroke = 5) => ({ fontFamily: FONT, fontStyle: '900', fontSize: size + 'px', color, stroke: INK, strokeThickness: stroke, align: 'center' });
+    /* selo do padrinho: o ícone do elemento numa bolinha */
+    const seal = (el: ElementId, x: number, y: number): Phaser.GameObjects.GameObject[] => [
+      this.add.circle(x, y, 17, 0x1c0f0a, 1), this.add.circle(x, y, 15, 0x3a2416, 1).setStrokeStyle(2, COLOR(el)),
+      ...(this.textures.exists('ui_' + el) ? [this.add.image(x, y, 'ui_' + el).setScale(INV * 0.4)] : []),
+    ];
     opts.forEach((id, i) => {
-      const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 448, color = TIER_COLORS[b.tier - 1] ?? BLESSING_TIER_COLOR[b.tier];
-      const top = -ch / 2;
-      const back = this.add.image(0, 0, `hud_card${b.tier}`).setScale(HUD_SCALE);
-      const tier = this.add.text(0, top + 23, BLESSING_TIER_LABEL[b.tier].toUpperCase(), { fontFamily: FONT, fontStyle: '900', fontSize: '18px', color: INK }).setOrigin(0.5).setResolution(2);
-      const key = this.add.text(-cw / 2 + 24, top + 44, String(i + 1), { fontFamily: FONT, fontStyle: '900', fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6 }).setResolution(2);
+      const b = BLESSINGS[id], x = VIEW.w / 2 + (i - (opts.length - 1) / 2) * (cw + gap), y = 448, top = -ch / 2;
+      const duo = b.pair ? [ELEMENTS[b.pair[0]].color, ELEMENTS[b.pair[1]].color] : null;
+      const color = duo ? '#ffe9a8' : TIER_COLORS[b.tier - 1] ?? BLESSING_TIER_COLOR[b.tier];
+      /* a faixa diz a raridade e de quem é: "RARA · SACI", "DESPERTAR · FÚRIA", "COMPADRIO" */
+      const band = b.kind === 'desperta' ? `DESPERTAR · ${BLESSINGS[b.awakens!].name}` : b.kind === 'compadrio' ? `COMPADRIO · ${PATRONS[b.pair![0]].name} e ${PATRONS[b.pair![1]].name}`
+        : b.patron ? `${BLESSING_TIER_LABEL[b.tier]} · ${PATRONS[b.patron].name}` : BLESSING_TIER_LABEL[b.tier];
+      const back = this.add.image(0, 0, duo ? duoCardTexture(this, duo[0], duo[1]) : `hud_card${b.tier}`).setScale(HUD_SCALE);
+      const tier = this.add.text(0, top + 23, band.toUpperCase(), { fontFamily: FONT, fontStyle: '900', fontSize: band.length > 24 ? '14px' : '17px', color: INK }).setOrigin(0.5).setResolution(2);
+      const key = this.add.text(-cw / 2 + 24, top + 44, String(i + 1), style(28, '#f1ebd8', 6)).setResolution(2);
       const parts: Phaser.GameObjects.GameObject[] = [back, tier, key];
       if (this.textures.exists('ui_' + b.icon)) parts.push(this.add.image(0, top + 92, 'ui_' + b.icon).setScale(INV * 0.92));
-      parts.push(this.add.text(0, top + 140, b.name, { fontFamily: FONT, fontStyle: '900', fontSize: '27px', color, stroke: INK, strokeThickness: 5, align: 'center' }).setOrigin(0.5, 0).setResolution(2));
-      parts.push(this.add.text(0, top + 176, b.desc, { fontFamily: FONT, fontSize: '19px', color: '#f6ead0', align: 'center', wordWrap: { width: cw - 54 }, lineSpacing: -2 }).setOrigin(0.5, 0).setResolution(2));
+      if (b.pair) parts.push(...seal(b.pair[0], -44, top + 118), ...seal(b.pair[1], 44, top + 118));
+      else if (b.patron) parts.push(...seal(b.patron, 36, top + 120));
+      parts.push(this.add.text(0, top + 140, b.name, style(b.name.length > 18 ? 23 : 27, color)).setOrigin(0.5, 0).setResolution(2));
+      parts.push(this.add.text(0, top + 176, b.desc, { fontFamily: FONT, fontSize: b.desc.length > 70 ? '17px' : '19px', color: '#f6ead0', align: 'center', wordWrap: { width: cw - 50 }, lineSpacing: -2 }).setOrigin(0.5, 0).setResolution(2));
       const n = have[id] ?? 0;
       if (b.max > 1 && b.max < 9) {
         /* pontinhos: quantas vezes já foi escolhida e quantas cabem */
@@ -812,7 +856,25 @@ export class StageScene extends Phaser.Scene {
       card.on('pointerdown', () => this.pickBlessing(i));
       this.cards.push(card);
     });
-    this.txtSub.setText(title).setPosition(VIEW.w / 2, 286).setVisible(true).setAlpha(1);
+    const special = opts.some((id) => BLESSINGS[id].kind === 'desperta') ? 'Uma bênção despertou: escolha uma das duas formas, ou outra bênção' : opts.some((id) => BLESSINGS[id].kind === 'compadrio') ? 'Dois padrinhos se juntaram: há um Compadrio no altar' : title;
+    this.txtSub.setText(special).setPosition(VIEW.w / 2, 286).setVisible(true).setAlpha(1);
+  }
+
+  /** Uma faixa de sinergia acabou de acender: avisa no meio da tela qual é e o que ela dá. */
+  private announceSynergy(): void {
+    const tiers = this.world.stats.patronTiers;
+    let row = 0;
+    for (const el of ELEMENT_ORDER) {
+      const now = tiers[el] ?? 0, was = this.synTiers[el] ?? 0;
+      if (now > was) {
+        /* se duas acendem juntas, a segunda sai mais embaixo */
+        const y = 176 + row++ * 78;
+        this.number(VIEW.w / 2, y, `SINERGIA ${PATRONS[el].of.toUpperCase()} · ${PATRON_STEPS[now - 1]}`, ELEMENTS[el].color, 38, 2.6);
+        this.number(VIEW.w / 2, y + 38, PATRON_TIERS[el][now - 1], '#f6ead0', 22, 2.8);
+        sfx.play('win');
+      }
+      this.synTiers[el] = now;
+    }
   }
 
   private clearCards(): void {
@@ -1414,6 +1476,8 @@ export class StageScene extends Phaser.Scene {
       .setText(['WASD mover', 'clique atacar', bow ? 'botão direito carrega o tiro' : w.stats.hasShield ? 'botão direito defende' : '', 'Espaço esquiva', 'Q feitiço', '1 poção'].filter(Boolean).join('  ·  '));
     this.txtBanner = this.add.text(VIEW.w / 2, VIEW.h / 2 - 50, '', { fontFamily: FONT, fontStyle: '900', fontSize: '92px', color: '#ffb238', stroke: INK, strokeThickness: 12 }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
     this.txtSub = this.add.text(VIEW.w / 2, VIEW.h / 2 + 50, '', { fontFamily: FONT, fontSize: '28px', color: '#f1ebd8', stroke: INK, strokeThickness: 6, align: 'center' }).setOrigin(0.5).setDepth(10005).setResolution(2).setVisible(false);
+    this.pauseVeil = this.add.rectangle(0, 0, VIEW.w, VIEW.h, 0x0a0604, 0.68).setOrigin(0).setDepth(10004).setVisible(false);
+    this.txtPause = this.add.text(VIEW.w / 2, 276, '', { fontFamily: FONT, fontSize: '17px', color: '#f6ead0', stroke: INK, strokeThickness: 4, align: 'center', lineSpacing: 2, wordWrap: { width: 1100 } }).setOrigin(0.5, 0).setDepth(10005).setResolution(2).setVisible(false);
 
     /* barra de ações: uma moldura por espaço, o ícone, a tecla e os segundos de recarga */
     const alt = bow || w.stats.hasShield || w.stats.weapon === 'borduna' || w.stats.weapon === 'zagaia';
@@ -1434,6 +1498,7 @@ export class StageScene extends Phaser.Scene {
     ];
     this.supIcon = w.supremo ? icon(7, 'ui_' + w.supremo) : null;
 
+    this.synY = th + 108;
     this.goldIcon = this.add.image(36, th + 30, 'moeda').setScale(INV * 1.1).setDepth(10001).setVisible(false);
     this.txtGold = this.label(52, th + 18, 22, '#f2c14e').setVisible(false);
     this.txtChallenge = this.label(24, th + 46, 19, '#ffd23f').setVisible(false);
@@ -1548,12 +1613,27 @@ export class StageScene extends Phaser.Scene {
       for (const o of this.blessIcons) o.destroy();
       this.blessIcons = [];
       const counts = blessingCounts(w.blessings);
-      (Object.keys(counts) as BlessingId[]).forEach((id, i) => {
-        const b = BLESSINGS[id], x = 36 + i * 40, y = VY - 24, col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
+      /* a forma desperta fica no lugar da bênção de que veio */
+      const awoke = new Set((Object.keys(counts) as BlessingId[]).map((id) => BLESSINGS[id].awakens).filter(Boolean));
+      const shown = (Object.keys(counts) as BlessingId[]).filter((id) => !awoke.has(id as never)), step = Math.min(40, 660 / Math.max(1, shown.length));
+      shown.forEach((id, i) => {
+        const b = BLESSINGS[id], x = 36 + i * step, y = VY - 24, col = Phaser.Display.Color.HexStringToColor(BLESSING_TIER_COLOR[b.tier]).color;
         this.blessIcons.push(this.add.circle(x, y, 18, 0x1c0f0a, 1).setDepth(10000));
-        this.blessIcons.push(this.add.circle(x, y, 16, 0x3a2416, 1).setStrokeStyle(2, col).setDepth(10001));
+        this.blessIcons.push(this.add.circle(x, y, 16, 0x3a2416, 1).setStrokeStyle(b.tier === 4 ? 3 : 2, col).setDepth(10001));
         if (this.textures.exists('ui_' + b.icon)) this.blessIcons.push(this.add.image(x, y, 'ui_' + b.icon).setScale(INV * 0.4).setDepth(10002));
         if (counts[id]! > 1) this.blessIcons.push(this.add.text(x + 8, y + 3, String(counts[id]), { fontFamily: FONT, fontStyle: '900', fontSize: '16px', color: '#ffffff', stroke: INK, strokeThickness: 4 }).setDepth(10003).setResolution(2));
+      });
+      /* sinergias: uma medalha por padrinho com bênção, com a contagem e as três faixas */
+      const pat = ELEMENT_ORDER.filter((el) => (s.patrons[el] ?? 0) > 0).sort((a, b) => s.patrons[b] - s.patrons[a]);
+      pat.forEach((el, i) => {
+        const x = 38, y = this.synY + i * 52, col = COLOR(el), n = s.patrons[el], tier = s.patronTiers[el];
+        this.blessIcons.push(this.add.image(x, y, 'hud_patron').setScale(HUD_SCALE).setDepth(10000));
+        this.blessIcons.push(this.add.circle(x, y, 20, 0, 0).setStrokeStyle(tier > 0 ? 3 : 2, col, tier > 0 ? 1 : 0.55).setDepth(10001));
+        if (this.textures.exists('ui_' + el)) this.blessIcons.push(this.add.image(x, y, 'ui_' + el).setScale(INV * 0.5).setDepth(10002).setAlpha(tier > 0 ? 1 : 0.75));
+        this.blessIcons.push(this.add.text(x + 26, y - 21, String(n), { fontFamily: FONT, fontStyle: '900', fontSize: '22px', color: tier > 0 ? ELEMENTS[el].color : '#f6ead0', stroke: INK, strokeThickness: 5 }).setDepth(10003).setResolution(2));
+        const pips = this.add.graphics().setDepth(10003);
+        PATRON_STEPS.forEach((need, k) => { pips.fillStyle(0x1c0f0a, 1).fillCircle(x + 31 + k * 11, y + 12, 5); pips.fillStyle(n >= need ? col : 0x4a3220, 1).fillCircle(x + 31 + k * 11, y + 12, 3.4); });
+        this.blessIcons.push(pips);
       });
     }
 

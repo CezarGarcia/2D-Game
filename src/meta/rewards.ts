@@ -178,6 +178,7 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
   if (isTowerId(o.stageId)) return applyTowerOutcome(p, o);
   const stage = STAGE_BY_ID.get(o.stageId)!;
   const rng = profileRng(p), stats = deriveStats(p);
+  stats.luck += 15 * (blessingCounts(o.blessings ?? []).trevo ?? 0);
   const rec = recordOf(p, stage.id);
   const firstClear = o.won && !rec.cleared;
   const xpMult = xpMultiplier(p.level, stage.level), goldMult = goldMultiplier(p.level, stage.level);

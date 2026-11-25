@@ -2,7 +2,7 @@
 import { ENEMY, PLAYER, PUDDLE_SLOW } from '../data/balance';
 import { COMPANIONS, SPELLS, SPELL_LEVEL_POWER, SPELL_NUM, SUPREMO_NUM, type SpellId } from '../data/content';
 import {
-  attackSpeed, chargeSupremo, clampArena, damageEnemy, emit, healPlayer, hurtPet, hurtPlayer, isBoss, levelScale, max0, rand, spellScale, strike, weaponBonus, wrapAngle,
+  WIND, attackSpeed, chargeSupremo, clampArena, damageEnemy, emit, healPlayer, hurtPet, hurtPlayer, isBoss, levelScale, max0, rand, spellScale, strike, weaponBonus, wrapAngle,
 } from './core';
 import { buffPower, lootHit } from './loot';
 import { castNewSpell, castNewSupremo, onDodge, registerZoneHurt, spellHit, updateNewZone } from './spells';
@@ -66,6 +66,19 @@ function weaponDamage(w: World, mult: number): number {
   return s.weaponDamage * mult * s.damageMult * weaponBonus(w) * (p.perfectT > 0 ? s.perfectBonus : 1) * (p.contraT > 0 ? PLAYER.contragolpe : 1);
 }
 
+/** Último golpe da sequência, golpe carregado e tiro carregado: o que as bênçãos fazem com quem foi acertado. */
+function finisher(w: World, e: Enemy): void {
+  if (e.hp > 0 && w.stats.bless.lastCrack) applyElement(w, e, 'terra');
+}
+/** O mesmo golpe, no chão: o Magma deixa fogo onde ele bateu. */
+function finisherGround(w: World, x: number, y: number): void {
+  const s = w.stats;
+  if (!s.bless.lastFire) return;
+  const pos = { x, y };
+  clampArena(w, pos, 20);
+  w.zones.push({ id: w.nextId++, kind: 'fire', x: pos.x, y: pos.y, r: 62, t: 0, dur: 3, tick: 0.5, power: s.weaponDamage * s.damageMult * 0.35 });
+}
+
 function meleeHit(w: World, a: Swing, last: boolean): void {
   const p = w.player, s = w.stats, dmg = weaponDamage(w, a.mult * (last ? s.thirdHitMult : 1));
   const range = a.range * s.reachMult, wide = last && s.comboWide;
@@ -76,8 +89,10 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
     if (d > range + e.radius) continue;
     if (!wide && Math.abs(wrapAngle(Math.atan2(dy, dx) - p.aim)) > a.arc && d > e.radius + 22) continue;
     damageEnemy(w, e, dmg, 'melee', wide ? Math.atan2(dy, dx) : p.aim);
+    if (last) finisher(w, e);
     hits++;
   }
+  if (last && hits > 0) finisherGround(w, p.x + Math.cos(p.aim) * range * 0.7, p.y + Math.sin(p.aim) * range * 0.7);
   if (hits > 0) {
     p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * s.manaPerHitMult * hits);
     p.perfectT = 0; p.contraT = 0;
@@ -111,11 +126,13 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     for (const e of w.enemies) {
       if (!hittable(e) || Math.hypot(e.x - cx, e.y - cy) > r + e.radius * 0.5) continue;
       damageEnemy(w, e, dmg, 'melee', aim);
+      finisher(w, e);
       if (e.hp <= 0) continue;
       if (charge >= 0.6) { e.crackT = Math.max(e.crackT, H.crack); if (isBoss(e)) e.posture = Math.min(100, e.posture + H.posture); }
       if (s.uniques.garraDoMapinguari) { e.crackT = Math.max(e.crackT, 8); if (!isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; } }
     }
     lootHit(w, (x, y, rr) => Math.hypot(x - cx, y - cy) <= r + rr * 0.5);
+    finisherGround(w, cx, cy);
     emit(w, { type: 'heavy', x: cx, y: cy, value: r });
   } else {
     const Z = PLAYER.weapons.zagaia.thrust, len = Z.len * s.reachMult * (0.6 + 0.4 * charge), dmg = weaponDamage(w, Z.mult * (0.5 + 0.5 * charge) * s.thirdHitMult);
@@ -123,8 +140,9 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     for (const e of w.enemies) {
       if (!hittable(e)) continue;
       const L2 = len * len, k = Math.max(0, Math.min(1, ((e.x - p.x) * (ex - p.x) + (e.y - p.y) * (ey - p.y)) / L2));
-      if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) damageEnemy(w, e, dmg, 'melee', aim);
+      if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) { damageEnemy(w, e, dmg, 'melee', aim); finisher(w, e); }
     }
+    finisherGround(w, (p.x + ex) / 2, (p.y + ey) / 2);
     lootHit(w, (x, y, rr) => {
       const k = Math.max(0, Math.min(1, ((x - p.x) * (ex - p.x) + (y - p.y) * (ey - p.y)) / (len * len)));
       return Math.hypot(x - (p.x + (ex - p.x) * k), y - (p.y + (ey - p.y) * k)) < Z.width / 2 + rr;
@@ -280,7 +298,8 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (p.dreamT > 0) inp = { ...inp, spell: [inp.spell[p.spellMap[0]], inp.spell[p.spellMap[1]], inp.spell[p.spellMap[2]]] };
   p.iframes = max0(p.iframes - dt); p.hurtInv = max0(p.hurtInv - dt); p.perfectT = max0(p.perfectT - dt); p.comboT = max0(p.comboT - dt);
   p.contraT = max0(p.contraT - dt); p.presaT = max0(p.presaT - dt); p.cascaT = max0(p.cascaT - dt); p.slowT = max0(p.slowT - dt);
-  p.potionCd = max0(p.potionCd - dt); p.shotCd = max0(p.shotCd - dt);
+  p.potionCd = max0(p.potionCd - dt); p.shotCd = max0(p.shotCd - dt); p.hasteT = max0(p.hasteT - dt);
+  if (p.windT > 0) { p.windT -= dt; if (p.windT <= 0) p.windStacks = 0; }
   if (p.stackT > 0) { p.stackT -= dt; if (p.stackT <= 0) p.stacks = 0; }
   for (let i = 0; i < 3; i++) p.cds[i] = max0(p.cds[i] - dt);
   if (p.dodgeCharges < s.dodgeCharges) {
@@ -298,10 +317,10 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
     chargeSupremo(w, SUPREMO_NUM.perSecond * dt);
     if (s.nova > 0) {
       p.novaT += dt;
-      if (p.novaT >= 4) {
+      if (p.novaT >= s.bless.novaEvery) {
         p.novaT = 0;
         const N = SPELL_NUM.dardo, n = 8 * s.nova, off = rand(w) * 6.283;
-        for (let i = 0; i < n; i++) { const a = off + (i * 6.283) / n; shot(w, 'thorn', p.x + Math.cos(a) * 20, p.y + Math.sin(a) * 20, a, N.speed, 360, N.damage * spellScale(w) * 0.9).pierce = s.pierce; }
+        for (let i = 0; i < n; i++) { const a = off + (i * 6.283) / n; shot(w, 'thorn', p.x + Math.cos(a) * 20, p.y + Math.sin(a) * 20, a, N.speed, 360, N.damage * spellScale(w) * 0.9 * s.bless.novaMult).pierce = s.pierce || s.bless.novaPierce; }
         emit(w, { type: 'nova', x: p.x, y: p.y });
       }
     }
@@ -315,7 +334,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (w.current && !free && p.state !== 'dodge' && w.phase === 'fight') p.x += w.current * dt;
   const aim = Math.atan2(inp.aimY - p.y, inp.aimX - p.x);
   const len = Math.hypot(inp.mx, inp.my);
-  const speed = s.moveSpeed * (p.slowT > 0 ? 0.5 : 1) * (p.inPuddle && !free ? PUDDLE_SLOW : 1) * (p.wolfT > 0 ? 1 + SUPREMO_NUM.sombra.speed : 1) * (p.stoneT > 0 ? 0.85 : 1) * (1 + buffPower(w, 'vento'));
+  const speed = s.moveSpeed * (p.slowT > 0 ? 0.5 : 1) * (p.inPuddle && !free ? PUDDLE_SLOW : 1) * (p.wolfT > 0 ? 1 + SUPREMO_NUM.sombra.speed : 1) * (p.stoneT > 0 ? 0.85 : 1) * (1 + buffPower(w, 'vento')) * (1 + WIND.perStack * p.windStacks);
   const as = attackSpeed(w);
   p.vx = 0; p.vy = 0; p.moving = false;
   const walkBy = (mult: number) => {
@@ -331,6 +350,16 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
     p.burnT = 0; p.poisonT = 0;
     if (s.uniques.colherDaCuca) w.zones.push({ id: w.nextId++, kind: 'borbulhante', x: p.x, y: p.y, r: 160, t: 0, dur: 0.3, tick: 0, power: SPELL_NUM.borbulhante.damage * spellScale(w) * 1.5 });
     healPlayer(w, s.maxHp * s.potionHeal, true);
+    if (s.bless.potionRoot) {
+      /* Igarapé: raízes em volta de quem bebeu */
+      const r = 210 * s.spellArea;
+      for (const e of w.enemies) {
+        if (!hittable(e) || Math.hypot(e.x - p.x, e.y - p.y) > r + e.radius * 0.5) continue;
+        if (isBoss(e)) e.slowT = Math.max(e.slowT, 2); else { e.rootT = Math.max(e.rootT, 2 * s.durationMult); e.tele = null; }
+        applyElement(w, e, 'natureza');
+      }
+      emit(w, { type: 'brotar', x: p.x, y: p.y, value: r });
+    }
     emit(w, { type: 'potion', x: p.x, y: p.y, value: Math.round(s.maxHp * s.potionHeal * s.healMult) });
   }
 
@@ -398,6 +427,14 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
       if (cast) { /* o feitiço tem prioridade sobre o golpe segurado */ }
       else if (shooting) { if (p.shotCd <= 0) { if (staff) fireStaff(w, aim); else fireArrow(w, aim, 0); } }
       else if (p.bufAttack > 0 || inp.attackHeld) startAttack(w, aim, p.comboT > 0 && p.combo < P.combo.length - 1 ? p.combo + 1 : 0);
+    }
+  }
+  if (s.bless.fireTrail && fighting) {
+    /* Rastro Aceso: uma labareda a cada tanto de chão andado */
+    p.trailD += Math.hypot(p.vx, p.vy) * dt;
+    if (p.trailD >= 72) {
+      p.trailD = 0;
+      w.zones.push({ id: w.nextId++, kind: 'fire', x: p.x, y: p.y, r: 40, t: 0, dur: 2.4, tick: 0.5, power: s.weaponDamage * s.damageMult * 0.3 });
     }
   }
   clampArena(w, p, P.radius);
@@ -525,6 +562,7 @@ export function updateProjectiles(w: World, dt: number): void {
         return false;
       }
       damageEnemy(w, e, pr.damage, 'arrow', ang);
+      if (pr.charged && pr.kind === 'arrow') { finisher(w, e); finisherGround(w, e.x, e.y); }
       p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 0.6 * s.manaPerHitMult);
       if (!pr.pierce) return false;
       pr.hit.push(e.id);

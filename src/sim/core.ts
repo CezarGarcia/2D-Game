@@ -185,6 +185,8 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     return 0;
   }
   let dmg = amount * w.dealt, armored = false;
+  const B = s.bless;
+  if (B.rootCrack && e.rootT > 0) e.crackT = Math.max(e.crackT, 3);
   const open = isOpen(e);
   const weapon = source === 'melee' || source === 'arrow' || source === 'roll';
   if (element) dmg *= 1 + s.elemDamage[element];
@@ -194,7 +196,11 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     dmg *= 1 + s.passives.armoredBonus;
   }
   if (isBossKind(e.kind)) { const m = bossStateMult(e); dmg *= m; if (m < 0.5) armored = true; }
-  if (e.crackT > 0) dmg *= 1.15;
+  if (e.crackT > 0) dmg *= 1.15 + B.crackBonus;
+  if (B.mataViva && (e.rootT > 0 || e.slowT > 0 || e.poisonT > 0)) dmg *= 1 + B.mataViva;
+  if (B.lowHpBonus && e.hp < e.maxHp * 0.3) dmg *= 1 + B.lowHpBonus;
+  if (B.burnBonus && e.burnT > 0) dmg *= 1 + B.burnBonus;
+  if (B.spellStatusBonus && source === 'spell' && (e.poisonT > 0 || e.wetT > 0 || e.chargeT > 0 || e.burnT > 0 || e.crackT > 0 || e.curseT > 0 || e.confuseT > 0)) dmg *= 1 + B.spellStatusBonus;
   if (e.curseT > 0) dmg *= 1 + (e.curseBonus || 0.15);
   if (e.frogT > 0) dmg *= 1 + SUPREMO_NUM.encanto.bonus;
   if (e.stone) { dmg *= 2; e.stone = false; }
@@ -237,15 +243,20 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     if (s.weapon === 'cajado' && source === 'arrow' && rand(w) < PLAYER.weapons.cajado.statusChance) applyElement(w, e, p.lastElement);
     const be = w.buffs.length ? buffOf(w, 'elemento') : undefined;
     if (be?.el && e.hp > 0 && rand(w) < buffPower(w, 'elemento')) applyElement(w, e, be.el);
+    for (const h of B.hitElements) if (e.hp > 0 && rand(w) < h.chance) applyElement(w, e, h.el);
   }
+  if (B.firstHitCharm && e.hits === 1 && e.hp > 0 && !isBoss(e)) { e.charmT = Math.max(e.charmT, B.firstHitCharm * s.durationMult); e.tele = null; }
+  if (B.charmSlow && e.hp > 0 && (e.confuseT > 0 || e.charmT > 0)) e.slowT = Math.max(e.slowT, 2.5);
 
   if (crit && weapon) {
     if (s.critHaste) { if (p.dodgeCharges < s.dodgeCharges) p.dodgeTimer += 0.5; for (let i = 0; i < 3; i++) p.cds[i] = max0(p.cds[i] - 0.3); }
     if (s.uniques.denteDoBoto) wet(w, e);
     if (s.passives.critBurn) applyElement(w, e, 'fogo');
-    if (s.uniques.pedraDaTeiniagua) applyElement(w, e, 'sombra');
+    if (s.uniques.pedraDaTeiniagua || B.critCurse) applyElement(w, e, 'sombra');
+    if (B.critHeal) healPlayer(w, s.maxHp * B.critHeal, true);
+    if (B.critFear && e.hp > 0 && e.confuseT > 0 && !isBoss(e)) { e.fearT = Math.max(e.fearT, 2); e.tele = null; }
   }
-  if (weapon && s.passives.quake && ++p.hitCount >= 10) {
+  if (weapon && s.passives.quake && ++p.hitCount >= (B.quakeHits || 10)) {
     p.hitCount = 0;
     w.zones.push({ id: w.nextId++, kind: 'pop', x: p.x, y: p.y, r: 150, t: 0, dur: 0.05, tick: 0, power: s.weaponDamage * s.damageMult * 1.5 });
   }
@@ -280,7 +291,10 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   }
   if ((source === 'melee' || source === 'arrow') && e.hp > 0) {
     if (s.onHitPoison || (s.uniques.mandibulaDaRainha && rand(w) < PLAYER.mandibulaChance)) { e.poisonT = 3 * s.durationMult; e.poisonTick = Math.min(e.poisonTick > 0 ? e.poisonTick : 0.5, 0.5); }
-    if (s.uniques.ferraoDeArraia && !isBoss(e) && rand(w) < 0.15) { e.rootT = Math.max(e.rootT, 1); e.tele = null; }
+    if (B.rootChance > 0 && !isBoss(e) && rand(w) < B.rootChance) {
+      e.rootT = Math.max(e.rootT, B.rootDur); e.tele = null;
+      if (B.rootPoison) { e.poisonT = Math.max(e.poisonT, 3 * s.durationMult); e.poisonTick = Math.min(e.poisonTick > 0 ? e.poisonTick : 0.5, 0.5); }
+    }
   }
 
   emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id, el: element ?? undefined });
@@ -295,6 +309,8 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
       addHazard(w, { kind: 'blast', tele: { shape: 'circle', x: e.x, y: e.y, r: MOD.explosivo.radius, t: 0, dur: MOD.explosivo.delay }, damage: MOD.explosivo.damage * e.dmg, slow: 0 });
     }
     if (s.passives.killHeal) healPlayer(w, s.maxHp * s.passives.killHeal, true);
+    if (B.killBurn && e.burnT > 0) { p.mana = Math.min(s.maxMana, p.mana + 8); healPlayer(w, s.maxHp * 0.02, true); }
+    if (B.killHaste) { p.windStacks = Math.min(WIND.max, p.windStacks + 1); p.windT = WIND.duration; }
     if (e.burnT > 0 && (s.passives.burnExplode || s.uniques.olhoDoBoitata)) {
       w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 110, t: 0, dur: 0.12, tick: 0, power: e.maxHp * 0.15 + s.weaponDamage * s.damageMult });
       for (const o of w.enemies) if (o !== e && o.hp > 0 && Math.hypot(o.x - e.x, o.y - e.y) < 130) applyElement(w, o, 'fogo');
@@ -315,6 +331,7 @@ export function weaponBonus(w: World): number {
   const p = w.player, s = w.stats;
   let m = 1 + p.stacks * PLAYER.sedeDeBriga.perStack;
   if (s.talents.sangueQuente && p.hp / s.maxHp < PLAYER.sangueQuente.below) m *= 1 + PLAYER.sangueQuente.bonus;
+  if (s.bless.fullHpDamage && p.hp >= s.maxHp * 0.8) m *= 1 + s.bless.fullHpDamage;
   return m;
 }
 
@@ -324,8 +341,13 @@ export function attackSpeed(w: World): number {
   if (p.presaT > 0) v += PLAYER.presa.bonus;
   if (s.uniques.denteDoLobisomem && p.hp < s.maxHp * 0.5) v += 0.3;
   if (s.talents.sangueQuente && p.hp / s.maxHp < PLAYER.sangueQuente.below) v *= 1 + PLAYER.sangueQuente.bonus;
+  if (p.hasteT > 0) v += s.bless.dodgeHaste;
+  if (p.windStacks > 0) v += WIND.perStack * p.windStacks;
   return v;
 }
+
+/** Lua Ventosa: cada abate dá um degrau de velocidade, por um tempo. */
+export const WIND = { perStack: 0.05, max: 5, duration: 4 };
 
 export interface HurtOpts {
   src?: Enemy | null; unblockable?: boolean; melee?: boolean; nature?: boolean; water?: boolean;
@@ -384,11 +406,15 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   if (p.stoneT > 0) dmg *= 1 - 0.4;
   if (w.moon > 0) dmg *= 1 + 0.15 * w.moon;
   if (src && (src.elite || isBoss(src)) && s.uniques.couroDoCapelobo) dmg *= 0.8;
+  const B = s.bless;
+  if (B.lowHpGuard && p.hp < s.maxHp * 0.35) dmg *= 1 - B.lowHpGuard;
+  if (B.safeFrom && src && (src.poisonT > 0 || src.rootT > 0 || src.slowT > 0 || src.blindT > 0)) dmg *= 1 - B.safeFrom;
   if (p.cascaT > 0) {
     if (src && src.hp > 0) damageEnemy(w, src, dmg * 0.5, 'reflect', 0);
     dmg *= 1 - 0.45;
   }
   if (s.thorns > 0 && o.melee && src && src.hp > 0) damageEnemy(w, src, dmg * s.thorns, 'reflect', 0);
+  if (B.thornRoot && o.melee && src && src.hp > 0 && !isBoss(src)) { src.rootT = Math.max(src.rootT, B.thornRoot); src.tele = null; }
   dmg = Math.max(1, Math.round(dmg));
   if (w.buffs.length) {
     dmg = Math.round(absorbGuard(w, dmg));
@@ -415,11 +441,13 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
   p.kx = (dx / d) * knock; p.ky = (dy / d) * knock;
   emit(w, { type: 'hurt', x: p.x, y: p.y, value: dmg, kind: o.soft ? 'soft' : undefined, text: src?.kind ?? (o.element ?? 'chao') });
   if (p.stoneT > 0) { p.kx *= 0.1; p.ky *= 0.1; }
+  if (B.steadfast) { p.kx = 0; p.ky = 0; }
+  if (B.secondWind && !p.secondWind && p.hp > 0 && p.hp < s.maxHp * 0.3) { p.secondWind = true; healPlayer(w, s.maxHp * B.secondWind); }
   if (p.hp <= 0) {
     p.hp = 0; p.state = 'dead'; p.stateT = 0; p.charge = 0;
     w.phase = 'dead'; w.deadT = 0; w.deaths++;
     emit(w, { type: 'death', x: p.x, y: p.y });
-  } else if (p.state !== 'block' && !o.soft) {
+  } else if (p.state !== 'block' && !o.soft && !B.steadfast) {
     p.state = 'hurt'; p.stateT = 0; p.charge = 0;
   }
   return true;

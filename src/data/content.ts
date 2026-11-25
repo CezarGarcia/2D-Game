@@ -138,7 +138,7 @@ export const STATUS = {
   burn: 2.5, burnTick: 0.4, burnDamage: 5, crack: 5, crackBonus: 0.15, curse: 6, curseBonus: 0.15, confuse: 3, confuseMiss: 0.5,
 };
 export const REACTION_NUM = {
-  eletrocutar: { damage: 30 }, queimada: { damage: 36, radius: 120 }, lama: { root: 3 }, vapor: { radius: 120, blind: 4 },
+  eletrocutar: { damage: 30 }, queimada: { damage: 36, radius: 120 }, lama: { root: 3 }, vapor: { radius: 120, blind: 4, burn: 9 },
   redemoinhoFogo: { radius: 150, damage: 24, pull: 90 }, estilhaco: { shards: 10, damage: 14 }, pesadelo: { radius: 180, charm: 4 },
   fogoFatuo: { damage: 30 }, estatua: { stun: 2, mult: 2 },
 };
@@ -227,12 +227,47 @@ export const COMPANION_ORDER = Object.keys(COMPANIONS) as CompanionId[];
 
 /* ---------- bênçãos de altar ---------- */
 
-export type BlessingId =
-  | 'furia' | 'olho' | 'ferocidade' | 'pressa' | 'projetil' | 'perfurar' | 'gigante' | 'peconha' | 'estouro' | 'ourico'
-  | 'vigor' | 'couro' | 'sanguessuga' | 'seiva' | 'espinhos' | 'amparo' | 'cura'
-  | 'vento' | 'folego' | 'passo' | 'fonte' | 'ligeireza' | 'mandinga'
-  | 'forca' | 'agilidade' | 'inteligencia'
-  | 'ouro' | 'sabedoria' | 'fartura' | 'parceria';
+/**
+ * Padrinhos (docs/gdd/09): cada Encantado libertado dá bênçãos do seu jeito. O padrinho é o elemento dele.
+ * As bênçãos sem padrinho são neutras: valem para qualquer build e não contam para sinergia nenhuma.
+ */
+export const PATRONS: Record<ElementId, { name: string; of: string; style: string }> = {
+  natureza: { name: 'Curupira', of: 'do Curupira', style: 'Veneno, espinhos e enganar' },
+  agua: { name: 'Iara', of: 'da Iara', style: 'Cura, mana e encanto' },
+  tempestade: { name: 'Saci', of: 'do Saci', style: 'Velocidade, esquiva e redemoinho' },
+  fogo: { name: 'Boitatá', of: 'do Boitatá', style: 'Dano e fogo' },
+  terra: { name: 'Mapinguari', of: 'do Mapinguari', style: 'Defesa e golpes pesados' },
+  sombra: { name: 'Lobisomem', of: 'do Lobisomem', style: 'Crítico, roubo de vida e abates' },
+  encanto: { name: 'Cuca', of: 'da Cuca', style: 'Feitiços e reações' },
+};
+
+/** Bênçãos comuns de altar: 8 de cada padrinho e 8 neutras. */
+export type BaseBlessingId =
+  /* Curupira */ | 'peconha' | 'ourico' | 'espinhos' | 'seiva' | 'perfurar' | 'pegadas' | 'cipoal' | 'mataViva'
+  /* Iara */ | 'cura' | 'fonte' | 'vigor' | 'canto' | 'mare' | 'remanso' | 'aguaBenta' | 'ondaMansa'
+  /* Saci */ | 'vento' | 'folego' | 'passo' | 'pressa' | 'projetil' | 'piao' | 'corisco' | 'gorro'
+  /* Boitatá */ | 'estouro' | 'furia' | 'rastro' | 'ticao' | 'lenha' | 'brasaViva' | 'chama' | 'cinzas'
+  /* Mapinguari */ | 'couro' | 'amparo' | 'gigante' | 'forca' | 'pisada' | 'pilao' | 'quebraPedra' | 'rachadura'
+  /* Lobisomem */ | 'olho' | 'ferocidade' | 'sanguessuga' | 'faro' | 'sedeDeSangue' | 'luaCheia' | 'mordida' | 'carniceiro'
+  /* Cuca */ | 'mandinga' | 'ligeireza' | 'inteligencia' | 'caldeirao' | 'quebranto' | 'olhoGordo' | 'receita' | 'unha'
+  /* neutras */ | 'ouro' | 'sabedoria' | 'fartura' | 'parceria' | 'agilidade' | 'cantil' | 'segundaChance' | 'trevo';
+
+/** Formas despertas: duas para cada bênção que desperta, à escolha, quando ela chega ao máximo. */
+export type AwakenedId =
+  | 'ouricoCacheiro' | 'espinhoComprido' | 'mandacaru' | 'cascaGrossa' | 'cipoalFechado' | 'lacoCerteiro'
+  | 'aguaFunda' | 'sangueFrio' | 'garrafada' | 'aguaDeCheiro' | 'enxurrada' | 'remansoFundo'
+  | 'vendaval' | 'peDeMoleque' | 'assobio' | 'sumico' | 'maoLeve' | 'ventania'
+  | 'furiaDoBoitata' | 'furiaCega' | 'labareda' | 'ferroEmBrasa' | 'fogoQueAnda' | 'brasaDormida'
+  | 'couroDeAnta' | 'peFincado' | 'maoDePedra' | 'bracoDeFerro' | 'bracoDeGigante' | 'abraco'
+  | 'olhoDeLobo' | 'golpeBaixo' | 'chupaSangue' | 'sangueFervendo' | 'boteFinal' | 'cacadorDaNoite'
+  | 'feiticaria' | 'rezaBrava' | 'rezaDaMeiaNoite' | 'ecoDaCuca';
+
+/** Compadrio: bênção de dois padrinhos, para quem tem pelo menos duas de cada um. */
+export type CompadrioId = 'banhoMaria' | 'molecagem' | 'pesadelo' | 'magma' | 'igarape' | 'luaVentosa' | 'acalanto' | 'raizDePedra';
+
+export type BlessingId = BaseBlessingId | AwakenedId | CompadrioId;
+export type BlessingKind = 'normal' | 'desperta' | 'compadrio';
+export type BlessingTier = 1 | 2 | 3 | 4;
 
 export interface BlessingDef {
   id: BlessingId;
@@ -240,58 +275,232 @@ export interface BlessingDef {
   desc: string;
   /** Chave do ícone em src/art/uiicons.ts. */
   icon: string;
-  /** 1 = comum, 2 = rara, 3 = épica. Mais alta, mais forte e mais difícil de aparecer. */
-  tier: 1 | 2 | 3;
+  /** 1 = comum, 2 = rara, 3 = épica, 4 = lendária (despertas e compadrios). Mais alta, mais forte e mais difícil de aparecer. */
+  tier: BlessingTier;
   /** Quantas vezes pode ser escolhida na mesma fase. */
   max: number;
+  kind: BlessingKind;
+  /** Padrinho (o elemento do Encantado), ou nulo se for neutra. */
+  patron: ElementId | null;
+  /** Forma desperta: a bênção de que ela vem. */
+  awakens?: BaseBlessingId;
+  /** Compadrio: os dois padrinhos. */
+  pair?: [ElementId, ElementId];
 }
 
-const B = (id: BlessingId, name: string, tier: 1 | 2 | 3, max: number, icon: string, desc: string): BlessingDef => ({ id, name, tier, max, icon, desc });
+const DEFS: BlessingDef[] = [];
+const patronGroup = (patron: ElementId | null) => (id: BaseBlessingId, name: string, tier: 1 | 2 | 3, max: number, icon: string, desc: string): void => { DEFS.push({ id, name, tier, max, icon, desc, kind: 'normal', patron }); };
 
-/** Bênçãos: valem até o fim da fase e várias podem ser escolhidas mais de uma vez. */
-export const BLESSINGS: Record<BlessingId, BlessingDef> = {
-  furia: B('furia', 'Fúria', 1, 5, 'dano', '+15% de dano de arma'),
-  olho: B('olho', 'Olho de Gavião', 1, 4, 'critico', '+10% de chance de crítico'),
-  ferocidade: B('ferocidade', 'Ferocidade', 2, 3, 'danoCritico', '+35% de dano crítico'),
-  pressa: B('pressa', 'Mãos Ligeiras', 1, 4, 'velAtaque', '+12% de velocidade de ataque'),
-  projetil: B('projetil', 'Mais Um', 3, 3, 'projetil', '+1 projétil: mais uma flecha por tiro e mais um espinho por Dardo'),
-  perfurar: B('perfurar', 'Ponta Dura', 2, 1, 'perfurar', 'Flechas e espinhos atravessam os inimigos'),
-  gigante: B('gigante', 'Braço Comprido', 2, 2, 'alcance', '+25% de alcance dos golpes e de área dos feitiços'),
-  peconha: B('peconha', 'Peçonha', 2, 1, 'veneno', 'Todo golpe de arma envenena'),
-  estouro: B('estouro', 'Estouro', 3, 1, 'explosao', 'Inimigos derrotados explodem e ferem quem está perto'),
-  ourico: B('ourico', 'Ouriço', 2, 2, 'espinhos', 'A cada 4 s você dispara espinhos em todas as direções'),
-  vigor: B('vigor', 'Seiva Grossa', 1, 4, 'vida', '+20% de vida máxima, e cura esse tanto agora'),
-  couro: B('couro', 'Couro Duro', 1, 3, 'defesa', 'Recebe 12% menos dano'),
-  sanguessuga: B('sanguessuga', 'Sanguessuga', 2, 3, 'roubo', 'Golpes de arma devolvem 4% do dano como vida'),
-  seiva: B('seiva', 'Seiva Viva', 2, 3, 'regeneracao', 'Recupera 1% da vida por segundo'),
-  espinhos: B('espinhos', 'Couro de Ouriço', 1, 2, 'espinhos', 'Quem te acerta de perto recebe 35% do dano de volta'),
-  amparo: B('amparo', 'Amparo', 2, 1, 'escudo', 'Em cada sala, o primeiro golpe que você tomaria não causa dano'),
-  cura: B('cura', 'Fruta Madura', 1, 9, 'cura', 'Cura 60% da vida e devolve as poções'),
-  vento: B('vento', 'Pé de Vento', 1, 3, 'movimento', '+12% de velocidade de movimento'),
-  folego: B('folego', 'Fôlego de Onça', 2, 1, 'esquiva', '+1 esquiva guardada'),
-  passo: B('passo', 'Passo Leve', 1, 3, 'esquiva', 'A esquiva recarrega 25% mais rápido'),
-  fonte: B('fonte', 'Olho-d’Água', 1, 2, 'mana', 'Feitiços custam 30% menos mana'),
-  ligeireza: B('ligeireza', 'Reza Ligeira', 1, 3, 'recarga', 'Feitiços recarregam 20% mais rápido'),
-  mandinga: B('mandinga', 'Mandinga Forte', 1, 5, 'magia', '+20% de dano de feitiço'),
-  forca: B('forca', 'Braço Forte', 1, 5, 'forca', '+6 de Força'),
-  agilidade: B('agilidade', 'Corpo Leve', 1, 5, 'agilidade', '+6 de Agilidade'),
-  inteligencia: B('inteligencia', 'Cabeça Fria', 1, 5, 'inteligencia', '+6 de Inteligência'),
-  ouro: B('ouro', 'Pote de Ouro', 1, 2, 'ouro', '+40% de ouro nesta fase'),
-  sabedoria: B('sabedoria', 'Lição da Mata', 1, 2, 'xp', '+25% de experiência nesta fase'),
-  fartura: B('fartura', 'Fartura', 3, 1, 'bau', '+1 item no baú desta fase'),
-  parceria: B('parceria', 'Parceria', 2, 2, 'companheiro', 'Seu companheiro causa e aguenta 50% mais'),
-};
-export const BLESSING_ORDER = Object.keys(BLESSINGS) as BlessingId[];
-/** Peso de cada raridade no sorteio do altar. */
-export const BLESSING_WEIGHT: Record<1 | 2 | 3, number> = { 1: 60, 2: 30, 3: 12 };
-export const BLESSING_TIER_LABEL: Record<1 | 2 | 3, string> = { 1: 'Comum', 2: 'Rara', 3: 'Épica' };
-export const BLESSING_TIER_COLOR: Record<1 | 2 | 3, string> = { 1: '#9BE7C0', 2: '#6AA5FF', 3: '#BC8CFF' };
+/* Curupira: veneno, espinhos e enganar */
+let B = patronGroup('natureza');
+B('peconha', 'Peçonha', 2, 1, 'veneno', 'Todo golpe de arma envenena');
+B('ourico', 'Ouriço', 2, 2, 'espinhos', 'A cada 4 s você dispara espinhos em todas as direções');
+B('espinhos', 'Couro de Ouriço', 1, 2, 'espinhos', 'Quem te acerta de perto recebe 35% do dano de volta');
+B('seiva', 'Seiva Viva', 2, 3, 'regeneracao', 'Recupera 1% da vida por segundo');
+B('perfurar', 'Ponta Dura', 2, 1, 'perfurar', 'Flechas e espinhos atravessam os inimigos');
+B('pegadas', 'Pegadas Trocadas', 2, 1, 'esquiva', 'A esquiva levanta poeira: quem entra nela erra os golpes');
+B('cipoal', 'Cipoal', 2, 2, 'cipo', 'Golpes de arma têm 12% de chance de prender o inimigo por 1 s');
+B('mataViva', 'Mata Viva', 3, 1, 'broto', 'Inimigos presos, lentos ou envenenados recebem 25% mais dano');
+
+/* Iara: cura, mana e encanto */
+B = patronGroup('agua');
+B('cura', 'Fruta Madura', 1, 9, 'cura', 'Cura 60% da vida e devolve as poções');
+B('fonte', 'Olho-d’Água', 1, 2, 'mana', 'Feitiços custam 30% menos mana');
+B('vigor', 'Seiva Grossa', 1, 4, 'vida', '+20% de vida máxima, e cura esse tanto agora');
+B('canto', 'Canto da Iara', 2, 1, 'sussurro', 'O primeiro golpe em cada inimigo o deixa encantado por 1,5 s: ele ataca os outros');
+B('mare', 'Maré Cheia', 1, 3, 'cura', '+15% de cura recebida');
+B('remanso', 'Remanso', 1, 3, 'mana', '+30% de recuperação de mana');
+B('aguaBenta', 'Água Benta', 2, 2, 'st_molhado', 'Golpes de arma têm 20% de chance de molhar o inimigo');
+B('ondaMansa', 'Onda Mansa', 2, 1, 'onda', 'A esquiva perfeita molha quem está perto e cura 5% da vida');
+
+/* Saci: velocidade, esquiva e redemoinho */
+B = patronGroup('tempestade');
+B('vento', 'Pé de Vento', 1, 3, 'movimento', '+12% de velocidade de movimento');
+B('folego', 'Fôlego de Onça', 2, 1, 'esquiva', '+1 esquiva guardada');
+B('passo', 'Passo Leve', 1, 3, 'esquiva', 'A esquiva recarrega 25% mais rápido');
+B('pressa', 'Mãos Ligeiras', 1, 4, 'velAtaque', '+12% de velocidade de ataque');
+B('projetil', 'Mais Um', 3, 3, 'projetil', '+1 projétil: mais uma flecha por tiro e mais um espinho por Dardo');
+B('piao', 'Pião', 2, 1, 'redemoinho', 'A esquiva perfeita solta um redemoinho que arrasta os inimigos');
+B('corisco', 'Corisco', 2, 2, 'st_carregado', 'Golpes de arma têm 20% de chance de deixar o inimigo Carregado');
+B('gorro', 'Gorro Vermelho', 3, 1, 'pedevento', 'Feitiços têm 20% de chance de não entrar em recarga');
+
+/* Boitatá: dano e fogo */
+B = patronGroup('fogo');
+B('estouro', 'Estouro', 3, 1, 'explosao', 'Inimigos derrotados explodem e ferem quem está perto');
+B('furia', 'Fúria', 1, 5, 'dano', '+15% de dano de arma');
+B('rastro', 'Rastro Aceso', 2, 1, 'coivara', 'Correr durante a luta deixa fogo no chão');
+B('ticao', 'Tição', 2, 2, 'st_queimando', 'Golpes de arma têm 20% de chance de queimar o inimigo');
+B('lenha', 'Lenha Seca', 1, 3, 'brasa', 'Inimigos queimando recebem 15% mais dano');
+B('brasaViva', 'Brasa Viva', 2, 1, 'fogofatuo', 'Críticos de arma queimam o inimigo');
+B('chama', 'Chama Alta', 1, 5, 'fogo', '+8% de dano de arma e de feitiço');
+B('cinzas', 'Cinzas Quentes', 2, 1, 'passocinza', 'Derrotar um inimigo queimando devolve 8 de mana e 2% da vida');
+
+/* Mapinguari: defesa e golpes pesados */
+B = patronGroup('terra');
+B('couro', 'Couro Duro', 1, 3, 'defesa', 'Recebe 12% menos dano');
+B('amparo', 'Amparo', 2, 1, 'escudo', 'Em cada sala, o primeiro golpe que você tomaria não causa dano');
+B('gigante', 'Braço Comprido', 2, 2, 'alcance', '+25% de alcance dos golpes e de área dos feitiços');
+B('forca', 'Braço Forte', 1, 5, 'forca', '+6 de Força');
+B('pisada', 'Pisada', 3, 1, 'tremor', 'A cada 8 golpes de arma, um tremor fere todos em volta de você');
+B('pilao', 'Mão de Pilão', 1, 3, 'pedrada', '+15% de dano no último golpe da sequência e no golpe carregado');
+B('quebraPedra', 'Quebra-Pedra', 2, 1, 'execucao', 'Seus golpes de arma ignoram a blindagem');
+B('rachadura', 'Rachadura', 2, 2, 'st_rachado', 'Golpes de arma têm 20% de chance de rachar o inimigo');
+
+/* Lobisomem: crítico, roubo de vida e abates */
+B = patronGroup('sombra');
+B('olho', 'Olho de Gavião', 1, 4, 'critico', '+10% de chance de crítico');
+B('ferocidade', 'Ferocidade', 2, 3, 'danoCritico', '+35% de dano crítico');
+B('sanguessuga', 'Sanguessuga', 2, 3, 'roubo', 'Golpes de arma devolvem 4% do dano como vida');
+B('faro', 'Faro', 2, 2, 'marcalua', 'Inimigos com menos de 30% de vida recebem 25% mais dano');
+B('sedeDeSangue', 'Sede de Sangue', 2, 1, 'furia', 'Cada inimigo derrotado dá +4% de dano de arma por 6 s, até 5 vezes');
+B('luaCheia', 'Lua Cheia', 3, 1, 'lua', 'A cada 20 s de luta você entra em fúria por 5 s: +40% de dano de arma e roubo de vida');
+B('mordida', 'Mordida', 2, 2, 'st_amaldicoado', 'Golpes de arma têm 20% de chance de amaldiçoar o inimigo');
+B('carniceiro', 'Carniceiro', 1, 3, 'garra', 'Derrotar um inimigo cura 2% da vida');
+
+/* Cuca: feitiços e reações */
+B = patronGroup('encanto');
+B('mandinga', 'Mandinga Forte', 1, 5, 'magia', '+20% de dano de feitiço');
+B('ligeireza', 'Reza Ligeira', 1, 3, 'recarga', 'Feitiços recarregam 20% mais rápido');
+B('inteligencia', 'Cabeça Fria', 1, 5, 'inteligencia', '+6 de Inteligência');
+B('caldeirao', 'Caldeirão', 2, 2, 'borbulhante', 'Feitiços têm 15% de chance de não gastar mana');
+B('quebranto', 'Quebranto', 2, 2, 'st_confuso', 'Golpes de arma têm 20% de chance de confundir o inimigo');
+B('olhoGordo', 'Olho Gordo', 1, 3, 'espelho', '+10% de chance de crítico dos feitiços');
+B('receita', 'Receita Antiga', 3, 1, 'reacao', 'Reações de elementos causam 40% mais dano');
+B('unha', 'Unha de Bruxa', 1, 3, 'relogio', 'Os efeitos de elemento que você aplica duram 25% mais');
+
+/* neutras */
+B = patronGroup(null);
+B('ouro', 'Pote de Ouro', 1, 2, 'ouro', '+40% de ouro nesta fase');
+B('sabedoria', 'Lição da Mata', 1, 2, 'xp', '+25% de experiência nesta fase');
+B('fartura', 'Fartura', 3, 1, 'bau', '+1 item no baú desta fase');
+B('parceria', 'Parceria', 2, 2, 'companheiro', 'Seu companheiro causa e aguenta 50% mais');
+B('agilidade', 'Corpo Leve', 1, 5, 'agilidade', '+6 de Agilidade');
+B('cantil', 'Cantil Cheio', 1, 2, 'pocao', '+1 poção, e ganha uma agora');
+B('segundaChance', 'Corpo Fechado', 3, 1, 'vitalidade', 'Uma vez por fase, o golpe que derrubaria você te deixa com 1 de vida e 2 s sem poder ser ferido');
+B('trevo', 'Trevo', 1, 2, 'sorte', '+15 de Sorte para os itens desta fase');
+
+/** As bênçãos comuns, na ordem em que entram no sorteio do altar. */
+export const BLESSING_ORDER = DEFS.map((d) => d.id) as BaseBlessingId[];
+
+/* ---------- Despertar ---------- */
+
+const patronOf = (id: BaseBlessingId) => DEFS.find((d) => d.id === id)!.patron;
+const iconOf = (id: BaseBlessingId) => DEFS.find((d) => d.id === id)!.icon;
+const AWAKE: [BaseBlessingId, [AwakenedId, string, string], [AwakenedId, string, string]][] = [
+  ['ourico', ['ouricoCacheiro', 'Ouriço-Cacheiro', 'Os espinhos do Ouriço saem a cada 2 s'], ['espinhoComprido', 'Espinho Comprido', 'Os espinhos do Ouriço atravessam os inimigos e causam 60% mais dano']],
+  ['espinhos', ['mandacaru', 'Abraço de Mandacaru', 'Quem te acerta de perto fica preso por 1,5 s'], ['cascaGrossa', 'Casca Grossa', 'Devolve o dobro do dano e você recebe 10% menos dano']],
+  ['cipoal', ['cipoalFechado', 'Cipoal Fechado', 'Quem fica preso pelo Cipoal fica 2 s e também é envenenado'], ['lacoCerteiro', 'Laço Certeiro', '+16% de chance de prender com golpes de arma']],
+  ['vigor', ['aguaFunda', 'Água Funda', '+25% de vida máxima'], ['sangueFrio', 'Sangue Frio', 'Abaixo de 35% de vida, você recebe 30% menos dano']],
+  ['mare', ['garrafada', 'Garrafada', 'As poções curam 40% a mais'], ['aguaDeCheiro', 'Água de Cheiro', 'Recupera 1,5% da vida por segundo']],
+  ['aguaBenta', ['enxurrada', 'Enxurrada', '+30% de chance de molhar com golpes de arma'], ['remansoFundo', 'Remanso Fundo', 'Inimigos molhados recebem 20% mais dano']],
+  ['vento', ['vendaval', 'Vendaval', 'A esquiva deixa um redemoinho que arrasta e fere os inimigos'], ['peDeMoleque', 'Pé de Moleque', '+15% de velocidade de movimento e +10% de velocidade de ataque']],
+  ['passo', ['assobio', 'Assobio do Saci', '+1 esquiva guardada'], ['sumico', 'Sumiço', 'Depois de esquivar, seu próximo golpe de arma é crítico']],
+  ['pressa', ['maoLeve', 'Mão Leve', '+20% de velocidade de ataque'], ['ventania', 'Ventania', 'Críticos de arma adiantam a esquiva e a recarga dos feitiços']],
+  ['furia', ['furiaDoBoitata', 'Fúria do Boitatá', 'Todo golpe de arma queima o inimigo'], ['furiaCega', 'Fúria Cega', '+60% de dano de arma, mas você recebe 30% mais dano']],
+  ['chama', ['labareda', 'Labareda', '+25% de dano de feitiço, e a área dos feitiços fica 15% maior'], ['ferroEmBrasa', 'Ferro em Brasa', '+25% de dano de arma e +20% de dano crítico']],
+  ['ticao', ['fogoQueAnda', 'Fogo que Anda', 'Inimigos queimando explodem ao cair e espalham o fogo'], ['brasaDormida', 'Brasa Dormida', 'Os efeitos de elemento que você aplica duram 60% mais']],
+  ['couro', ['couroDeAnta', 'Couro de Anta', 'Recebe 15% menos dano'], ['peFincado', 'Pé Fincado', 'Golpes não te empurram nem interrompem o que você está fazendo']],
+  ['pilao', ['maoDePedra', 'Mão de Pedra', 'O último golpe da sequência e o golpe carregado racham o inimigo'], ['bracoDeFerro', 'Braço de Ferro', '+30% de dano no último golpe da sequência e no golpe carregado']],
+  ['gigante', ['bracoDeGigante', 'Braço de Gigante', '+30% de alcance dos golpes e de área dos feitiços'], ['abraco', 'Abraço do Mapinguari', 'O último golpe da sequência acerta todos em volta de você']],
+  ['olho', ['olhoDeLobo', 'Olho de Lobo', '+15% de chance de crítico, e críticos de arma amaldiçoam o inimigo'], ['golpeBaixo', 'Golpe Baixo', '+60% de dano crítico']],
+  ['sanguessuga', ['chupaSangue', 'Chupa-Sangue', 'Golpes de arma devolvem mais 6% do dano como vida'], ['sangueFervendo', 'Sangue Fervendo', 'Abaixo de 35% de vida: +40% de dano de arma e de velocidade de ataque']],
+  ['faro', ['boteFinal', 'Bote Final', 'Golpes de arma em inimigos com menos de 25% de vida são sempre críticos'], ['cacadorDaNoite', 'Caçador da Noite', '+15% de dano contra elites e chefões']],
+  ['mandinga', ['feiticaria', 'Feitiçaria', 'A área dos feitiços fica 40% maior'], ['rezaBrava', 'Reza Brava', 'Feitiços causam 35% mais dano em inimigos com algum efeito de elemento']],
+  ['ligeireza', ['rezaDaMeiaNoite', 'Reza da Meia-Noite', 'Feitiços recarregam 25% mais rápido'], ['ecoDaCuca', 'Eco da Cuca', 'Feitiços têm 25% de chance de não entrar em recarga']],
+];
+
+/** As duas formas despertas de cada bênção que desperta. */
+export const AWAKENINGS: Partial<Record<BaseBlessingId, [AwakenedId, AwakenedId]>> = {};
+for (const [base, a, b] of AWAKE) {
+  AWAKENINGS[base] = [a[0], b[0]];
+  for (const [id, name, desc] of [a, b]) DEFS.push({ id, name, desc, icon: iconOf(base), tier: 4, max: 1, kind: 'desperta', patron: patronOf(base), awakens: base });
+}
+
+/* ---------- Compadrio ---------- */
+
+const COMP: [CompadrioId, ElementId, ElementId, string, string, string][] = [
+  ['banhoMaria', 'agua', 'fogo', 'Banho-Maria', 'nuvem', 'A reação Vapor também fere quem está dentro da nuvem, a cada meio segundo'],
+  ['molecagem', 'tempestade', 'natureza', 'Molecagem', 'espelho', 'A esquiva deixa um sósia que atrai os inimigos por 2 s'],
+  ['pesadelo', 'sombra', 'encanto', 'Pesadelo', 'ninar', 'Críticos de arma em inimigos confusos os fazem fugir por 2 s'],
+  ['magma', 'terra', 'fogo', 'Magma', 'coivara', 'O último golpe da sequência e o golpe carregado deixam fogo no chão'],
+  ['igarape', 'agua', 'natureza', 'Igarapé', 'broto', 'Beber uma poção prende por 2 s e envenena os inimigos em volta'],
+  ['luaVentosa', 'tempestade', 'sombra', 'Lua Ventosa', 'uivo', 'Cada inimigo derrotado dá +5% de velocidade de movimento e de ataque por 4 s, até 5 vezes'],
+  ['acalanto', 'encanto', 'agua', 'Acalanto', 'ninar', 'Inimigos confusos ou encantados ficam lentos quando você os acerta'],
+  ['raizDePedra', 'terra', 'natureza', 'Raiz de Pedra', 'estaca', 'Inimigos presos ficam Rachados: perdem a blindagem e recebem mais dano'],
+];
+/** Compadrios existentes, com o par de padrinhos de cada um. */
+export const COMPADRIOS: { id: CompadrioId; a: ElementId; b: ElementId }[] = COMP.map(([id, a, b]) => ({ id, a, b }));
+for (const [id, a, b, name, icon, desc] of COMP) DEFS.push({ id, name, desc, icon, tier: 4, max: 1, kind: 'compadrio', patron: null, pair: [a, b] });
+/** Quantas bênçãos de cada padrinho do par é preciso ter para o Compadrio aparecer. */
+export const COMPADRIO_NEEDS = 2;
+
+export const BLESSINGS = Object.fromEntries(DEFS.map((d) => [d.id, d])) as Record<BlessingId, BlessingDef>;
+
+/** Peso de cada raridade no sorteio do altar (as lendárias nunca saem do sorteio comum). */
+export const BLESSING_WEIGHT: Record<BlessingTier, number> = { 1: 60, 2: 30, 3: 12, 4: 0 };
+export const BLESSING_TIER_LABEL: Record<BlessingTier, string> = { 1: 'Comum', 2: 'Rara', 3: 'Épica', 4: 'Lendária' };
+export const BLESSING_TIER_COLOR: Record<BlessingTier, string> = { 1: '#9BE7C0', 2: '#6AA5FF', 3: '#BC8CFF', 4: '#FFB238' };
+/** Altares seguidos só com bênçãos comuns antes de o próximo garantir uma rara ou melhor. */
+export const ALTAR_PITY = 2;
 
 /** Quantas vezes cada bênção já foi escolhida. */
 export function blessingCounts(list: BlessingId[]): Partial<Record<BlessingId, number>> {
   const out: Partial<Record<BlessingId, number>> = {};
   for (const b of list) out[b] = (out[b] ?? 0) + 1;
   return out;
+}
+
+/* ---------- sinergia de padrinho ---------- */
+
+/** Quantas bênçãos do mesmo padrinho acendem cada faixa. */
+export const PATRON_STEPS = [3, 5, 7] as const;
+/** O que cada faixa dá (os efeitos estão em src/meta/stats.ts). */
+export const PATRON_TIERS: Record<ElementId, [string, string, string]> = {
+  natureza: ['Seu veneno causa 30% mais dano', 'A esquiva perfeita solta espinhos em todas as direções', 'Inimigos envenenados, presos, lentos ou cegos causam 25% menos dano a você'],
+  agua: ['+20% de cura recebida', 'A esquiva perfeita molha quem está perto e cura 5% da vida', 'Uma vez por sala, ao cair abaixo de 30% de vida, você recupera 35%'],
+  tempestade: ['+1 esquiva guardada', 'A esquiva perfeita solta um redemoinho que arrasta os inimigos', 'Por 3 s depois de cada esquiva, seus ataques são 40% mais rápidos'],
+  fogo: ['+20% de dano de Fogo', 'Críticos de arma queimam o inimigo', 'Inimigos queimando explodem ao cair e espalham o fogo'],
+  terra: ['Recebe 10% menos dano', 'Inimigos rachados recebem 30% mais dano, em vez de 15%', 'Com mais de 80% da vida, +30% de dano de arma'],
+  sombra: ['+10% de chance de crítico', 'Derrotar um inimigo cura 3% da vida', '+50% de dano crítico, e críticos de arma curam 1% da vida'],
+  encanto: ['Feitiços custam 20% menos mana', 'Reações de elementos causam 40% mais dano', 'Feitiços têm 25% de chance de sair de graça e 25% de não entrar em recarga'],
+};
+
+/**
+ * Bênçãos de cada padrinho na lista (cada escolha conta uma vez; um Compadrio conta para os dois padrinhos),
+ * mais um se o companheiro for do elemento do padrinho.
+ */
+export function patronCounts(list: BlessingId[], companion: ElementId | null = null): Record<ElementId, number> {
+  const out = {} as Record<ElementId, number>;
+  for (const el of ELEMENT_ORDER) out[el] = 0;
+  for (const id of list) {
+    const d = BLESSINGS[id];
+    if (!d) continue;
+    if (d.patron) out[d.patron]++;
+    if (d.pair) { out[d.pair[0]]++; out[d.pair[1]]++; }
+  }
+  if (companion) out[companion]++;
+  return out;
+}
+
+/** Faixa de sinergia acesa (0 a 3) para um número de bênçãos. */
+export function patronTier(count: number): 0 | 1 | 2 | 3 {
+  return count >= PATRON_STEPS[2] ? 3 : count >= PATRON_STEPS[1] ? 2 : count >= PATRON_STEPS[0] ? 1 : 0;
+}
+
+/** O Despertar que cabe a esta lista: as duas formas de cada bênção no máximo que ainda não despertou. */
+export function awakeningsFor(list: BlessingId[]): [AwakenedId, AwakenedId][] {
+  const have = blessingCounts(list), out: [AwakenedId, AwakenedId][] = [];
+  for (const base of Object.keys(AWAKENINGS) as BaseBlessingId[]) {
+    const forms = AWAKENINGS[base]!;
+    if ((have[base] ?? 0) >= BLESSINGS[base].max && !have[forms[0]] && !have[forms[1]]) out.push(forms);
+  }
+  return out;
+}
+
+/** Compadrios que esta lista já pode receber (duas bênçãos de cada padrinho do par, sem contar o companheiro). */
+export function compadriosFor(list: BlessingId[]): CompadrioId[] {
+  const n = patronCounts(list), have = blessingCounts(list);
+  return COMPADRIOS.filter((c) => !have[c.id] && n[c.a] >= COMPADRIO_NEEDS && n[c.b] >= COMPADRIO_NEEDS).map((c) => c.id);
 }
 
 export const MAX_POTIONS = 2;

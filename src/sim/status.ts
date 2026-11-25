@@ -83,7 +83,7 @@ function react(w: World, e: Enemy, id: ReactionId): void {
     }
     case 'vapor': {
       const N = REACTION_NUM.vapor;
-      w.zones.push({ id: w.nextId++, kind: 'vapor', x: e.x, y: e.y, r: N.radius * s.spellArea, t: 0, dur: N.blind, tick: 0, power: 0 });
+      w.zones.push({ id: w.nextId++, kind: 'vapor', x: e.x, y: e.y, r: N.radius * s.spellArea, t: 0, dur: N.blind, tick: 0.5, power: s.bless.vaporBurn ? N.burn * pw : 0 });
       break;
     }
     case 'redemoinhoFogo': {
