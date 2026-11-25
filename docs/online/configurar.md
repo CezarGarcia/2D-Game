@@ -53,12 +53,25 @@ No repositório, em **Settings → Secrets and variables → Actions → aba Var
 
 Depois rode o fluxo de novo: **Actions → Publicar o jogo → Run workflow**. Na próxima publicação, o botão **Entrar** aparece em Opções (a engrenagem).
 
-## 5. Conferir
+## 5. Ligar os rankings
+
+Os rankings usam uma função no Supabase (`supabase/functions/tentativa`), que refaz cada partida. Ela é publicada sozinha pelo fluxo `.github/workflows/servidor.yml`, junto com o jogo, para os dois terem sempre a mesma versão.
+
+1. No Supabase, clique no seu avatar → **Account → Access Tokens → Generate new token**. Copie o token.
+2. No repositório, em **Settings → Secrets and variables → Actions**:
+   - aba **Secrets**: crie `SUPABASE_ACCESS_TOKEN` com o token;
+   - aba **Variables**: crie `SUPABASE_PROJECT_REF` com o código do projeto (a parte do Project URL antes de `.supabase.co`).
+3. Rode **Actions → Publicar o servidor → Run workflow**.
+
+O token de acesso é secreto: ele só vai no campo **Secrets** do GitHub.
+
+## 6. Conferir
 
 1. Abra o jogo, vá em **Opções → Entrar**, entre com o Google e escolha um apelido.
 2. Jogue uma fase. Em Opções, a conta deve mostrar "Salvo na nuvem".
 3. Abra o jogo em outro navegador, entre com a mesma conta: o progresso aparece.
 4. No Supabase, em **Table Editor**, as tabelas `jogadores` e `saves` têm uma linha cada.
+5. Liberte o Curupira (fase 1-12), abra o **Diário** e jogue o Desafio do Dia. Ao voltar, aparece "Ranking: 1º de 1", e a tabela `tentativas` ganha uma linha com o estado `verificada`.
 
 ## Testar no computador
 

@@ -3,13 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "Encantados: RPG de ação 2D para navegador (protótipo de sensação)",
+  "description": "Encantados: RPG de ação 2D para navegador",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:server": "node scripts/build-server.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.2",

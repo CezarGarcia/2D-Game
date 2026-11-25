@@ -42,6 +42,8 @@ export interface UiController {
   showDream(result: NodeResult | null): void;
   /** Aviso curto por cima da tela atual (conquistas). */
   notify(text: string): void;
+  /** Remonta a tela atual (chegou um resultado do servidor). */
+  refresh(): void;
   hide(): void;
   readonly visible: boolean;
 }

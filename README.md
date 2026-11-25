@@ -65,6 +65,7 @@ Toda marca vermelha no chão avisa um golpe. Esquivar no último instante é uma
 | `npx vite-node tests/calib-afinidade.ts 10` | Mede as 96 fases com o herói que nunca troca de feitiço e com o que troca conforme a fase |
 | `npx vite-node tests/calib-sonho.ts 40 38 4 facao peso=8 cordeis=1` | Calibração do Sonho: 40 noites com um herói de nível 38 e 4 capítulos vencidos; `peso=` liga Presságios e `cordeis=1`, um kit de folhetos |
 | `npm run build` | Confere os tipos e gera a versão final em `dist/` |
+| `npm run build:server` | Empacota o servidor dos rankings para a função do Supabase |
 
 ## Onde está cada coisa
 
@@ -79,4 +80,5 @@ Toda marca vermelha no chão avisa um golpe. Esquivar no último instante é uma
 - `src/art/` — personagens e cenário desenhados por código. Cada capítulo de 3 a 8 tem o seu arquivo (`ch3.ts`…`ch8.ts`), gerado só quando uma fase dele começa; o contrato está em `src/art/kit.ts` e a lista de criaturas em `docs/arte/etapa3-criaturas.md`.
 - `src/game/` — cena do Phaser, efeitos, HUD e som. As molduras do HUD da fase são geradas em `hudart.ts`.
 - `src/sim/bot.ts` — o jogador automático: calibra as fases nos testes e guia o herói na Caçada automática.
+- `src/online/` — conta e save na nuvem; `src/server/` — o servidor dos rankings, que refaz cada partida; `supabase/` — o banco e a função do Supabase. Para ligar tudo: `docs/online/configurar.md`.
 - `legacy/java/` — o projeto Java original.

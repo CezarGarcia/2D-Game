@@ -23,6 +23,7 @@ import { compact, h, num, stat, ui } from './dom';
 import { renderFeiticos } from './feiticos';
 import { renderFerreiro } from './ferreiro';
 import { accountModal, conflictModal, syncLine } from './conta';
+import { rankingModal } from './ranking';
 import { renderHeroi, renderItemMenu } from './heroi';
 import type { HuntSummary, UiController, UiHost } from './host';
 import { defaultStage, dismissStory, pendingStory, renderMapa } from './mapa';
@@ -310,7 +311,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     shownTab = st.tab;
     /* virou o dia com o jogo aberto: missões novas e descanso */
     if (touchDay(host.getProfile())) host.save();
-    const blocked = !!st.confirm || !!host.online?.conflict || (st.account && !!host.online);
+    const blocked = !!st.confirm || !!host.online?.conflict || ((st.account || !!st.ranking) && !!host.online);
     return h('div', `camp tab-${st.tab}`,
       h('div', { class: 'camp-in', inert: blocked },
         hud(),
@@ -320,7 +321,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
         st.options && optionsMenu(),
         st.menu && st.tab === 'heroi' && renderItemMenu(ctx),
         h('div', { class: 'toast-layer', 'aria-live': 'polite' }, toastNodes())),
-      !st.confirm && host.online?.conflict ? conflictModal(ctx, host.online) : !st.confirm && st.account && host.online ? accountModal(ctx, host.online) : null,
+      !st.confirm && host.online?.conflict ? conflictModal(ctx, host.online) : !st.confirm && st.account && host.online ? accountModal(ctx, host.online) : !st.confirm && st.ranking && host.online ? rankingModal(ctx, host.online) : null,
       st.confirm && confirmDialog(st.confirm));
   }
 
@@ -404,6 +405,8 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     if (root.hidden || e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey) return;
     if (e.key === 'Escape') {
       if (st.confirm) { st.confirm = null; render(); e.preventDefault(); return; }
+      if (st.ranking) { st.ranking = null; render(); e.preventDefault(); return; }
+      if (st.account) { st.account = false; render('opcoes'); e.preventDefault(); return; }
       if (st.options) { st.options = false; render('opcoes'); e.preventDefault(); return; }
       if (st.menu) { st.menu = null; render(); e.preventDefault(); return; }
       if (st.builds) { st.builds = false; render('builds'); e.preventDefault(); return; }
@@ -428,6 +431,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
 
   return {
     showCamp, showResults, showDream, hide, notify,
+    refresh: () => { if (st.ranking) st.ranking.rows = null; render(); },
     get visible() { return !root.hidden; },
   };
 }

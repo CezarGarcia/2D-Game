@@ -91,6 +91,9 @@ const game = new Phaser.Game({
   scene: [BootScene, CampScene, StageScene],
 });
 
+/** Tentativa de ranking aberta no servidor para o desafio em andamento (nula sem conta ou sem rede). */
+let attempt: { id: string; kind: 'dia' | 'encantados'; key: string; ranked: boolean } | null = null;
+
 /** Caçada automática em andamento: quantas partidas faltam e o que já rendeu. */
 let hunt: { stageId: string; left: number; total: number; sum: HuntSummary } | null = null;
 
@@ -164,10 +167,19 @@ const ui = mountUi(document.getElementById('ui')!, {
     const p = session.profile!;
     if (!ready || (kind === 'dia' ? !dailyOpen(p) : !encantadosOpen(p))) return;
     touchChallengeDay(p);
-    const id = kind === 'dia' ? dailyChallengeId(p.challenges.daily.day) : ENCANTADOS_ID;
-    const spec = kind === 'dia' ? dailySpec(p.challenges.daily.day) : encantadosSpec(p, weapon);
-    ui.hide(); hunt = null;
-    launch(id, undefined, undefined, undefined, undefined, spec);
+    const go = (day: string, spec: HeroSpec) => { ui.hide(); hunt = null; launch(kind === 'dia' ? dailyChallengeId(day) : ENCANTADOS_ID, undefined, undefined, undefined, undefined, spec); };
+    const localSpec = kind === 'dia' ? dailySpec(p.challenges.daily.day) : encantadosSpec(p, weapon);
+    attempt = null;
+    /* com conta, a tentativa abre no servidor, que diz o dia e o herói; sem conta ou sem rede, joga sem ranking */
+    if (!online?.ranked) { go(p.challenges.daily.day, localSpec); return; }
+    ui.notify('Abrindo a tentativa…');
+    void online.backend.startAttempt(kind, kind === 'encantados' ? localSpec : undefined).then((a) => {
+      attempt = { id: a.id, kind, key: a.chave, ranked: a.valendo };
+      go(a.chave, a.heroi);
+    }, (err: unknown) => {
+      ui.notify(`Sem ranking desta vez: ${err instanceof Error ? err.message : 'sem conexão'}`);
+      go(p.challenges.daily.day, localSpec);
+    });
   },
   resetGame: () => {
     wipeSave();
@@ -188,11 +200,12 @@ if (online) {
 }
 
 /** Aviso do fim de um desafio: resultado, se vale para o ranking e se é recorde. */
-function challengeNote(r: ChallengeSettled): string {
+function challengeNote(r: ChallengeSettled, online: boolean): string {
   const name = r.kind === 'dia' ? 'Desafio do Dia' : 'Desafio dos Encantados';
   const t = Math.floor(r.result.time / 60) + ':' + String(Math.floor(r.result.time % 60)).padStart(2, '0');
   const how = r.result.won ? `vitória em ${t}` : `caiu na sala ${r.result.rooms + 1}`;
-  const tag = r.kind === 'dia' ? (r.ranked ? ' · vale para o ranking' : ' · treino') : '';
+  /* com conta, quem diz se valeu é o servidor, num aviso à parte */
+  const tag = online ? ' · enviando ao ranking…' : r.kind === 'dia' ? (r.ranked ? ' · primeira do dia' : ' · treino') : '';
   return `${name}: ${how}${tag}${r.newBest ? ' · recorde!' : ''}`;
 }
 
@@ -220,11 +233,23 @@ session.onStageEnd = (outcome) => {
   if (isChallengeId(outcome.stageId)) {
     const r = settleChallenge(profile, outcome);
     saveProfile(profile); queueSync();
+    const sent = attempt;
+    attempt = null;
     afterStep(() => {
       game.scene.stop('stage'); game.scene.start('camp');
       ui.showCamp(r?.kind === 'encantados' ? 'torre' : 'diario');
-      if (r) ui.notify(challengeNote(r));
+      if (r) ui.notify(challengeNote(r, !!sent));
     });
+    /* a gravação vai para o servidor refazer; o resultado do ranking é o dele */
+    if (sent && outcome.replay && online) {
+      void online.backend.submitAttempt(sent.id, outcome.replay).then(async (res) => {
+        if (res.estado !== 'verificada') { ui.notify(`Ranking: tentativa recusada. ${res.motivo ?? ''}`); return; }
+        if (!res.valendo) { ui.notify('Treino conferido pelo servidor (não muda o ranking)'); return; }
+        const me = await online.backend.myRank(sent.kind, sent.key).catch(() => null);
+        ui.notify(me ? `Ranking: ${me.posicao}º de ${me.total}${me.total >= 10 ? ` · top ${Math.max(1, Math.ceil((me.posicao / me.total) * 100))}%` : ''}` : 'Ranking: tentativa conferida');
+        ui.refresh();
+      }, (err: unknown) => ui.notify(`Ranking: não deu para enviar. ${err instanceof Error ? err.message : ''}`));
+    }
     return;
   }
   const rewards = settleStage(profile, outcome);

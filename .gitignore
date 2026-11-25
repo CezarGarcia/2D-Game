@@ -18,3 +18,7 @@ preview-*.html
 # chaves locais
 .env
 .env.local
+
+# gerado por npm run build:server
+supabase/functions/_shared/servidor.js
+supabase/functions/_shared/servidor.d.ts

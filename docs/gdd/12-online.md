@@ -132,8 +132,8 @@ Hoje o jogo roda como página publicada no Claude, pensada para ser vista e test
 | Fase | Estado |
 |---|---|
 | 0 · Preparação, sem servidor | **Feita** |
-| 1 · Endereço próprio e contas | Decidido: Supabase, Google e link por e-mail, endereço gratuito |
-| 2 · Rankings verificados | — |
+| 1 · Endereço próprio e contas | **Código feito**; falta criar o projeto no Supabase e ativar o Pages ([passo a passo](../online/configurar.md)) |
+| 2 · Rankings verificados | **Código feito** para o Desafio do Dia e o dos Encantados; falta publicar a função |
 | 3 · Fantasmas, cruzes e recados | — |
 | 4 · Mundo Online | Fica nesta etapa (decidido) |
 
@@ -148,6 +148,19 @@ Hoje o jogo roda como página publicada no Claude, pensada para ser vista e test
 - **Testes:** `tests/fmath.test.ts`, `tests/replay.test.ts` (17 fases refeitas, adulteração, gravação malformada) e `tests/challenge.test.ts`, que refaz um Desafio do Dia só com o identificador e a escolha do herói, como o servidor vai fazer. Comparar Firefox e WebKit fica para quando houver os dois navegadores no ambiente de teste.
 
 Cada fase termina com o jogo funcionando, os testes passando e nada quebrado para quem joga sem conta.
+
+### Fases 1 e 2: o que entrou
+
+- **Banco** (`supabase/migrations`): `jogadores`, `saves` e `tentativas`, com segurança por linha. O save só sobe pela função `salvar_solo`, que confere a revisão; as tentativas só são escritas pelo servidor; os rankings saem das funções `ranking` e `minha_posicao`, que mostram só apelido e resultado. Os testes rodam as migrações num Postgres de verdade (PGlite) dentro do Node.
+- **Sincronização** (`src/online/sync.ts`): o navegador lembra a revisão que sincronizou e um resumo do perfil. Só um lado mudou: sobe ou desce sozinho. Os dois mudaram: o jogador escolhe entre os dois saves, lado a lado. No meio de uma fase nada é trocado.
+- **Servidor dos rankings** (`src/server/tentativa.ts`): TypeScript puro. `iniciar` abre a tentativa (no Desafio do Dia, o servidor decide o dia e o herói, e só a primeira do dia vale); `enviar` confere o formato, o prazo de duas horas e que a partida não durou mais do que o tempo que passou, refaz a partida e guarda o resultado refeito. `npm run build:server` empacota isso para a função `supabase/functions/tentativa`, que só cuida do login e do banco.
+- **No jogo:** com conta, o desafio abre a tentativa antes de começar e manda a gravação no fim; sem conta ou sem rede, joga igual, sem ranking. Botão Ranking no Desafio do Dia e no dos Encantados: topo, a sua posição e o percentil.
+- **Sem servidor configurado**, o jogo sai igual a antes, num arquivo só. A biblioteca do Supabase só é baixada quando o jogo é publicado com o endereço dele.
+- **Limites conhecidos:**
+  - A função do Supabase em si (`index.ts`, umas 70 linhas de login e banco) não foi rodada contra um projeto de verdade: aqui não há Supabase nem Deno. A regra que ela chama foi testada com o mesmo banco e as mesmas migrações.
+  - O Desafio do Dia é igual para todos, então dá para treinar numa conta e jogar valendo em outra (o Spelunky tem a mesma limitação). Jogar em câmera lenta com ajuda de programa também passa: a gravação é legítima. O que o servidor garante é que o resultado aconteceu de verdade com aquele herói.
+  - No Desafio dos Encantados, o servidor confere o formato do herói, não se o jogador já liberou aqueles feitiços. Fica certo com o Mundo Online (fase 4).
+  - Faltam os rankings de tempo por fase, da Noite da Semana e de Primeira vitória, que usam a mesma função com modos novos.
 
 ### Fase 0 · Preparação, sem servidor (M)
 

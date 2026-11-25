@@ -11,6 +11,7 @@ import { ENCANTADOS_HERO_LEVEL, dailyOpen, encantadosOpen, encantadosSpec, touch
 import type { ChallengeResult } from '../meta/profile';
 import type { Ctx } from './ctx';
 import { clock, h, hdCanvas, itemIcon, num, ui } from './dom';
+import { openRanking } from './ranking';
 import { drawFigure } from './retratos';
 import { tip, type TipRow } from './tip';
 
@@ -53,7 +54,7 @@ export function dailyChallengeCard(c: Ctx): HTMLElement | null {
   const p = c.p;
   if (!dailyOpen(p)) return null;
   touchChallengeDay(p);
-  const d = p.challenges.daily, def = dailyChallenge(d.day), lk = look(def.chapter), mod = EXP_MODS[def.mod], played = d.tries > 0;
+  const d = p.challenges.daily, def = dailyChallenge(d.day), lk = look(def.chapter), mod = EXP_MODS[def.mod], played = d.tries > 0, online = c.host.online;
   const rows: TipRow[] = [
     { icon: lk.icon, text: lk.name, value: `Nv ${def.level}`, color: lk.color },
     { icon: mod.icon, text: mod.name, value: null }, { text: mod.desc, tone: 'dim' },
@@ -73,8 +74,10 @@ export function dailyChallengeCard(c: Ctx): HTMLElement | null {
       h('div', `dd-status${d.first?.won ? ' ok' : ''}`,
         !played ? [ui('coroa', 20), 'Primeira tentativa vale ranking']
           : [ui(d.first?.won ? 'check' : 'caveira', 20), d.first ? resultText(d.first) : '—', d.tries > 1 ? h('i', null, ` · ${d.tries - 1} ${d.tries === 2 ? 'treino' : 'treinos'}`) : null])),
-    h('button', { type: 'button', class: `btn ${played ? '' : 'primary'} dd-go`, 'data-fk': 'desafio-dia', onclick: () => c.host.startChallenge('dia') },
-      ui(played ? 'relogio' : 'coroa', 26), played ? 'Treinar' : 'Valendo!')),
+    h('div', 'dd-btns',
+      h('button', { type: 'button', class: `btn ${played ? '' : 'primary'} dd-go`, 'data-fk': 'desafio-dia', onclick: () => c.host.startChallenge('dia') },
+        ui(played ? 'relogio' : 'coroa', 26), played ? 'Treinar' : 'Valendo!'),
+      online && h('button', { type: 'button', class: 'btn small dd-rank', 'data-fk': 'ranking-dia', onclick: () => openRanking(c, online, 'dia', d.day, `Desafio do Dia · ${d.day.split('-').reverse().slice(0, 2).join('/')}`, 'sala') }, ui('coroa', 18), 'Ranking'))),
   { title: 'Desafio do Dia', color: lk.color, icon: ui(lk.icon, 36), tag: d.day.split('-').reverse().slice(0, 2).join('/'), rows });
 }
 
@@ -88,6 +91,7 @@ export function encantadosPanel(c: Ctx): HTMLElement {
       ui('cadeado', 56), h('p', null, 'Abre depois do final: vença o Esquecimento.')),
     { title: 'Desafio dos Encantados', icon: ui('coroa', 36), rows: [{ text: 'Os oito Encantados seguidos, contra o relógio, com ranking.' }] });
   }
+  const online = c.host.online;
   const e = p.challenges.encantados, weapon = (c.st.encWeapon ?? encantadosSpec(p).weapon) as WeaponKind, spec = encantadosSpec(p, weapon);
   const bests: TipRow[] = WEAPONS.map((w) => { const r = e.bestByWeapon[w]; return { node: itemIcon(w, 22), text: ITEM_TYPES[w].label, value: r ? resultText(r, 'chefe') : '—', tone: r?.won ? 'ok' : 'dim' }; });
   return h('section', { class: 'enc-desafio', 'aria-label': 'Desafio dos Encantados' },
@@ -103,5 +107,7 @@ export function encantadosPanel(c: Ctx): HTMLElement {
     tip(h('div', { class: 'ed-best', tabindex: 0 }, ui('relogio', 30),
       h('span', null, e.best ? resultText(e.best, 'chefe') : 'Sem tentativa ainda', h('i', null, ` · ${e.wins} ${e.wins === 1 ? 'vitória' : 'vitórias'}`))),
     { title: 'Recordes por arma', icon: ui('relogio', 36), rows: [...bests, 'sep', { text: `Herói do nível ${ENCANTADOS_HERO_LEVEL}, chefes do ${ENCANTADOS_LEVEL}. Um altar a cada dois chefes.`, tone: 'dim' }, e.wins === 0 ? { icon: 'lagrima', text: 'Primeira vitória: 2 Lágrimas de Encantado', tone: 'gold' } : null] }),
-    h('button', { type: 'button', class: 'btn primary ed-go', 'data-fk': 'encantados', onclick: () => c.host.startChallenge('encantados', weapon) }, ui('coroa', 30), 'Enfrentar'));
+    h('div', 'ed-btns',
+      h('button', { type: 'button', class: 'btn primary ed-go', 'data-fk': 'encantados', onclick: () => c.host.startChallenge('encantados', weapon) }, ui('coroa', 30), 'Enfrentar'),
+      online && h('button', { type: 'button', class: 'btn ed-rank', 'aria-label': 'Ranking', 'data-fk': 'ranking-encantados', onclick: () => openRanking(c, online, 'encantados', 'geral', 'Desafio dos Encantados', 'chefe') }, ui('coroa', 26))));
 }

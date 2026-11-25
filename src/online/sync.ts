@@ -179,6 +179,11 @@ export class CloudSync {
     catch (err) { this.set('sem-rede', err instanceof Error ? err.message : 'Sem conexão com o servidor.'); }
   }
 
+  /** O servidor, para os rankings (src/online/backend.ts). */
+  get backend(): Backend { return this.api; }
+  /** Logado e com apelido: pode jogar valendo. */
+  get ranked(): boolean { return !!this.account?.apelido; }
+
   signInGoogle(): Promise<void> { return this.api.signInGoogle(); }
   signInEmail(email: string): Promise<void> { return this.api.signInEmail(email); }
 

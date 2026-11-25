@@ -1,0 +1,32 @@
+# Publica a função de ranking no Supabase a cada envio para a main, do mesmo commit do jogo,
+# para o jogo e o servidor terem sempre a mesma versão da simulação.
+# Precisa de: variável SUPABASE_PROJECT_REF e segredo SUPABASE_ACCESS_TOKEN (docs/online/configurar.md).
+name: Publicar o servidor
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: servidor
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: ${{ vars.SUPABASE_PROJECT_REF != '' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:server
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - run: supabase functions deploy tentativa --project-ref "${{ vars.SUPABASE_PROJECT_REF }}"
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

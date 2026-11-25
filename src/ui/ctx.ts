@@ -11,6 +11,7 @@ import type { OmenPick } from '../data/omens';
 import type { NightChoice, NightEnd } from '../meta/dream';
 import type { Profile } from '../meta/profile';
 import type { CampTab, UiHost } from './host';
+import type { RankingState } from './ranking';
 
 /** Tamanho lógico da tela, igual ao do canvas do jogo. */
 export const VIEW_W = 1280;
@@ -105,6 +106,8 @@ export interface UiState {
   options: boolean;
   /** Janela da conta (login, apelido, save na nuvem) aberta. */
   account: boolean;
+  /** Janela de ranking aberta, com o que já chegou do servidor. */
+  ranking: RankingState | null;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
 }
@@ -115,7 +118,7 @@ export function newState(): UiState {
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
     web: null, spellSel: null, spellEl: null, compFilter: null,
     alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false, village: false, building: 'rancho', walk: { id: null, chapter: 1, hours: 4 }, moment: null }, omens: {}, omenOpen: false, brew: null, brewOpen: false,
-    options: false, account: false, confirm: null, toast: null,
+    options: false, account: false, ranking: null, confirm: null, toast: null,
   };
 }
 

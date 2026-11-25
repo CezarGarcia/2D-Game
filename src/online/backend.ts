@@ -2,6 +2,8 @@
  * O que o jogo pede ao servidor, separado de quem atende: o Supabase no jogo publicado
  * e um falso nos testes. Nada aqui conhece regra de jogo.
  */
+import type { HeroSpec } from '../data/challenge';
+import type { Replay } from '../sim/replay';
 
 /** Save guardado na nuvem, com o resumo que a tela de conflito mostra. */
 export interface CloudSave { rev: number; perfil: unknown; nivel: number; tempoJogo: number; aparelho: string | null; atualizadoEm: string }
@@ -23,7 +25,22 @@ export interface Backend {
   deleteAccount(): Promise<void>;
   /** Chamado quando o login muda (entrou pelo link, saiu em outra aba). */
   onAuthChange(cb: () => void): void;
+
+  /* ---------- rankings ---------- */
+  /** Abre uma tentativa de ranking. O servidor diz o dia, o herói e se ela vale. Lança `Error` com o motivo se recusar. */
+  startAttempt(modo: RankMode, heroi?: HeroSpec): Promise<AttemptStart>;
+  /** Manda a gravação da tentativa para o servidor refazer. */
+  submitAttempt(id: string, gravacao: Replay): Promise<AttemptResult>;
+  ranking(modo: RankMode, chave: string): Promise<RankRow[]>;
+  /** Posição de quem está logado, ou nulo se ainda não entrou neste ranking. */
+  myRank(modo: RankMode, chave: string): Promise<MyRank | null>;
 }
+
+export type RankMode = 'dia' | 'encantados';
+export interface AttemptStart { id: string; chave: string; valendo: boolean; heroi: HeroSpec }
+export interface AttemptResult { estado: 'verificada' | 'rejeitada'; valendo: boolean; venceu?: boolean; salas?: number; tempo_ms?: number; motivo?: string }
+export interface RankRow { apelido: string; venceu: boolean; salas: number; tempo_ms: number; arma: string; posicao: number }
+export interface MyRank { posicao: number; total: number; venceu: boolean; salas: number; tempo_ms: number; arma: string }
 
 /** Apelido: 3 a 16 letras, números, espaço ou _. A mesma regra do banco. */
 export const NICK_RE = /^[A-Za-z0-9À-ÖØ-öø-ÿ_ ]{3,16}$/;
@@ -55,5 +72,9 @@ export function lazyBackend(load: () => Promise<Backend>): Backend {
     putSave: (p, base, meta) => get().then((x) => x.putSave(p, base, meta)),
     deleteAccount: () => get().then((x) => x.deleteAccount()),
     onAuthChange: (cb) => { void get().then((x) => x.onAuthChange(cb)); },
+    startAttempt: (m, h) => get().then((x) => x.startAttempt(m, h)),
+    submitAttempt: (id, g) => get().then((x) => x.submitAttempt(id, g)),
+    ranking: (m, c) => get().then((x) => x.ranking(m, c)),
+    myRank: (m, c) => get().then((x) => x.myRank(m, c)),
   };
 }

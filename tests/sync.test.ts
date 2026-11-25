@@ -23,6 +23,8 @@ class FakeCloud {
       },
       async deleteAccount() { cloud.save = null; },
       onAuthChange() {},
+      async startAttempt() { throw new Error('não usado'); }, async submitAttempt() { throw new Error('não usado'); },
+      async ranking() { return []; }, async myRank() { return null; },
     };
   }
 }
