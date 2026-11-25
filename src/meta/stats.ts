@@ -2,6 +2,7 @@
  * Transforma o perfil (nível, atributos, talentos, equipamento, companheiro) e as bênçãos da fase
  * nos números que o combate usa. Fórmulas de docs/gdd/02-personagem-e-talentos.md.
  */
+import { fpow } from '../sim/fmath';
 import type { AmuletId } from '../data/amulets';
 import { ASPECTS, type AspectId } from '../data/aspects';
 import { BOND, bondLevel } from '../data/tempers';
@@ -332,10 +333,10 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
       + (chest === 'gibao' ? 0.03 : 0) + (companion === 'onca' ? 0.05 : 0) + 0.1 * bl('olho') + 0.15 * bl('olhoDeLobo') + (syn('sombra', 1) ? 0.1 : 0) + (am('denteDeOnca') ? 0.1 : 0)),
     critMult: 1.5 + pct('danoCritico') + 0.06 * rank('brutalidade') + 0.35 * bl('ferocidade') + 0.6 * bl('golpeBaixo') + 0.2 * bl('ferroEmBrasa') + (syn('sombra', 3) ? 0.5 : 0),
     defense: Math.round(defense * 10) / 10,
-    damageTaken: Math.pow(0.88, bl('couro')) * (has('cascaGrossa') ? 0.9 : 1) * (has('couroDeAnta') ? 0.85 : 1) * (has('furiaCega') ? 1.3 : 1) * (syn('terra', 1) ? 0.9 : 1) * (am('couroDeJacare') ? 0.88 : 1),
+    damageTaken: fpow(0.88, bl('couro')) * (has('cascaGrossa') ? 0.9 : 1) * (has('couroDeAnta') ? 0.85 : 1) * (has('furiaCega') ? 1.3 : 1) * (syn('terra', 1) ? 0.9 : 1) * (am('couroDeJacare') ? 0.88 : 1),
     moveSpeed: BASE_MOVE_SPEED * (1 + 0.02 * rank('peLigeiro') + haste + 0.12 * bl('vento') + 0.15 * bl('peDeMoleque') + (am('penaDeArara') ? 0.12 : 0) + (uniq('escamaDaIara') ? 0.12 : 0) + pct('movimento')
       + (set('vaqueiro', 2) ? 0.1 : 0) + (pet('loboguara') ? 0.06 : 0)),
-    dodgeCooldown: BASE_DODGE_COOLDOWN * (1 - 0.04 * rank('reflexo')) * Math.pow(0.75, bl('passo')),
+    dodgeCooldown: BASE_DODGE_COOLDOWN * (1 - 0.04 * rank('reflexo')) * fpow(0.75, bl('passo')),
     dodgeDistance: chest === 'couraca' ? 0.8 : 1,
     dodgeCharges: 1 + (rank('segundaEsquiva') ? 1 : 0) + bl('folego') + bl('assobio') + (syn('tempestade', 1) ? 1 : 0),
     spellPower: (1 + 0.012 * attrs.inteligencia)
@@ -343,8 +344,8 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
         + (set('benzedeira', 2) ? 0.1 : 0) + (pet('coruja') ? 0.08 : 0)),
     spellCrit: 0.05 + 0.02 * rank('foco') + 0.1 * bl('olhoGordo'),
     spellCritMult: rank('sobrecarga') ? 2.5 : 1.5,
-    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * Math.pow(0.8, bl('ligeireza')) * (has('rezaDaMeiaNoite') ? 0.75 : 1) * (weapon === 'cajado' ? 0.8 : 1) * (pet('tuiuiu') ? 0.92 : 1),
-    manaCostMult: (rank('arquimago') ? 0.8 : 1) * Math.pow(0.7, bl('fonte')) * (syn('encanto', 1) ? 0.8 : 1) * (am('contaDeLagrima') ? 0.9 : 1),
+    cooldownMult: (1 - cooldownCut) * (rank('fluxo') ? 0.85 : 1) * fpow(0.8, bl('ligeireza')) * (has('rezaDaMeiaNoite') ? 0.75 : 1) * (weapon === 'cajado' ? 0.8 : 1) * (pet('tuiuiu') ? 0.92 : 1),
+    manaCostMult: (rank('arquimago') ? 0.8 : 1) * fpow(0.7, bl('fonte')) * (syn('encanto', 1) ? 0.8 : 1) * (am('contaDeLagrima') ? 0.9 : 1),
     spellArea: 1 + 0.05 * rank('alcanceMagico') + 0.25 * bl('gigante') + 0.3 * bl('bracoDeGigante') + 0.15 * bl('labareda') + 0.4 * bl('feiticaria'),
     poisonMult: 1 + 0.1 * rank('venenoForte') + (syn('natureza', 1) ? 0.3 : 0),
     durationMult: 1 + 0.06 * rank('duracao'),

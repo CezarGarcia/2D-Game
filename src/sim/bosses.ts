@@ -3,6 +3,7 @@
  * em ordem, postura (Encantados), fúria por tempo e uma janela de punição. Cada padrão é uma pequena
  * linha do tempo dentro do estado `cast`; o truque de cada lenda está nos padrões dela.
  */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { BOSSES, BOSS_NUM, type BossKind, type MonsterKind } from '../data/bestiary';
 import { ELEMENT_ORDER, type ElementId } from '../data/content';
 import { addHazard, clampArena, emit, hurtPlayer, rand, rayExit, setState, spawnEnemy, strike, targetOf } from './core';
@@ -27,16 +28,16 @@ function dmg(w: World, e: Enemy, mult: number): number {
 
 /** Leque de linhas que estouram depois de um aviso (jatos, sopro de fogo). */
 function fan(w: World, e: Enemy, T: { x: number; y: number }, J: { lines: number; spread: number; delay: number; width: number; len: number; damage: number }, wait = 0): void {
-  const base = Math.atan2(T.y - e.y, T.x - e.x);
+  const base = fatan2(T.y - e.y, T.x - e.x);
   for (let i = 0; i < J.lines; i++) {
-    const a = base + (i - (J.lines - 1) / 2) * J.spread, [x2, y2] = rayExit(w, e.x, e.y, Math.cos(a), Math.sin(a), 0, J.len);
+    const a = base + (i - (J.lines - 1) / 2) * J.spread, [x2, y2] = rayExit(w, e.x, e.y, fcos(a), fsin(a), 0, J.len);
     addHazard(w, { kind: elOf(e) === 'fogo' ? 'fire' : elOf(e) === 'agua' ? 'jet' : 'spell', element: elOf(e), tele: { shape: 'line', x: e.x, y: e.y, x2, y2, w: J.width, t: -wait, dur: J.delay }, damage: dmg(w, e, J.damage), slow: 0 });
   }
 }
 
 function circles(w: World, e: Enemy, T: { x: number; y: number }, n: number, r: number, delay: number, spread: number, mult: number, kind: 'spell' | 'bolt' | 'fire' | 'sleep' = 'spell', extra?: { sleep?: number }): void {
   for (let i = 0; i < n; i++) {
-    const a = rand(w) * Math.PI * 2, d = i === 0 ? 0 : spread * (0.45 + rand(w) * 0.7), pos = { x: T.x + Math.cos(a) * d, y: T.y + Math.sin(a) * d };
+    const a = rand(w) * Math.PI * 2, d = i === 0 ? 0 : spread * (0.45 + rand(w) * 0.7), pos = { x: T.x + fcos(a) * d, y: T.y + fsin(a) * d };
     clampArena(w, pos, 20);
     addHazard(w, { kind, element: elOf(e), tele: { shape: 'circle', x: pos.x, y: pos.y, r, t: -i * 0.12, dur: delay }, damage: dmg(w, e, mult), slow: 0, extra });
   }
@@ -46,7 +47,7 @@ function ring(w: World, e: Enemy, n: number, speed: number, mult: number, offset
   const el = elOf(e);
   for (let i = 0; i < n; i++) {
     const a = offset + (i / n) * Math.PI * 2;
-    w.projectiles.push({ id: w.nextId++, kind: 'eproj', x: e.x + Math.cos(a) * 24, y: e.y + Math.sin(a) * 24, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, dist: 0, range: 900, damage: dmg(w, e, mult), pierce: false, hit: [], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner: e.id, element: el, tex: TEX[String(el)] });
+    w.projectiles.push({ id: w.nextId++, kind: 'eproj', x: e.x + fcos(a) * 24, y: e.y + fsin(a) * 24, vx: fcos(a) * speed, vy: fsin(a) * speed, dist: 0, range: 900, damage: dmg(w, e, mult), pierce: false, hit: [], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner: e.id, element: el, tex: TEX[String(el)] });
   }
 }
 
@@ -58,7 +59,7 @@ function lob(w: World, e: Enemy, x: number, y: number, r: number, flight: number
 
 /** Golpe à frente: um círculo que segue o alvo até perto do fim do aviso. */
 function frontal(w: World, e: Enemy, T: { x: number; y: number }, N: { aim: number; radius: number; offset: number; damage: number }, dt: number): boolean {
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   if (e.stateT < N.aim * 0.65) { e.dirX = dx / d; e.dirY = dy / d; if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; if (d > N.offset + 40) moveToward(e, T.x, T.y, bossDef(e).speed * 0.6, dt); }
   e.tele = { shape: 'circle', x: e.x + e.dirX * N.offset, y: e.y + e.dirY * N.offset, r: N.radius, t: e.stateT, dur: N.aim };
   if (e.stateT >= N.aim) {
@@ -73,7 +74,7 @@ function frontal(w: World, e: Enemy, T: { x: number; y: number }, N: { aim: numb
 /** Um padrão em andamento. Devolve 'done', 'exposed' (abre a guarda) ou nada (continua). */
 function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done' | 'exposed' | 'down' | void {
   const p = w.player, D = bossDef(e), N = BOSS_NUM, t = e.stateT;
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   switch (e.pattern) {
     case 'investida': {
       const I = N.investida, aim = I.aim * (e.kind === 'teiniagua' ? 0.9 : 1);
@@ -87,7 +88,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
       }
       const left = moveToward(e, e.ax, e.ay, I.speed, dt);
       e.walk += I.speed * dt * 0.05;
-      if (!e.mem.hit && Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 20) { e.mem.hit = 1; hurtPlayer(w, dmg(w, e, I.damage), e.x - e.dirX * 20, e.y - e.dirY * 20, 520, { src: e, melee: true }); }
+      if (!e.mem.hit && fhypot(p.x - e.x, p.y - e.y) < e.radius + 20) { e.mem.hit = 1; hurtPlayer(w, dmg(w, e, I.damage), e.x - e.dirX * 20, e.y - e.dirY * 20, 520, { src: e, melee: true }); }
       if (e.kind === 'mula' && (e.mem.trail ?? 0) <= 0) { e.mem.trail = 0.06; w.zones.push({ id: w.nextId++, kind: 'fire', x: e.x, y: e.y, r: 44, t: 0, dur: 4, tick: 0.5, power: dmg(w, e, 0.15), hostile: true }); }
       e.mem.trail = (e.mem.trail ?? 0) - dt;
       if (left < 12) {
@@ -100,8 +101,8 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
     case 'leque': if (!e.flag && t >= N.leque.cast) { e.flag = true; fan(w, e, T, N.leque); if (e.phase >= 1) fan(w, e, T, { ...N.leque, lines: N.leque.lines - 1 }, 0.55); emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.leque.cast + N.leque.delay + 0.6 ? 'done' : undefined;
     case 'sopro': if (!e.flag && t >= N.sopro.cast) { e.flag = true; fan(w, e, T, N.sopro); emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.sopro.cast + N.sopro.delay + 0.2 ? 'done' : undefined;
     case 'chuva': if (!e.flag && t >= N.chuva.cast) { e.flag = true; circles(w, e, T, N.chuva.count + e.phase, N.chuva.radius, N.chuva.delay, N.chuva.spread, N.chuva.damage, elOf(e) === 'tempestade' ? 'bolt' : elOf(e) === 'fogo' ? 'fire' : 'spell'); emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: 'chuva' }); } return t >= N.chuva.cast + 0.5 ? 'done' : undefined;
-    case 'cuspe': if (!e.flag && t >= N.cuspe.cast) { e.flag = true; for (let i = 0; i < N.cuspe.count + e.phase; i++) { const a = rand(w) * 6.283, r = i === 0 ? 0 : N.cuspe.spread * rand(w); lob(w, e, T.x + Math.cos(a) * r, T.y + Math.sin(a) * r, N.cuspe.radius, N.cuspe.delay, N.cuspe.damage, 'fogo'); } emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.cuspe.cast + 0.4 ? 'done' : undefined;
-    case 'pocoes': if (!e.flag && t >= N.pocoes.cast) { e.flag = true; const els: ElementId[] = ['fogo', 'natureza', 'agua', 'sombra']; for (let i = 0; i < N.pocoes.count + e.phase; i++) { const a = rand(w) * 6.283, r = i === 0 ? 0 : N.pocoes.spread * (0.4 + rand(w)); lob(w, e, T.x + Math.cos(a) * r, T.y + Math.sin(a) * r, N.pocoes.radius, N.pocoes.flight, N.pocoes.damage, els[Math.floor(rand(w) * els.length)]); } emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.pocoes.cast + 0.5 ? 'done' : undefined;
+    case 'cuspe': if (!e.flag && t >= N.cuspe.cast) { e.flag = true; for (let i = 0; i < N.cuspe.count + e.phase; i++) { const a = rand(w) * 6.283, r = i === 0 ? 0 : N.cuspe.spread * rand(w); lob(w, e, T.x + fcos(a) * r, T.y + fsin(a) * r, N.cuspe.radius, N.cuspe.delay, N.cuspe.damage, 'fogo'); } emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.cuspe.cast + 0.4 ? 'done' : undefined;
+    case 'pocoes': if (!e.flag && t >= N.pocoes.cast) { e.flag = true; const els: ElementId[] = ['fogo', 'natureza', 'agua', 'sombra']; for (let i = 0; i < N.pocoes.count + e.phase; i++) { const a = rand(w) * 6.283, r = i === 0 ? 0 : N.pocoes.spread * (0.4 + rand(w)); lob(w, e, T.x + fcos(a) * r, T.y + fsin(a) * r, N.pocoes.radius, N.pocoes.flight, N.pocoes.damage, els[Math.floor(rand(w) * els.length)]); } emit(w, { type: 'spit', x: e.x, y: e.y }); } return t >= N.pocoes.cast + 0.5 ? 'done' : undefined;
     case 'anel': {
       const A = N.anel;
       if (t >= A.cast + e.step * 0.45 && e.step < A.waves + (e.phase >= 2 ? 1 : 0)) { ring(w, e, A.count, A.speed, A.damage, e.step * 0.2); e.step++; emit(w, { type: 'spit', x: e.x, y: e.y }); }
@@ -164,7 +165,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
         return;
       }
       const left = moveToward(e, e.ax, e.ay, G.speed, dt);
-      if (Math.hypot(p.x - e.x, p.y - e.y) < e.radius + 22 && hurtPlayer(w, dmg(w, e, G.drain), e.x, e.y, 0, { src: e, melee: true })) {
+      if (fhypot(p.x - e.x, p.y - e.y) < e.radius + 22 && hurtPlayer(w, dmg(w, e, G.drain), e.x, e.y, 0, { src: e, melee: true })) {
         e.mem.hit = 1; p.heldT = G.hold; p.x = e.x + e.dirX * (e.radius + 10); p.y = e.y + e.dirY * (e.radius + 10);
         emit(w, { type: 'grab', x: p.x, y: p.y });
       }
@@ -186,7 +187,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
         e.flag = true;
         const n = e.pattern === 'uivo' ? N.uivo.summon : e.pattern === 'risada' ? N.risada.count : N.chamado.count;
         const kind = SWARM[D.chapter] ?? 'vulto';
-        for (let i = 0; i < n; i++) { const a = (i / n) * 6.283 + rand(w), pos = { x: e.x + Math.cos(a) * 150, y: e.y + Math.sin(a) * 120 }; clampArena(w, pos, 20); spawnEnemy(w, { kind, x: pos.x, y: pos.y }); }
+        for (let i = 0; i < n; i++) { const a = (i / n) * 6.283 + rand(w), pos = { x: e.x + fcos(a) * 150, y: e.y + fsin(a) * 120 }; clampArena(w, pos, 20); spawnEnemy(w, { kind, x: pos.x, y: pos.y }); }
         if (e.pattern === 'uivo') { const k = 380 / d; p.kx -= dx * k; p.ky -= dy * k; }
         emit(w, { type: 'call', x: e.x, y: e.y });
       }
@@ -215,10 +216,10 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
       const R = N.redemoinho;
       moveToward(e, T.x, T.y, R.speed * (1 + 0.08 * e.phase), dt);
       e.tele = { shape: 'circle', x: e.x, y: e.y, r: R.radius + 10, t: 0.95, dur: 1 };
-      if ((e.mem.cd ?? 0) <= 0 && Math.hypot(p.x - e.x, p.y - e.y) < R.radius + 16) { e.mem.cd = 0.9; hurtPlayer(w, dmg(w, e, R.damage), e.x, e.y, 520, { src: e }); }
+      if ((e.mem.cd ?? 0) <= 0 && fhypot(p.x - e.x, p.y - e.y) < R.radius + 16) { e.mem.cd = 0.9; hurtPlayer(w, dmg(w, e, R.damage), e.x, e.y, 520, { src: e }); }
       e.mem.cd = (e.mem.cd ?? 0) - dt;
       if (t >= R.duration) {
-        for (let i = 0; i < R.devils; i++) w.devils.push({ id: w.nextId++, x: e.x, y: e.y, vx: Math.cos(i * 3.1 + t) * 180, vy: Math.sin(i * 3.1 + t) * 140, r: 54, t: 0, dur: 8 });
+        for (let i = 0; i < R.devils; i++) w.devils.push({ id: w.nextId++, x: e.x, y: e.y, vx: fcos(i * 3.1 + t) * 180, vy: fsin(i * 3.1 + t) * 140, r: 54, t: 0, dur: 8 });
         emit(w, { type: 'devil', x: e.x, y: e.y });
         return 'down';
       }
@@ -226,7 +227,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
     }
     case 'serpente': {
       const S = N.serpente;
-      const a = t * 2.4, nx = -dy / d, ny = dx / d, wob = Math.sin(a) * 140;
+      const a = t * 2.4, nx = -dy / d, ny = dx / d, wob = fsin(a) * 140;
       moveToward(e, T.x + nx * wob, T.y + ny * wob, S.speed * (1 + 0.15 * e.phase), dt);
       if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1;
       return t >= S.duration ? 'done' : undefined;
@@ -242,7 +243,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
         return;
       }
       const left = moveToward(e, e.ax, e.ay, C.speed, dt);
-      if (!e.mem.hit && Math.hypot(p.x - e.x, p.y - e.y) < C.width / 2 + 10) { e.mem.hit = 1; hurtPlayer(w, dmg(w, e, C.damage), e.x - e.dirX * 20, e.y - e.dirY * 20, 520, { src: e, melee: true }); }
+      if (!e.mem.hit && fhypot(p.x - e.x, p.y - e.y) < C.width / 2 + 10) { e.mem.hit = 1; hurtPlayer(w, dmg(w, e, C.damage), e.x - e.dirX * 20, e.y - e.dirY * 20, 520, { src: e, melee: true }); }
       if ((e.mem.trail ?? 0) <= 0) { e.mem.trail = 0.05; w.zones.push({ id: w.nextId++, kind: 'fire', x: e.x, y: e.y, r: 40, t: 0, dur: 3, tick: 0.5, power: dmg(w, e, 0.12), hostile: true }); }
       e.mem.trail = (e.mem.trail ?? 0) - dt;
       if (left < 12) { emit(w, { type: 'crash', x: e.x, y: e.y, text: 'TONTO' }); return 'exposed'; }
@@ -295,7 +296,7 @@ function run(w: World, e: Enemy, T: { x: number; y: number }, dt: number): 'done
     case 'vazio': {
       const V = N.vazio;
       if (t >= V.cast && t < V.cast + V.duration && p.state !== 'dodge' && p.state !== 'dead') {
-        const pd = Math.hypot(e.x - p.x, e.y - p.y) || 1;
+        const pd = fhypot(e.x - p.x, e.y - p.y) || 1;
         if (pd > 50) { p.x += ((e.x - p.x) / pd) * V.pull * dt; p.y += ((e.y - p.y) / pd) * V.pull * dt; }
         e.tele = { shape: 'circle', x: e.x, y: e.y, r: 120, t: t - V.cast, dur: V.duration };
         if ((e.mem.cd ?? 0) <= 0 && pd < 120) { e.mem.cd = 0.5; hurtPlayer(w, dmg(w, e, V.damage), e.x, e.y, 0, { src: e, soft: true, unblockable: true }); }
@@ -323,10 +324,10 @@ export function boitataBody(w: World, e: Enemy): { x: number; y: number; a: numb
   const S = BOSS_NUM.serpente, out: { x: number; y: number; a: number }[] = [];
   let acc = 0, prev = { x: e.x, y: e.y }, next = S.gap;
   for (let i = w.trail.length - 1; i >= 0 && out.length < S.segs; i--) {
-    const q = w.trail[i], seg = Math.hypot(q.x - prev.x, q.y - prev.y);
+    const q = w.trail[i], seg = fhypot(q.x - prev.x, q.y - prev.y);
     while (seg > 0 && acc + seg >= next && out.length < S.segs) {
       const k = (next - acc) / seg;
-      out.push({ x: prev.x + (q.x - prev.x) * k, y: prev.y + (q.y - prev.y) * k, a: Math.atan2(prev.y - q.y, prev.x - q.x) });
+      out.push({ x: prev.x + (q.x - prev.x) * k, y: prev.y + (q.y - prev.y) * k, a: fatan2(prev.y - q.y, prev.x - q.x) });
       next += S.gap;
     }
     acc += seg; prev = q;
@@ -336,7 +337,7 @@ export function boitataBody(w: World, e: Enemy): { x: number; y: number; a: numb
 
 export function updateBoss(w: World, e: Enemy, dt: number): void {
   const D = bossDef(e), T = targetOf(w, e), p = w.player;
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
 
   w.bossTime += dt;
@@ -348,8 +349,8 @@ export function updateBoss(w: World, e: Enemy, dt: number): void {
   /* Boitatá: o corpo segue o rastro e queima quem encosta */
   if (e.kind === 'boitata') {
     const last = w.trail[w.trail.length - 1];
-    if (!last || Math.hypot(last.x - e.x, last.y - e.y) > 6) { w.trail.push({ x: e.x, y: e.y }); if (w.trail.length > 600) w.trail.shift(); }
-    if (p.hurtInv <= 0 && p.iframes <= 0) for (const s of boitataBody(w, e).slice(2)) if (Math.hypot(p.x - s.x, p.y - s.y) < 30) { hurtPlayer(w, dmg(w, e, BOSS_NUM.serpente.damage), s.x, s.y, 420, { src: e }); p.hurtInv = Math.max(p.hurtInv, 1.0); break; }
+    if (!last || fhypot(last.x - e.x, last.y - e.y) > 6) { w.trail.push({ x: e.x, y: e.y }); if (w.trail.length > 600) w.trail.shift(); }
+    if (p.hurtInv <= 0 && p.iframes <= 0) for (const s of boitataBody(w, e).slice(2)) if (fhypot(p.x - s.x, p.y - s.y) < 30) { hurtPlayer(w, dmg(w, e, BOSS_NUM.serpente.damage), s.x, s.y, 420, { src: e }); p.hurtInv = Math.max(p.hurtInv, 1.0); break; }
   }
   /* Lobisomem: a lua enche com o tempo; cheia o bastante, ele vira lobo */
   if (e.kind === 'lobisomem') {

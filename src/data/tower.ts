@@ -4,6 +4,7 @@
  * O nível e os monstros sobem com o andar e passam pelos capítulos em ordem. Os andares são fixos
  * (saem de uma semente por andar), para o tempo do ranking ser comparável.
  */
+import { fpow } from '../sim/fmath';
 import { ARENA, isBossKind } from './balance';
 import { BOSSES, type BossKind } from './bestiary';
 import { expeditionStage, isExpeditionId } from './daily';
@@ -27,7 +28,7 @@ export function towerChapter(floor: number): number {
 export const DEPTHS = { hpPerFloor: 0.03, damagePerFloor: 0.012 };
 export function depthsScale(floor: number): { hp: number; damage: number } {
   const n = Math.max(0, floor - TOWER_FLOORS);
-  return { hp: Math.pow(1 + DEPTHS.hpPerFloor, n), damage: Math.pow(1 + DEPTHS.damagePerFloor, n) };
+  return { hp: fpow(1 + DEPTHS.hpPerFloor, n), damage: fpow(1 + DEPTHS.damagePerFloor, n) };
 }
 
 /** Monstros comuns de um capítulo (sem chefes). */

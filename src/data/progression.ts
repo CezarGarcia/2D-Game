@@ -2,13 +2,14 @@
  * Fórmulas de progressão do documento de design (docs/gdd/01-progressao-e-dificuldade.md).
  * São valores iniciais: ajustar aqui, não espalhar números pelo código.
  */
+import { fpow } from '../sim/fmath';
 
 export const MAX_LEVEL_CAMPAIGN = 60;
 export const STAGE_COUNT = 96;
 
 /** XP para subir do nível `level` para `level + 1`. */
 export function xpNeeded(level: number): number {
-  const stagesAtLevel = 0.45 + 0.085 * Math.pow(level, 1.2);
+  const stagesAtLevel = 0.45 + 0.085 * fpow(level, 1.2);
   return Math.round((stagesAtLevel * stageXp(level)) / 5) * 5;
 }
 

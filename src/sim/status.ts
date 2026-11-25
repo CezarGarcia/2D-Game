@@ -2,6 +2,7 @@
  * Efeitos de elemento nos inimigos e as reações entre elementos (docs/gdd/03).
  * Um elemento em quem já tem o efeito de outro consome esse efeito e causa a reação; senão, aplica o seu.
  */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { BROTAR, ELEMENTS, REACTION_NUM, STATUS, reactionOf, type ElementId, type ReactionId } from '../data/content';
 import { addHazard, damageEnemy, emit, healPlayer, isBoss, max0, rand, setState, spellScale } from './core';
 import type { Enemy, World } from './types';
@@ -48,7 +49,7 @@ function reactionPower(w: World): number {
 }
 
 function around(w: World, x: number, y: number, r: number, fn: (o: Enemy) => void): void {
-  for (const o of w.enemies) if (o.hp > 0 && !o.hidden && !o.fake && o.state !== 'spawn' && Math.hypot(o.x - x, o.y - y) < r + o.radius * 0.5) fn(o);
+  for (const o of w.enemies) if (o.hp > 0 && !o.hidden && !o.fake && o.state !== 'spawn' && fhypot(o.x - x, o.y - y) < r + o.radius * 0.5) fn(o);
 }
 
 function react(w: World, e: Enemy, id: ReactionId): void {
@@ -60,7 +61,7 @@ function react(w: World, e: Enemy, id: ReactionId): void {
       const dmg = BROTAR.damage * pw, r = BROTAR.radius * s.spellArea;
       emit(w, { type: 'brotar', x: e.x, y: e.y, value: r });
       around(w, e.x, e.y, r, (o) => {
-        damageEnemy(w, o, dmg, 'reaction', Math.atan2(o.y - e.y, o.x - e.x));
+        damageEnemy(w, o, dmg, 'reaction', fatan2(o.y - e.y, o.x - e.x));
         if (o.hp > 0) { if (isBoss(o)) o.slowT = Math.max(o.slowT, BROTAR.root); else { o.rootT = Math.max(o.rootT, BROTAR.root * s.durationMult); o.tele = null; } }
       });
       healPlayer(w, s.maxHp * BROTAR.heal);
@@ -74,7 +75,7 @@ function react(w: World, e: Enemy, id: ReactionId): void {
     }
     case 'queimada': {
       const N = REACTION_NUM.queimada;
-      around(w, e.x, e.y, N.radius * s.spellArea, (o) => { damageEnemy(w, o, N.damage * pw, 'reaction', Math.atan2(o.y - e.y, o.x - e.x)); if (o.hp > 0) setStatus(w, o, 'fogo'); });
+      around(w, e.x, e.y, N.radius * s.spellArea, (o) => { damageEnemy(w, o, N.damage * pw, 'reaction', fatan2(o.y - e.y, o.x - e.x)); if (o.hp > 0) setStatus(w, o, 'fogo'); });
       for (const o of w.enemies) if (o.hp > 0 && o.poisonT > 0) { o.poisonT = 0; setStatus(w, o, 'fogo'); }
       emit(w, { type: 'pop', x: e.x, y: e.y, value: N.radius * s.spellArea, kind: 'fogo' });
       break;
@@ -98,7 +99,7 @@ function react(w: World, e: Enemy, id: ReactionId): void {
       const N = REACTION_NUM.estilhaco;
       for (let i = 0; i < N.shards; i++) {
         const a = (i / N.shards) * Math.PI * 2;
-        w.projectiles.push({ id: w.nextId++, kind: 'spell', spell: 'pedrada', element: null, x: e.x, y: e.y, vx: Math.cos(a) * 700, vy: Math.sin(a) * 700, dist: 0, range: 300, damage: N.damage * pw, pierce: true, hit: [e.id], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner: 0, tex: 'p_pedra' });
+        w.projectiles.push({ id: w.nextId++, kind: 'spell', spell: 'pedrada', element: null, x: e.x, y: e.y, vx: fcos(a) * 700, vy: fsin(a) * 700, dist: 0, range: 300, damage: N.damage * pw, pierce: true, hit: [e.id], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner: 0, tex: 'p_pedra' });
       }
       break;
     }
@@ -129,7 +130,7 @@ export function wakeAndCharge(w: World, e: Enemy, source: string): void {
     const pw = spellScale(w) * STATUS.chargeSpark * 20;
     let n = 0;
     for (const o of w.enemies) {
-      if (o === e || o.hp <= 0 || o.hidden || o.fake || n >= 3 || Math.hypot(o.x - e.x, o.y - e.y) > STATUS.chargeRange) continue;
+      if (o === e || o.hp <= 0 || o.hidden || o.fake || n >= 3 || fhypot(o.x - e.x, o.y - e.y) > STATUS.chargeRange) continue;
       n++;
       emit(w, { type: 'spark', x: e.x, y: e.y, x2: o.x, y2: o.y });
       damageEnemy(w, o, pw, 'spark', 0);
@@ -165,11 +166,11 @@ export function wander(w: World, e: Enemy, dt: number, speed: number): boolean {
   const p = w.player;
   e.tele = null;
   if (e.fearT > 0) {
-    const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
+    const dx = e.x - p.x, dy = e.y - p.y, d = fhypot(dx, dy) || 1;
     e.x += (dx / d) * speed * dt; e.y += (dy / d) * speed * dt; e.moving = true;
     if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1;
   } else {
-    if (e.stateT > 0.6 || e.state !== 'roam') { setState(e, 'roam'); const a = rand(w) * Math.PI * 2; e.dirX = Math.cos(a); e.dirY = Math.sin(a); }
+    if (e.stateT > 0.6 || e.state !== 'roam') { setState(e, 'roam'); const a = rand(w) * Math.PI * 2; e.dirX = fcos(a); e.dirY = fsin(a); }
     const v = speed * (e.frogT > 0 ? 0.4 : 0.6);
     e.x += e.dirX * v * dt; e.y += e.dirY * v * dt; e.moving = true;
   }

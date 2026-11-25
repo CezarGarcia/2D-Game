@@ -1,4 +1,5 @@
 /** Funções compartilhadas da simulação: sorteio, geometria, dano e criação de inimigos. */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyBase, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, isBossKind, isMonster, type EliteMod, type EnemyKind, type SpawnDef } from '../data/balance';
 import { BOSSES as BOSS_DEFS, MONSTERS } from '../data/bestiary';
 import { AFFINITY, affinityMult, affinitySign, kindElement, wheelAffinity } from '../data/affinity';
@@ -47,10 +48,10 @@ export function rayExit(w: World, x: number, y: number, dx: number, dy: number, 
 
 /** O ponto (x, y) está dentro da marca, com uma folga `pad`? */
 export function inTele(t: Telegraph, x: number, y: number, pad: number): boolean {
-  if (t.shape === 'circle') return Math.hypot(x - t.x, y - t.y) < t.r + pad;
+  if (t.shape === 'circle') return fhypot(x - t.x, y - t.y) < t.r + pad;
   const dx = t.x2 - t.x, dy = t.y2 - t.y, len2 = dx * dx + dy * dy || 1;
   const k = Math.max(0, Math.min(1, ((x - t.x) * dx + (y - t.y) * dy) / len2));
-  return Math.hypot(x - (t.x + dx * k), y - (t.y + dy * k)) < t.w / 2 + pad;
+  return fhypot(x - (t.x + dx * k), y - (t.y + dy * k)) < t.w / 2 + pad;
 }
 
 export function setState(e: Enemy, s: EnemyState): void {
@@ -62,7 +63,7 @@ export function setState(e: Enemy, s: EnemyState): void {
 export function targetOf(w: World, e: Enemy): { x: number; y: number } {
   if (e.charmT > 0) {
     let best: Enemy | null = null, bd = Infinity;
-    for (const o of w.enemies) { if (o === e || o.hp <= 0 || o.hidden || o.illusion || o.fake) continue; const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < bd) { bd = d; best = o; } }
+    for (const o of w.enemies) { if (o === e || o.hp <= 0 || o.hidden || o.illusion || o.fake) continue; const d = fhypot(o.x - e.x, o.y - e.y); if (d < bd) { bd = d; best = o; } }
     if (best) return best;
   }
   const decoy = w.allies.find((a) => a.kind === 'decoy' && a.hp > 0);
@@ -111,8 +112,8 @@ export function brotar(w: World, e: Enemy): void {
   const dmg = BROTAR.damage * spellScale(w) * w.stats.reactionMult, r = BROTAR.radius * w.stats.spellArea;
   emit(w, { type: 'brotar', x: e.x, y: e.y, value: r });
   for (const o of w.enemies) {
-    if (o.hp <= 0 || o.hidden || o.fake || o.state === 'spawn' || Math.hypot(o.x - e.x, o.y - e.y) > r + o.radius * 0.5) continue;
-    damageEnemy(w, o, dmg, 'reaction', Math.atan2(o.y - e.y, o.x - e.x));
+    if (o.hp <= 0 || o.hidden || o.fake || o.state === 'spawn' || fhypot(o.x - e.x, o.y - e.y) > r + o.radius * 0.5) continue;
+    damageEnemy(w, o, dmg, 'reaction', fatan2(o.y - e.y, o.x - e.x));
     if (o.hp > 0) { if (isBoss(o)) o.slowT = Math.max(o.slowT, BROTAR.root); else { o.rootT = Math.max(o.rootT, BROTAR.root * w.stats.durationMult); o.tele = null; } }
   }
   healPlayer(w, w.stats.maxHp * BROTAR.heal);
@@ -187,21 +188,21 @@ function parryAspect(w: World): void {
     /* espinhos em volta: ferem e prendem */
     const R = 150;
     for (const e of w.enemies.slice()) {
-      if (e.hp <= 0 || e.hidden || Math.hypot(e.x - p.x, e.y - p.y) > R + e.radius) continue;
-      damageEnemy(w, e, power * 1.2, 'reflect', Math.atan2(e.y - p.y, e.x - p.x), false, 'natureza');
+      if (e.hp <= 0 || e.hidden || fhypot(e.x - p.x, e.y - p.y) > R + e.radius) continue;
+      damageEnemy(w, e, power * 1.2, 'reflect', fatan2(e.y - p.y, e.x - p.x), false, 'natureza');
       if (e.hp > 0 && !isBoss(e)) { e.rootT = Math.max(e.rootT, 1); e.tele = null; }
     }
     emit(w, { type: 'heavy', x: p.x, y: p.y, value: R });
     return;
   }
   /* investida na direção da mira: fere quem está no caminho */
-  const L = 130, x0 = p.x, y0 = p.y, to = { x: p.x + Math.cos(p.aim) * L, y: p.y + Math.sin(p.aim) * L };
+  const L = 130, x0 = p.x, y0 = p.y, to = { x: p.x + fcos(p.aim) * L, y: p.y + fsin(p.aim) * L };
   clampArena(w, to, 18);
   const dx = to.x - x0, dy = to.y - y0, L2 = dx * dx + dy * dy || 1;
   for (const e of w.enemies.slice()) {
     if (e.hp <= 0 || e.hidden) continue;
     const k = Math.max(0, Math.min(1, ((e.x - x0) * dx + (e.y - y0) * dy) / L2));
-    if (Math.hypot(e.x - (x0 + dx * k), e.y - (y0 + dy * k)) < 34 + e.radius) damageEnemy(w, e, power * 1.6, 'melee', p.aim);
+    if (fhypot(e.x - (x0 + dx * k), e.y - (y0 + dy * k)) < 34 + e.radius) damageEnemy(w, e, power * 1.6, 'melee', p.aim);
   }
   p.x = to.x; p.y = to.y; p.iframes = Math.max(p.iframes, 0.3);
   emit(w, { type: 'thrust', x: p.x, y: p.y, x2: x0, y2: y0, ang: p.aim });
@@ -335,7 +336,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   if (weapon || source === 'spell') chargeSupremo(w, SUPREMO_NUM.perHit);
   const light = e.kind === 'sauva' || e.kind === 'cogumelo' || e.kind === 'piranha' || (e.kind === 'urutau' && e.state !== 'dash');
   if (source === 'melee' && light && !e.elite && !e.champion) {
-    e.kx = Math.cos(ang) * 170; e.ky = Math.sin(ang) * 170;
+    e.kx = fcos(ang) * 170; e.ky = fsin(ang) * 170;
     if ((e.kind === 'sauva' || e.kind === 'piranha') && e.state !== 'stagger' && e.state !== 'leap') { e.tele = null; setState(e, 'stagger'); }
   }
   const bdef = isBossKind(e.kind) ? BOSS_DEFS[e.kind] : null;
@@ -387,18 +388,18 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
       /* Sanfona: a onda de som afasta quem não é chefe */
       for (const o of w.enemies) {
         if (o === e || o.hp <= 0 || o.hidden || isBoss(o)) continue;
-        const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy) || 1;
+        const dx = o.x - p.x, dy = o.y - p.y, d = fhypot(dx, dy) || 1;
         if (d < 420) { o.kx = (dx / d) * 520; o.ky = (dy / d) * 520; o.tele = null; if (o.state === 'windup' || o.state === 'aim' || o.state === 'fuse') setState(o, 'stagger'); }
       }
       emit(w, { type: 'onda', x: p.x, y: p.y, ang: 0, value: 420 });
     }
     if (e.burnT > 0 && (s.passives.burnExplode || s.uniques.olhoDoBoitata)) {
       w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 110, t: 0, dur: 0.12, tick: 0, power: e.maxHp * 0.15 + s.weaponDamage * s.damageMult });
-      for (const o of w.enemies) if (o !== e && o.hp > 0 && Math.hypot(o.x - e.x, o.y - e.y) < 130) applyElement(w, o, 'fogo');
+      for (const o of w.enemies) if (o !== e && o.hp > 0 && fhypot(o.x - e.x, o.y - e.y) < 130) applyElement(w, o, 'fogo');
     }
     if (e.wisp) {
       let near: Enemy | null = null, bd = 300;
-      for (const o of w.enemies) { if (o === e || o.hp <= 0 || o.illusion) continue; const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < bd) { bd = d; near = o; } }
+      for (const o of w.enemies) { if (o === e || o.hp <= 0 || o.illusion) continue; const d = fhypot(o.x - e.x, o.y - e.y); if (d < bd) { bd = d; near = o; } }
       if (near) { near.curseT = Math.max(near.curseT, 6); near.wisp = true; applyElement(w, near, 'fogo'); emit(w, { type: 'reaction', x: near.x, y: near.y, kind: 'fogoFatuo' }); }
     }
     emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id, value: isBoss(e) ? 3 : e.elite ? 2 : e.champion ? 1 : 0 });
@@ -519,7 +520,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
     else if (el === 'encanto' && rand(w) < 0.3) p.confuseT = 0.8;
   }
   if (src && src.mods.includes('vampirico') && src.hp > 0) src.hp = Math.min(src.maxHp, src.hp + src.maxHp * MOD.vampirico.heal);
-  const dx = p.x - fromX, dy = p.y - fromY, d = Math.hypot(dx, dy) || 1;
+  const dx = p.x - fromX, dy = p.y - fromY, d = fhypot(dx, dy) || 1;
   p.kx = (dx / d) * knock; p.ky = (dy / d) * knock;
   emit(w, { type: 'hurt', x: p.x, y: p.y, value: dmg, kind: o.soft ? 'soft' : undefined, text: src?.kind ?? (o.element ?? 'chao') });
   if (p.stoneT > 0) { p.kx *= 0.1; p.ky *= 0.1; }

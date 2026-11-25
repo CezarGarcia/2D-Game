@@ -1,4 +1,5 @@
 /** Herói, feitiços, projéteis, efeitos no chão e companheiro. */
+import { fatan2, fcos, fexp, fhypot, fsin } from './fmath';
 import { ENEMY, PLAYER, PUDDLE_SLOW } from '../data/balance';
 import { COMPANIONS, SPELLS, SPELL_LEVEL_POWER, SPELL_NUM, SUPREMO_NUM, type SpellId } from '../data/content';
 import {
@@ -36,7 +37,7 @@ export function spellCost(w: World, slot: number, id: SpellId): number {
 
 function shot(w: World, kind: Projectile['kind'], x: number, y: number, ang: number, speed: number, range: number, damage: number): Projectile {
   const pr: Projectile = {
-    id: w.nextId++, kind, x, y, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed, dist: 0, range, damage,
+    id: w.nextId++, kind, x, y, vx: fcos(ang) * speed, vy: fsin(ang) * speed, dist: 0, range, damage,
     pierce: false, hit: [], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner: 0,
   };
   w.projectiles.push(pr);
@@ -46,8 +47,8 @@ function shot(w: World, kind: Projectile['kind'], x: number, y: number, ang: num
 /* ---------- ações do herói ---------- */
 
 function startDodge(w: World, inp: Input): void {
-  const p = w.player, len = Math.hypot(inp.mx, inp.my);
-  if (len > 0.1) { p.dx = inp.mx / len; p.dy = inp.my / len; } else { p.dx = Math.cos(p.aim); p.dy = Math.sin(p.aim); }
+  const p = w.player, len = fhypot(inp.mx, inp.my);
+  if (len > 0.1) { p.dx = inp.mx / len; p.dy = inp.my / len; } else { p.dx = fcos(p.aim); p.dy = fsin(p.aim); }
   p.state = 'dodge'; p.stateT = 0; p.charge = 0; p.surf = 0;
   p.iframes = PLAYER.dodge.iframes; p.dodgeCharges--; p.perfectUsed = false; p.bufDodge = 0; p.rolled = []; p.surfKind = 'dodge';
   onDodge(w);
@@ -57,7 +58,7 @@ function startDodge(w: World, inp: Input): void {
 function startAttack(w: World, aim: number, combo: number): void {
   const p = w.player;
   p.state = 'attack'; p.stateT = 0; p.combo = combo; p.hitDone = false;
-  p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1; p.bufAttack = 0;
+  p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1; p.bufAttack = 0;
   emit(w, { type: 'swing', x: p.x, y: p.y, ang: aim, value: combo });
 }
 
@@ -85,16 +86,16 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
   let hits = 0;
   for (const e of w.enemies) {
     if (!hittable(e)) continue;
-    const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy);
+    const dx = e.x - p.x, dy = e.y - p.y, d = fhypot(dx, dy);
     if (d > range + e.radius) continue;
-    if (!wide && Math.abs(wrapAngle(Math.atan2(dy, dx) - p.aim)) > a.arc && d > e.radius + 22) continue;
-    damageEnemy(w, e, dmg, 'melee', wide ? Math.atan2(dy, dx) : p.aim);
+    if (!wide && Math.abs(wrapAngle(fatan2(dy, dx) - p.aim)) > a.arc && d > e.radius + 22) continue;
+    damageEnemy(w, e, dmg, 'melee', wide ? fatan2(dy, dx) : p.aim);
     if (last) finisher(w, e);
     hits++;
   }
-  if (last && hits > 0) finisherGround(w, p.x + Math.cos(p.aim) * range * 0.7, p.y + Math.sin(p.aim) * range * 0.7);
+  if (last && hits > 0) finisherGround(w, p.x + fcos(p.aim) * range * 0.7, p.y + fsin(p.aim) * range * 0.7);
   if (last && s.aspect === 'peixeirasLampiao') {
-    for (const off of [-0.13, 0.13]) { const pr = shot(w, 'arrow', p.x + Math.cos(p.aim + off) * 20, p.y + Math.sin(p.aim + off) * 20, p.aim + off, PLAYER.bow.speed, 420, weaponDamage(w, 0.6)); pr.pierce = true; }
+    for (const off of [-0.13, 0.13]) { const pr = shot(w, 'arrow', p.x + fcos(p.aim + off) * 20, p.y + fsin(p.aim + off) * 20, p.aim + off, PLAYER.bow.speed, 420, weaponDamage(w, 0.6)); pr.pierce = true; }
     emit(w, { type: 'shoot', x: p.x, y: p.y, ang: p.aim, value: 0 });
   }
   if (hits > 0) {
@@ -102,8 +103,8 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
     p.perfectT = 0; p.contraT = 0;
   }
   if (w.pots.length || w.wisp) lootHit(w, (x, y, r) => {
-    const dx = x - p.x, dy = y - p.y, d = Math.hypot(dx, dy);
-    return d <= range + r && (wide || d <= r + 22 || Math.abs(wrapAngle(Math.atan2(dy, dx) - p.aim)) <= a.arc);
+    const dx = x - p.x, dy = y - p.y, d = fhypot(dx, dy);
+    return d <= range + r && (wide || d <= r + 22 || Math.abs(wrapAngle(fatan2(dy, dx) - p.aim)) <= a.arc);
   });
 }
 
@@ -116,10 +117,10 @@ function fireStaff(w: World, aim: number): void {
   }
   for (let i = 0; i < n; i++) {
     const a = aim + (i - (n - 1) / 2) * 0.12;
-    const pr = shot(w, 'staff', p.x + Math.cos(a) * 26, p.y - 4 + Math.sin(a) * 26, a, C.speed, C.range, weaponDamage(w, C.mult));
+    const pr = shot(w, 'staff', p.x + fcos(a) * 26, p.y - 4 + fsin(a) * 26, a, C.speed, C.range, weaponDamage(w, C.mult));
     pr.element = p.lastElement; pr.pierce = s.pierce;
   }
-  p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+  p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
   p.shotCd = C.interval / attackSpeed(w); p.bufAttack = 0; p.perfectT = 0; p.contraT = 0;
   emit(w, { type: 'shoot', x: p.x, y: p.y, ang: aim, value: 0, kind: p.lastElement });
 }
@@ -127,13 +128,13 @@ function fireStaff(w: World, aim: number): void {
 /** Golpe carregado da borduna (bate no chão à frente) e estocada da zagaia (atravessa a fila). */
 function releaseHeavy(w: World, aim: number, charge: number): void {
   const p = w.player, s = w.stats;
-  p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+  p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
   if (s.weapon === 'borduna') {
-    const H = PLAYER.weapons.borduna.heavy, k = 0.4 + 0.6 * charge, cx = p.x + Math.cos(aim) * H.offset, cy = p.y + Math.sin(aim) * H.offset, r = H.radius * s.reachMult;
+    const H = PLAYER.weapons.borduna.heavy, k = 0.4 + 0.6 * charge, cx = p.x + fcos(aim) * H.offset, cy = p.y + fsin(aim) * H.offset, r = H.radius * s.reachMult;
     const dmg = weaponDamage(w, H.mult * k * s.thirdHitMult);
     let struck = 0;
     for (const e of w.enemies) {
-      if (!hittable(e) || Math.hypot(e.x - cx, e.y - cy) > r + e.radius * 0.5) continue;
+      if (!hittable(e) || fhypot(e.x - cx, e.y - cy) > r + e.radius * 0.5) continue;
       damageEnemy(w, e, dmg, 'melee', aim);
       struck++;
       finisher(w, e);
@@ -141,15 +142,15 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
       if (charge >= 0.6) { e.crackT = Math.max(e.crackT, H.crack); if (isBoss(e)) e.posture = Math.min(100, e.posture + H.posture); }
       if (s.uniques.garraDoMapinguari) { e.crackT = Math.max(e.crackT, 8); if (!isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; } }
     }
-    lootHit(w, (x, y, rr) => Math.hypot(x - cx, y - cy) <= r + rr * 0.5);
+    lootHit(w, (x, y, rr) => fhypot(x - cx, y - cy) <= r + rr * 0.5);
     if (s.aspect === 'bordunaPaje' && struck > 0) healPlayer(w, s.maxHp * Math.min(0.12, 0.03 * struck));
     if (s.aspect === 'bordunaMapinguari') {
       /* a fenda segue em linha a partir de onde a borduna bateu */
-      const L = 300, ex = cx + Math.cos(aim) * L, ey = cy + Math.sin(aim) * L;
+      const L = 300, ex = cx + fcos(aim) * L, ey = cy + fsin(aim) * L;
       for (const e of w.enemies) {
         if (!hittable(e)) continue;
         const k = Math.max(0, Math.min(1, ((e.x - cx) * (ex - cx) + (e.y - cy) * (ey - cy)) / (L * L)));
-        if (Math.hypot(e.x - (cx + (ex - cx) * k), e.y - (cy + (ey - cy) * k)) > 34 + e.radius) continue;
+        if (fhypot(e.x - (cx + (ex - cx) * k), e.y - (cy + (ey - cy) * k)) > 34 + e.radius) continue;
         damageEnemy(w, e, dmg * 0.6, 'melee', aim, false, 'terra');
         if (e.hp > 0 && !isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; }
       }
@@ -159,15 +160,15 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     emit(w, { type: 'heavy', x: cx, y: cy, value: r });
   } else {
     const Z = PLAYER.weapons.zagaia.thrust, len = Z.len * s.reachMult * (0.6 + 0.4 * charge), dmg = weaponDamage(w, Z.mult * (0.5 + 0.5 * charge) * s.thirdHitMult);
-    const ex = p.x + Math.cos(aim) * len, ey = p.y + Math.sin(aim) * len;
+    const ex = p.x + fcos(aim) * len, ey = p.y + fsin(aim) * len;
     for (const e of w.enemies) {
       if (!hittable(e)) continue;
       const L2 = len * len, k = Math.max(0, Math.min(1, ((e.x - p.x) * (ex - p.x) + (e.y - p.y) * (ey - p.y)) / L2));
-      if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) {
+      if (fhypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) {
         damageEnemy(w, e, dmg, 'melee', aim); finisher(w, e);
         if (s.aspect === 'zagaiaPescador' && e.hp > 0) {
           applyElement(w, e, 'agua');
-          if (!isBoss(e)) { const d = Math.hypot(e.x - p.x, e.y - p.y) || 1, to = Math.max(60, d - 90); e.x = p.x + ((e.x - p.x) / d) * to; e.y = p.y + ((e.y - p.y) / d) * to; e.kx = 0; e.ky = 0; }
+          if (!isBoss(e)) { const d = fhypot(e.x - p.x, e.y - p.y) || 1, to = Math.max(60, d - 90); e.x = p.x + ((e.x - p.x) / d) * to; e.y = p.y + ((e.y - p.y) / d) * to; e.kx = 0; e.ky = 0; }
         }
       }
     }
@@ -177,9 +178,9 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     finisherGround(w, (p.x + ex) / 2, (p.y + ey) / 2);
     lootHit(w, (x, y, rr) => {
       const k = Math.max(0, Math.min(1, ((x - p.x) * (ex - p.x) + (y - p.y) * (ey - p.y)) / (len * len)));
-      return Math.hypot(x - (p.x + (ex - p.x) * k), y - (p.y + (ey - p.y) * k)) < Z.width / 2 + rr;
+      return fhypot(x - (p.x + (ex - p.x) * k), y - (p.y + (ey - p.y) * k)) < Z.width / 2 + rr;
     });
-    p.x += Math.cos(aim) * 40; p.y += Math.sin(aim) * 40;
+    p.x += fcos(aim) * 40; p.y += fsin(aim) * 40;
     emit(w, { type: 'thrust', x: p.x, y: p.y, x2: ex, y2: ey, ang: aim });
   }
   p.perfectT = 0; p.contraT = 0;
@@ -193,10 +194,10 @@ function fireArrow(w: World, aim: number, charge: number): void {
   const dmg = weaponDamage(w, B.mult * (strong ? (1 + (B.chargeMult - 1) * charge) * s.thirdHitMult : 1));
   for (let i = 0; i < n; i++) {
     const a = aim + (i - (n - 1) / 2) * 0.085;
-    const pr = shot(w, 'arrow', p.x + Math.cos(a) * 22, p.y + Math.sin(a) * 22, a, B.speed * (strong ? 1.15 : 1), B.range, dmg);
+    const pr = shot(w, 'arrow', p.x + fcos(a) * 22, p.y + fsin(a) * 22, a, B.speed * (strong ? 1.15 : 1), B.range, dmg);
     pr.pierce = charge >= 0.6 || s.pierce; pr.charged = strong;
   }
-  p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+  p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
   p.shotCd = B.interval / attackSpeed(w); p.bufAttack = 0;
   p.perfectT = 0; p.contraT = 0;
   emit(w, { type: 'shoot', x: p.x, y: p.y, ang: aim, value: strong ? 1 : 0 });
@@ -205,7 +206,7 @@ function fireArrow(w: World, aim: number, charge: number): void {
 function aimPoint(w: World, inp: Input, range: number): { x: number; y: number } {
   const p = w.player;
   let dx = inp.aimX - p.x, dy = inp.aimY - p.y;
-  const d = Math.hypot(dx, dy) || 1;
+  const d = fhypot(dx, dy) || 1;
   if (d > range) { dx = (dx / d) * range; dy = (dy / d) * range; }
   const pos = { x: p.x + dx, y: p.y + dy };
   clampArena(w, pos, 10);
@@ -222,20 +223,20 @@ function castSpell(w: World, slot: number, id: SpellId, aim: number, inp: Input)
   p.cds[slot] = echo ? Math.min(0.5, p.cdMax[slot]) : p.cdMax[slot];
   if (free || echo) emit(w, { type: 'freecast', x: p.x, y: p.y, kind: echo ? 'eco' : 'fluxo' });
   p.bufSpell[slot] = 0;
-  p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+  p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
   if (castNewSpell(w, id, aim, inp.aimX, inp.aimY, power, lv)) { emit(w, { type: 'cast', x: p.x, y: p.y, ang: aim, kind: id }); return; }
   if (id === 'dardo') {
     const N = SPELL_NUM.dardo, n = N.count + s.projectiles;
     for (let i = 0; i < n; i++) {
       const a = aim + (i - (n - 1) / 2) * N.spread;
-      shot(w, 'thorn', p.x + Math.cos(a) * 26, p.y + Math.sin(a) * 26, a, N.speed, N.range, N.damage * power).pierce = s.pierce;
+      shot(w, 'thorn', p.x + fcos(a) * 26, p.y + fsin(a) * 26, a, N.speed, N.range, N.damage * power).pierce = s.pierce;
     }
   } else if (id === 'sementes') {
     const N = SPELL_NUM.sementes, pos = aimPoint(w, inp, N.range);
     w.zones.push({ id: w.nextId++, kind: 'sementes', x: pos.x, y: pos.y, r: N.radius * area, t: 0, dur: N.delay, tick: 0, power: N.damage * power });
   } else if (id === 'cipo') {
     const N = SPELL_NUM.cipo;
-    shot(w, 'cipo', p.x + Math.cos(aim) * 24, p.y + Math.sin(aim) * 24, aim, N.speed, N.range, N.damage * power);
+    shot(w, 'cipo', p.x + fcos(aim) * 24, p.y + fsin(aim) * 24, aim, N.speed, N.range, N.damage * power);
   } else if (id === 'casca') {
     p.cascaT = SPELL_NUM.casca.duration * dur * (1 + 0.05 * (lv - 1));
   } else if (id === 'broto') {
@@ -243,14 +244,14 @@ function castSpell(w: World, slot: number, id: SpellId, aim: number, inp: Input)
     w.zones.push({ id: w.nextId++, kind: 'broto', x: p.x, y: p.y, r: N.radius * area, t: 0, dur: N.duration * dur, tick: 0.5, power: N.healPerSecond * spellLevelPower(lv) });
   } else if (id === 'jato') {
     const N = SPELL_NUM.jato;
-    shot(w, 'jet', p.x + Math.cos(aim) * 26, p.y + Math.sin(aim) * 26, aim, N.speed, N.range, N.damage * power).pierce = true;
+    shot(w, 'jet', p.x + fcos(aim) * 26, p.y + fsin(aim) * 26, aim, N.speed, N.range, N.damage * power).pierce = true;
   } else if (id === 'onda') {
     const N = SPELL_NUM.onda, r = N.radius * area;
     for (const e of w.enemies) {
       if (!hittable(e)) continue;
-      const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
-      if (d > r + e.radius || (Math.abs(wrapAngle(Math.atan2(dy, dx) - aim)) > N.arc && d > e.radius + 30)) continue;
-      damageEnemy(w, e, N.damage * power, 'spell', Math.atan2(dy, dx), false, 'agua');
+      const dx = e.x - p.x, dy = e.y - p.y, d = fhypot(dx, dy) || 1;
+      if (d > r + e.radius || (Math.abs(wrapAngle(fatan2(dy, dx) - aim)) > N.arc && d > e.radius + 30)) continue;
+      damageEnemy(w, e, N.damage * power, 'spell', fatan2(dy, dx), false, 'agua');
       if (e.hp > 0) {
         wet(w, e);
         const heavy = isBoss(e) || e.elite || e.kind === 'tronco' || e.kind === 'cuspidor' || e.kind === 'jacare' || e.kind === 'caramujo';
@@ -260,11 +261,11 @@ function castSpell(w: World, slot: number, id: SpellId, aim: number, inp: Input)
     emit(w, { type: 'onda', x: p.x, y: p.y, ang: aim, value: r });
   } else if (id === 'bolha') {
     const N = SPELL_NUM.bolha;
-    shot(w, 'bubble', p.x + Math.cos(aim) * 26, p.y + Math.sin(aim) * 26, aim, N.speed, N.range, N.damage * power);
+    shot(w, 'bubble', p.x + fcos(aim) * 26, p.y + fsin(aim) * 26, aim, N.speed, N.range, N.damage * power);
   } else if (id === 'correnteza') {
     const N = SPELL_NUM.correnteza;
     p.state = 'dodge'; p.stateT = 0; p.charge = 0; p.surf = N.damage * power; p.surfKind = 'correnteza';
-    p.dx = Math.cos(aim); p.dy = Math.sin(aim); p.iframes = N.duration + 0.08; p.perfectUsed = true; p.rolled = [];
+    p.dx = fcos(aim); p.dy = fsin(aim); p.iframes = N.duration + 0.08; p.perfectUsed = true; p.rolled = [];
     emit(w, { type: 'correnteza', x: p.x, y: p.y, ang: aim });
   } else {
     const N = SPELL_NUM.chuva, pos = aimPoint(w, inp, N.range);
@@ -293,7 +294,7 @@ function castSupremo(w: World): void {
     } else {
       const N = SUPREMO_NUM.agua;
       if (!boss && e.kind !== 'cuspidor') {
-        const dx = e.x - cx, dy = e.y - cy, d = Math.hypot(dx, dy) || 1, to = Math.min(d, N.pullTo + (e.id % 5) * 14);
+        const dx = e.x - cx, dy = e.y - cy, d = fhypot(dx, dy) || 1, to = Math.min(d, N.pullTo + (e.id % 5) * 14);
         e.x = cx + (dx / d) * to; e.y = cy + (dy / d) * to; e.kx = e.ky = 0; e.tele = null;
         if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'charge' || e.state === 'leap') { e.state = 'stagger'; e.stateT = 0; }
       }
@@ -319,7 +320,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (p.heldT > 0 || p.sleepT > 0) {
     p.heldT = max0(p.heldT - dt); p.sleepT = max0(p.sleepT - dt);
     p.iframes = max0(p.iframes - dt); p.hurtInv = max0(p.hurtInv - dt);
-    const decay = Math.exp(-10 * dt);
+    const decay = fexp(-10 * dt);
     p.x += p.kx * dt; p.y += p.ky * dt; p.kx *= decay; p.ky *= decay;
     p.moving = false; p.vx = 0; p.vy = 0; p.state = 'idle'; p.charge = 0;
     clampArena(w, p, PLAYER.radius);
@@ -352,7 +353,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
       if (p.novaT >= s.bless.novaEvery) {
         p.novaT = 0;
         const N = SPELL_NUM.dardo, n = 8 * s.nova, off = rand(w) * 6.283;
-        for (let i = 0; i < n; i++) { const a = off + (i * 6.283) / n; shot(w, 'thorn', p.x + Math.cos(a) * 20, p.y + Math.sin(a) * 20, a, N.speed, 360, N.damage * spellScale(w) * 0.9 * s.bless.novaMult).pierce = s.pierce || s.bless.novaPierce; }
+        for (let i = 0; i < n; i++) { const a = off + (i * 6.283) / n; shot(w, 'thorn', p.x + fcos(a) * 20, p.y + fsin(a) * 20, a, N.speed, 360, N.damage * spellScale(w) * 0.9 * s.bless.novaMult).pierce = s.pierce || s.bless.novaPierce; }
         emit(w, { type: 'nova', x: p.x, y: p.y });
       }
     }
@@ -360,12 +361,12 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   if (inp.supremoPressed && w.supremo && p.supremo >= 100 && fighting) castSupremo(w);
 
   const free = s.uniques.escamaDaIara;
-  p.inPuddle = w.flooded || w.puddles.some((q) => Math.hypot(p.x - q.x, p.y - q.y) < q.r);
-  const decay = Math.exp(-10 * dt);
+  p.inPuddle = w.flooded || w.puddles.some((q) => fhypot(p.x - q.x, p.y - q.y) < q.r);
+  const decay = fexp(-10 * dt);
   p.x += p.kx * dt; p.y += p.ky * dt; p.kx *= decay; p.ky *= decay;
   if (w.current && !free && p.state !== 'dodge' && w.phase === 'fight') p.x += w.current * dt;
-  const aim = Math.atan2(inp.aimY - p.y, inp.aimX - p.x);
-  const len = Math.hypot(inp.mx, inp.my);
+  const aim = fatan2(inp.aimY - p.y, inp.aimX - p.x);
+  const len = fhypot(inp.mx, inp.my);
   const speed = s.moveSpeed * (p.slowT > 0 ? 0.5 : 1) * (p.inPuddle && !free ? PUDDLE_SLOW : 1) * (p.wolfT > 0 ? 1 + SUPREMO_NUM.sombra.speed : 1) * (p.stoneT > 0 ? 0.85 : 1) * (1 + buffPower(w, 'vento')) * (1 + WIND.perStack * p.windStacks);
   const as = attackSpeed(w);
   p.vx = 0; p.vy = 0; p.moving = false;
@@ -386,7 +387,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
       /* Igarapé: raízes em volta de quem bebeu */
       const r = 210 * s.spellArea;
       for (const e of w.enemies) {
-        if (!hittable(e) || Math.hypot(e.x - p.x, e.y - p.y) > r + e.radius * 0.5) continue;
+        if (!hittable(e) || fhypot(e.x - p.x, e.y - p.y) > r + e.radius * 0.5) continue;
         if (isBoss(e)) e.slowT = Math.max(e.slowT, 2); else { e.rootT = Math.max(e.rootT, 2 * s.durationMult); e.tele = null; }
         applyElement(w, e, 'natureza');
       }
@@ -407,18 +408,18 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
     p.x += p.vx * dt; p.y += p.vy * dt;
     if (surf || s.talents.rolamentoCortante) {
       for (const e of w.enemies) {
-        if (!hittable(e) || p.rolled.includes(e.id) || Math.hypot(e.x - p.x, e.y - p.y) > e.radius + P.radius + (surf ? 22 : 8)) continue;
+        if (!hittable(e) || p.rolled.includes(e.id) || fhypot(e.x - p.x, e.y - p.y) > e.radius + P.radius + (surf ? 22 : 8)) continue;
         p.rolled.push(e.id);
-        if (surf && vento) { damageEnemy(w, e, p.surf, 'spell', Math.atan2(p.dy, p.dx), false, 'tempestade'); if (e.hp > 0) { applyElement(w, e, 'tempestade'); if (!isBoss(e)) { e.kx = p.dx * SPELL_NUM.pedevento.knock; e.ky = p.dy * SPELL_NUM.pedevento.knock; } } }
-        else if (surf) { damageEnemy(w, e, p.surf, 'spell', Math.atan2(p.dy, p.dx), false, 'agua'); wet(w, e); }
-        else damageEnemy(w, e, s.weaponDamage * s.damageMult * weaponBonus(w) * P.rolamentoMult, 'roll', Math.atan2(p.dy, p.dx));
+        if (surf && vento) { damageEnemy(w, e, p.surf, 'spell', fatan2(p.dy, p.dx), false, 'tempestade'); if (e.hp > 0) { applyElement(w, e, 'tempestade'); if (!isBoss(e)) { e.kx = p.dx * SPELL_NUM.pedevento.knock; e.ky = p.dy * SPELL_NUM.pedevento.knock; } } }
+        else if (surf) { damageEnemy(w, e, p.surf, 'spell', fatan2(p.dy, p.dx), false, 'agua'); wet(w, e); }
+        else damageEnemy(w, e, s.weaponDamage * s.damageMult * weaponBonus(w) * P.rolamentoMult, 'roll', fatan2(p.dy, p.dx));
       }
     }
     if (p.stateT >= total) { p.state = 'idle'; p.surf = 0; p.surfKind = 'dodge'; }
   } else if (p.state === 'attack') {
     const combo = comboOf(s.weapon), a = combo[Math.min(p.combo, combo.length - 1)], windup = a.windup / as, total = a.total / as;
     p.stateT += dt;
-    if (p.stateT < windup + 0.08) { p.x += Math.cos(p.aim) * a.lunge * dt; p.y += Math.sin(p.aim) * a.lunge * dt; }
+    if (p.stateT < windup + 0.08) { p.x += fcos(p.aim) * a.lunge * dt; p.y += fsin(p.aim) * a.lunge * dt; }
     if (!p.hitDone && p.stateT >= windup) { p.hitDone = true; meleeHit(w, a, p.combo === combo.length - 1); }
     if (p.hitDone && p.bufDodge > 0 && p.dodgeCharges > 0) startDodge(w, inp);
     else if (p.stateT >= total) {
@@ -426,14 +427,14 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
       else { p.state = 'idle'; p.comboT = P.comboWindow; }
     }
   } else if (p.state === 'block') {
-    p.blockT += dt; p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+    p.blockT += dt; p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
     walkBy(P.shield.moveMult);
     if (p.bufDodge > 0 && p.dodgeCharges > 0) startDodge(w, inp);
     else if (!inp.altHeld) p.state = 'idle';
   } else if (p.state === 'charge') {
     const heavy = s.weapon === 'borduna' ? P.weapons.borduna.heavy : s.weapon === 'zagaia' ? P.weapons.zagaia.thrust : null;
     p.charge = Math.min(1, p.charge + (dt / (heavy ? heavy.chargeTime : P.bow.chargeTime)) * as);
-    p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+    p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
     walkBy(heavy ? heavy.moveMult : P.bow.chargeMoveMult);
     if (p.bufDodge > 0 && p.dodgeCharges > 0) startDodge(w, inp);
     else if (!inp.altHeld) { if (heavy) releaseHeavy(w, aim, p.charge); else fireArrow(w, aim, p.charge); p.charge = 0; p.state = 'idle'; }
@@ -443,7 +444,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
     const bow = s.weapon === 'arco', staff = s.weapon === 'cajado', ranged = bow || staff, shooting = ranged && (inp.attackHeld || p.bufAttack > 0);
     const chargeable = bow || s.weapon === 'borduna' || s.weapon === 'zagaia';
     walkBy(shooting ? P.bow.shotSlow : 1);
-    p.aim = aim; p.facing = Math.cos(aim) >= 0 ? 1 : -1;
+    p.aim = aim; p.facing = fcos(aim) >= 0 ? 1 : -1;
     if (p.bufDodge > 0 && p.dodgeCharges > 0) startDodge(w, inp);
     else if (inp.altHeld && chargeable) { if (p.shotCd <= 0) { p.state = 'charge'; p.charge = 0; } }
     else if (inp.altHeld && s.hasShield) { p.state = 'block'; p.blockT = 0; }
@@ -463,7 +464,7 @@ export function updatePlayer(w: World, inp: Input, dt: number): void {
   }
   if (s.bless.fireTrail && fighting) {
     /* Rastro Aceso: uma labareda a cada tanto de chão andado */
-    p.trailD += Math.hypot(p.vx, p.vy) * dt;
+    p.trailD += fhypot(p.vx, p.vy) * dt;
     if (p.trailD >= 72) {
       p.trailD = 0;
       w.zones.push({ id: w.nextId++, kind: 'fire', x: p.x, y: p.y, r: 40, t: 0, dur: 2.4, tick: 0.5, power: s.weaponDamage * s.damageMult * 0.3 });
@@ -506,7 +507,7 @@ export function updateProjectiles(w: World, dt: number): void {
       if (pr.kind === 'glob') w.zones.push({ id: w.nextId++, kind: 'puddle', x: pr.tx, y: pr.ty, r: r * 1.15, t: 0, dur: ENEMY.sapo.puddle, tick: 0, power: 0 });
       return false;
     }
-    const sp = Math.hypot(pr.vx, pr.vy);
+    const sp = fhypot(pr.vx, pr.vy);
     pr.x += pr.vx * dt; pr.y += pr.vy * dt; pr.dist += sp * dt;
     const inside = pr.x > a.x0 - 80 && pr.x < a.x1 + 80 && pr.y > a.y0 - 80 && pr.y < a.y1 + 80;
     if (pr.dist >= pr.range || !inside) return false;
@@ -528,21 +529,21 @@ export function updateProjectiles(w: World, dt: number): void {
     }
     if (pr.kind === 'ethorn' || pr.kind === 'stampede' || pr.kind === 'sting' || pr.kind === 'eproj' || pr.kind === 'spin') {
       const r = pr.kind === 'stampede' ? 34 : pr.kind === 'spin' ? 20 : 14, pass = pr.kind === 'stampede' || pr.kind === 'spin';
-      if (!pr.hit.includes(-1) && Math.hypot(p.x - pr.x, p.y - pr.y) < r + PLAYER.radius * 0.5) {
+      if (!pr.hit.includes(-1) && fhypot(p.x - pr.x, p.y - pr.y) < r + PLAYER.radius * 0.5) {
         pr.hit.push(-1);
         const src = w.enemies.find((e) => e.id === pr.owner) ?? null;
         hurtPlayer(w, pr.damage, pr.x - pr.vx * 0.05, pr.y - pr.vy * 0.05, pr.kind === 'stampede' ? 520 : 180, { src, nature: pr.kind === 'ethorn', element: pr.element });
         if (!pass) return false;
       }
-      if (pet && pet.state !== 'down' && !pr.hit.includes(-2) && Math.hypot(pet.x - pr.x, pet.y - pr.y) < r + 12) { pr.hit.push(-2); hurtPet(w, pr.damage); if (!pass) return false; }
+      if (pet && pet.state !== 'down' && !pr.hit.includes(-2) && fhypot(pet.x - pr.x, pet.y - pr.y) < r + 12) { pr.hit.push(-2); hurtPet(w, pr.damage); if (!pass) return false; }
       return true;
     }
 
     /* potes e Mãe-do-Ouro: o disparo acerta e segue em frente, para não roubar golpe dos monstros */
-    if (w.pots.length || w.wisp) lootHit(w, (x, y, r) => Math.hypot(x - pr.x, y - pr.y) < r + 10);
+    if (w.pots.length || w.wisp) lootHit(w, (x, y, r) => fhypot(x - pr.x, y - pr.y) < r + 10);
     for (const e of w.enemies) {
-      if (!hittable(e) || pr.hit.includes(e.id) || Math.hypot(e.x - pr.x, e.y - pr.y) > e.radius + (pr.charged || pr.kind === 'bubble' ? 16 : 10)) continue;
-      const ang = Math.atan2(pr.vy, pr.vx);
+      if (!hittable(e) || pr.hit.includes(e.id) || fhypot(e.x - pr.x, e.y - pr.y) > e.radius + (pr.charged || pr.kind === 'bubble' ? 16 : 10)) continue;
+      const ang = fatan2(pr.vy, pr.vx);
       if (pr.kind === 'spell') {
         if (spellHit(w, pr, e)) return false;
         continue;
@@ -550,7 +551,7 @@ export function updateProjectiles(w: World, dt: number): void {
       if (pr.kind === 'staff') {
         damageEnemy(w, e, pr.damage, 'arrow', ang, false, pr.element ?? null);
         if (s.aspect === 'cajadoBenzedeira') {
-          for (const o of w.enemies.slice()) if (o !== e && hittable(o) && Math.hypot(o.x - e.x, o.y - e.y) <= 70 + o.radius) damageEnemy(w, o, pr.damage * 0.4, 'arrow', Math.atan2(o.y - e.y, o.x - e.x), false, pr.element ?? null);
+          for (const o of w.enemies.slice()) if (o !== e && hittable(o) && fhypot(o.x - e.x, o.y - e.y) <= 70 + o.radius) damageEnemy(w, o, pr.damage * 0.4, 'arrow', fatan2(o.y - e.y, o.x - e.x), false, pr.element ?? null);
           emit(w, { type: 'heavy', x: e.x, y: e.y, value: 70 });
         }
         p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 0.6 * s.manaPerHitMult);
@@ -573,7 +574,7 @@ export function updateProjectiles(w: World, dt: number): void {
           if (isBoss(e)) e.slowT = N.root * s.durationMult;
           else {
             e.rootT = N.root * s.durationMult; e.tele = null;
-            if (!heavy) { const d = Math.hypot(e.x - p.x, e.y - p.y) || 1; e.x = p.x + ((e.x - p.x) / d) * N.pullTo; e.y = p.y + ((e.y - p.y) / d) * N.pullTo; e.kx = 0; e.ky = 0; }
+            if (!heavy) { const d = fhypot(e.x - p.x, e.y - p.y) || 1; e.x = p.x + ((e.x - p.x) / d) * N.pullTo; e.y = p.y + ((e.y - p.y) / d) * N.pullTo; e.kx = 0; e.ky = 0; }
           }
           emit(w, { type: 'cipo', x: p.x, y: p.y, x2: e.x, y2: e.y, id: e.id });
           applyElement(w, e, 'natureza');
@@ -601,7 +602,7 @@ export function updateProjectiles(w: World, dt: number): void {
       if (pr.charged && pr.kind === 'arrow') {
         finisher(w, e); finisherGround(w, e.x, e.y);
         if (s.aspect === 'arcoCarcara' && e.hp > 0) e.markT = Math.max(e.markT, 5);
-        if (s.aspect === 'arcoIara') { for (const o of w.enemies.slice()) if (hittable(o) && Math.hypot(o.x - e.x, o.y - e.y) <= 95 + o.radius) applyElement(w, o, 'agua'); emit(w, { type: 'heavy', x: e.x, y: e.y, value: 95 }); }
+        if (s.aspect === 'arcoIara') { for (const o of w.enemies.slice()) if (hittable(o) && fhypot(o.x - e.x, o.y - e.y) <= 95 + o.radius) applyElement(w, o, 'agua'); emit(w, { type: 'heavy', x: e.x, y: e.y, value: 95 }); }
       }
       p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 0.6 * s.manaPerHitMult);
       if (!pr.pierce) return false;
@@ -622,10 +623,10 @@ export function updateZones(w: World, dt: number): void {
     if (z.kind === 'sementes') {
       if (z.t < z.dur) return true;
       const N = SPELL_NUM.sementes;
-      const inside = w.enemies.filter((e) => hittable(e) && Math.hypot(e.x - z.x, e.y - z.y) <= z.r + e.radius * 0.5);
+      const inside = w.enemies.filter((e) => hittable(e) && fhypot(e.x - z.x, e.y - z.y) <= z.r + e.radius * 0.5);
       for (const e of inside) {
         if (e.hp <= 0) continue;
-        damageEnemy(w, e, z.power, 'spell', Math.atan2(e.y - z.y, e.x - z.x), false, 'natureza');
+        damageEnemy(w, e, z.power, 'spell', fatan2(e.y - z.y, e.x - z.x), false, 'natureza');
         if (e.hp > 0) { e.slowT = N.slowDuration * s.durationMult; applyElement(w, e, 'natureza'); }
       }
       emit(w, { type: 'sementes', x: z.x, y: z.y, value: z.r });
@@ -634,26 +635,26 @@ export function updateZones(w: World, dt: number): void {
     if (z.kind === 'pop') {
       if (z.t < z.dur) return true;
       for (const e of w.enemies) {
-        if (!hittable(e) || Math.hypot(e.x - z.x, e.y - z.y) > z.r + e.radius * 0.5) continue;
-        damageEnemy(w, e, z.power, 'blast', Math.atan2(e.y - z.y, e.x - z.x));
+        if (!hittable(e) || fhypot(e.x - z.x, e.y - z.y) > z.r + e.radius * 0.5) continue;
+        damageEnemy(w, e, z.power, 'blast', fatan2(e.y - z.y, e.x - z.x));
       }
       emit(w, { type: 'pop', x: z.x, y: z.y, value: z.r });
       return false;
     }
     if (z.kind === 'whirl') {
       /* redemoinho da Iara: puxa o herói para o centro e fere quem fica dentro */
-      const dx = z.x - p.x, dy = z.y - p.y, d = Math.hypot(dx, dy) || 1;
+      const dx = z.x - p.x, dy = z.y - p.y, d = fhypot(dx, dy) || 1;
       if (z.t > 0 && d < z.r * 2.4 && p.state !== 'dodge' && p.state !== 'dead' && !s.uniques.escamaDaIara) { const pull = ENEMY.iara.redemoinho.pull * (1 - d / (z.r * 2.4)); p.x += (dx / d) * pull * dt; p.y += (dy / d) * pull * dt; }
     }
     z.tick -= dt;
     if (z.tick <= 0 && z.t > 0) {
       z.tick += 0.5;
-      const inP = Math.hypot(p.x - z.x, p.y - z.y) < z.r;
+      const inP = fhypot(p.x - z.x, p.y - z.y) < z.r;
       if (z.kind === 'broto' || z.kind === 'chuva') {
         const heal = s.maxHp * z.power * 0.5 * Math.min(1.8, Math.sqrt(s.spellPower));
         if (inP) healPlayer(w, heal);
-        if (pet && pet.state !== 'down' && Math.hypot(pet.x - z.x, pet.y - z.y) < z.r) pet.hp = Math.min(pet.maxHp, pet.hp + pet.maxHp * z.power * 0.5);
-        if (z.kind === 'chuva') for (const e of w.enemies) if (hittable(e) && Math.hypot(e.x - z.x, e.y - z.y) < z.r + e.radius * 0.5) wet(w, e);
+        if (pet && pet.state !== 'down' && fhypot(pet.x - z.x, pet.y - z.y) < z.r) pet.hp = Math.min(pet.maxHp, pet.hp + pet.maxHp * z.power * 0.5);
+        if (z.kind === 'chuva') for (const e of w.enemies) if (hittable(e) && fhypot(e.x - z.x, e.y - z.y) < z.r + e.radius * 0.5) wet(w, e);
       } else if (z.kind === 'puddle') {
         if (inP && !s.uniques.escamaDaIara) p.slowT = Math.max(p.slowT, 0.55);
       } else if (inP) hurtPlayer(w, z.power, z.x, z.y, 0, { unblockable: true, nature: z.kind === 'cloud', water: z.kind === 'whirl', soft: true });
@@ -668,7 +669,7 @@ export function updateHazards(w: World, dt: number): void {
     if (h.tele.t < h.tele.dur) return true;
     const t = h.tele;
     if (h.kind === 'lane' && t.shape === 'line') {
-      const E = ENEMY.curupira.estouro, ang = Math.atan2(t.y2 - t.y, t.x2 - t.x), len = Math.hypot(t.x2 - t.x, t.y2 - t.y);
+      const E = ENEMY.curupira.estouro, ang = fatan2(t.y2 - t.y, t.x2 - t.x), len = fhypot(t.x2 - t.x, t.y2 - t.y);
       const pr = shot(w, 'stampede', t.x, t.y, ang, E.speed, len, h.damage);
       pr.pierce = true;
     } else {
@@ -713,7 +714,7 @@ export function updatePet(w: World, inp: Input, dt: number): void {
     return;
   }
   const go = (tx: number, ty: number, speed: number, stop: number): number => {
-    const dx = tx - pet.x, dy = ty - pet.y, d = Math.hypot(dx, dy);
+    const dx = tx - pet.x, dy = ty - pet.y, d = fhypot(dx, dy);
     if (d > stop) {
       pet.x += (dx / d) * Math.min(speed * dt, d - stop + 0.1); pet.y += (dy / d) * Math.min(speed * dt, d - stop + 0.1);
       pet.walk += speed * dt * 0.09; pet.moving = true;
@@ -725,8 +726,8 @@ export function updatePet(w: World, inp: Input, dt: number): void {
   let near: Enemy | null = null, best = Infinity;
   for (const e of w.enemies) {
     if (!hittable(e) || e.fake) continue;
-    const d = Math.hypot(e.x - pet.x, e.y - pet.y);
-    if (d < best && Math.hypot(e.x - p.x, e.y - p.y) < 460) { best = d; near = e; }
+    const d = fhypot(e.x - pet.x, e.y - pet.y);
+    if (d < best && fhypot(e.x - p.x, e.y - p.y) < 460) { best = d; near = e; }
   }
 
   const mult = s.petDouble ? 2 : 1, ability = def.ability;
@@ -737,9 +738,9 @@ export function updatePet(w: World, inp: Input, dt: number): void {
     const t = w.enemies.find((e) => e.id === pet.target), dur = ability === 'roll' ? 0.5 : 0.28, k = Math.min(1, pet.stateT / dur);
     if (!t || t.hp <= 0) { pet.state = 'follow'; return; }
     pet.x = pet.sx + (t.x - pet.sx) * k; pet.y = pet.sy + (t.y - pet.sy) * k; pet.facing = t.x >= pet.sx ? 1 : -1;
-    if (ability === 'roll') for (const e of w.enemies) if (hittable(e) && !isBoss(e) && Math.hypot(e.x - pet.x, e.y - pet.y) < e.radius + 20 && e.stunT <= 0) { e.stunT = 1.2 * mult; e.tele = null; damageEnemy(w, e, petDamage(w, pet) * 2, 'pet', 0); }
+    if (ability === 'roll') for (const e of w.enemies) if (hittable(e) && !isBoss(e) && fhypot(e.x - pet.x, e.y - pet.y) < e.radius + 20 && e.stunT <= 0) { e.stunT = 1.2 * mult; e.tele = null; damageEnemy(w, e, petDamage(w, pet) * 2, 'pet', 0); }
     if (k >= 1) {
-      const ang = Math.atan2(t.y - pet.sy, t.x - pet.sx);
+      const ang = fatan2(t.y - pet.sy, t.x - pet.sx);
       if (ability === 'pounce') damageEnemy(w, t, petDamage(w, pet) * 5 * mult, 'pet', ang, true);
       else if (ability === 'dive') { damageEnemy(w, t, petDamage(w, pet) * 3, 'pet', ang); if (isBoss(t)) t.posture = Math.min(100, t.posture + 15 * mult); else { t.stunT = Math.max(t.stunT, 2 * mult); t.tele = null; } }
       else if (ability === 'steal') { damageEnemy(w, t, petDamage(w, pet) * 2, 'pet', ang); if ((t.elite || isBoss(t)) && w.steals < 1) { w.steals++; emit(w, { type: 'petAct', x: t.x, y: t.y, kind: 'afanou' }); } }
@@ -750,22 +751,22 @@ export function updatePet(w: World, inp: Input, dt: number): void {
     return;
   }
   if (inp.petPressed && pet.cd <= 0 && w.phase === 'fight') {
-    const area = (r: number, fn: (e: Enemy) => void) => { for (const e of w.enemies) if (hittable(e) && Math.hypot(e.x - (ability === 'gust' || ability === 'wave' ? p.x : pet.x), e.y - (ability === 'gust' || ability === 'wave' ? p.y : pet.y)) < r) fn(e); };
+    const area = (r: number, fn: (e: Enemy) => void) => { for (const e of w.enemies) if (hittable(e) && fhypot(e.x - (ability === 'gust' || ability === 'wave' ? p.x : pet.x), e.y - (ability === 'gust' || ability === 'wave' ? p.y : pet.y)) < r) fn(e); };
     const lunge = (t: Enemy | null) => { if (!t) return false; pet.state = 'pounce'; pet.stateT = 0; pet.target = t.id; pet.sx = pet.x; pet.sy = pet.y; pet.cd = cooldown; emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: ability }); return true; };
     if (ability === 'wave') { area(300, (e) => applyElement(w, e, 'agua')); healPlayer(w, s.maxHp * 0.1 * mult); pet.cd = cooldown; emit(w, { type: 'onda', x: p.x, y: p.y, ang: 0, value: 300 }); }
     else if (ability === 'flash') { area(300, (e) => { if (!isBoss(e)) { e.blindT = Math.max(e.blindT, 3 * mult); e.tele = null; } }); for (const e of w.enemies) if (e.hidden && !isBoss(e)) { e.hidden = false; e.stateT = 99; } pet.cd = cooldown; emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'flash' }); }
     else if (ability === 'slow') { for (const e of w.enemies) if (hittable(e)) e.slowT = Math.max(e.slowT, 4 * mult); pet.cd = cooldown; emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'slow' }); }
-    else if (ability === 'gust') { area(260, (e) => { if (!isBoss(e)) { const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1; e.kx = (dx / d) * 520 * mult; e.ky = (dy / d) * 520 * mult; e.tele = null; } }); pet.cd = cooldown; emit(w, { type: 'onda', x: p.x, y: p.y, ang: 0, value: 260, kind: 'vento' }); }
+    else if (ability === 'gust') { area(260, (e) => { if (!isBoss(e)) { const dx = e.x - p.x, dy = e.y - p.y, d = fhypot(dx, dy) || 1; e.kx = (dx / d) * 520 * mult; e.ky = (dy / d) * 520 * mult; e.tele = null; } }); pet.cd = cooldown; emit(w, { type: 'onda', x: p.x, y: p.y, ang: 0, value: 260, kind: 'vento' }); }
     else if (ability === 'silence') { area(320, (e) => { e.silenceT = Math.max(e.silenceT, 5 * mult); if (e.state === 'cast' || e.state === 'aim') { e.tele = null; e.state = 'recover'; e.stateT = 0; } }); pet.cd = cooldown; emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'silence' }); }
     else if (ability === 'confuse') { const list = w.enemies.filter((e) => hittable(e) && !isBoss(e)).slice(0, 2 * mult); for (const e of list) { e.charmT = 5; e.tele = null; } if (list.length) { pet.cd = cooldown; emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'confuse' }); } }
-    else if (ability === 'trail') { pet.tauntT = 0; pet.cd = cooldown; for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; w.zones.push({ id: w.nextId++, kind: 'fire', x: p.x + Math.cos(a) * 110, y: p.y + Math.sin(a) * 90, r: 40, t: 0, dur: 4, tick: 0.5, power: petDamage(w, pet) * 1.5 * mult }); } emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'trail' }); }
+    else if (ability === 'trail') { pet.tauntT = 0; pet.cd = cooldown; for (let i = 0; i < 10; i++) { const a = (i / 10) * Math.PI * 2; w.zones.push({ id: w.nextId++, kind: 'fire', x: p.x + fcos(a) * 110, y: p.y + fsin(a) * 90, r: 40, t: 0, dur: 4, tick: 0.5, power: petDamage(w, pet) * 1.5 * mult }); } emit(w, { type: 'petAct', x: pet.x, y: pet.y, kind: 'trail' }); }
     else if (ability === 'roll' && near) lunge(near);
     else if ((ability === 'dive' || ability === 'hug' || ability === 'bite' || ability === 'steal') && strongest) lunge(strongest);
     else if (ability === 'squeeze' && near) lunge(near);
     else if (pet.id === 'capivara') {
       const dur = s.petDouble ? 8 : 4;
       pet.tauntT = dur; pet.cd = cooldown;
-      for (const e of w.enemies) if (e.hp > 0 && !isBoss(e) && Math.hypot(e.x - pet.x, e.y - pet.y) < 320) e.aggroPet = dur;
+      for (const e of w.enemies) if (e.hp > 0 && !isBoss(e) && fhypot(e.x - pet.x, e.y - pet.y) < 320) e.aggroPet = dur;
       emit(w, { type: 'taunt', x: pet.x, y: pet.y });
     } else if (pet.id === 'arara') {
       let top: Enemy | null = null;
@@ -780,10 +781,10 @@ export function updatePet(w: World, inp: Input, dt: number): void {
   if (def.fly) {
     /* quem voa fica em volta do herói e bica de longe */
     const a = w.time * 1.6;
-    go(p.x + Math.cos(a) * 62, p.y - 46 + Math.sin(a) * 22, def.speed, 6);
+    go(p.x + fcos(a) * 62, p.y - 46 + fsin(a) * 22, def.speed, 6);
     if (near && best < reach && pet.atkCd <= 0 && w.phase === 'fight') {
       pet.atkCd = 1.25; pet.facing = near.x >= pet.x ? 1 : -1;
-      damageEnemy(w, near, petDamage(w, pet), 'pet', Math.atan2(near.y - pet.y, near.x - pet.x));
+      damageEnemy(w, near, petDamage(w, pet), 'pet', fatan2(near.y - pet.y, near.x - pet.x));
       emit(w, { type: 'pet', x: pet.x, y: pet.y, x2: near.x, y2: near.y, kind: 'bicada' });
     }
     return;
@@ -792,9 +793,9 @@ export function updatePet(w: World, inp: Input, dt: number): void {
     const d = go(near.x, near.y, def.speed, near.radius + 22);
     if (d <= near.radius + 30 && pet.atkCd <= 0) {
       pet.atkCd = 1.1;
-      damageEnemy(w, near, petDamage(w, pet), 'pet', Math.atan2(near.y - pet.y, near.x - pet.x));
+      damageEnemy(w, near, petDamage(w, pet), 'pet', fatan2(near.y - pet.y, near.x - pet.x));
       emit(w, { type: 'pet', x: pet.x, y: pet.y, kind: 'golpe' });
     }
-  } else go(p.x - 48 * p.facing, p.y + 18, def.speed * (Math.hypot(p.x - pet.x, p.y - pet.y) > 220 ? 1.6 : 1), 10);
+  } else go(p.x - 48 * p.facing, p.y + 18, def.speed * (fhypot(p.x - pet.x, p.y - pet.y) > 220 ? 1.6 : 1), 10);
   clampArena(w, pet, 12);
 }

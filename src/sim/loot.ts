@@ -5,6 +5,7 @@
  * Tudo aqui sorteia com a semente própria dos achados (`lootRand`), separada da do combate: um baú a
  * mais ou a menos não muda o que os monstros fazem, e a mesma semente dá sempre os mesmos baús.
  */
+import { fcos, fexp, fhypot, fsin } from './fmath';
 import { ARENA } from '../data/balance';
 import { BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, ELEMENT_ORDER, blessingCounts, type BlessingId } from '../data/content';
 import {
@@ -75,7 +76,7 @@ export function absorbGuard(w: World, dmg: number): number {
 
 function spawnPickup(w: World, kind: Pickup['kind'], x: number, y: number, value: number, speed = 1): void {
   const a = lootRand(w) * TAU, v = (110 + lootRand(w) * 170) * speed;
-  w.pickups.push({ id: w.nextId++, kind, x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v * 0.7, t: 0, value });
+  w.pickups.push({ id: w.nextId++, kind, x, y, vx: fcos(a) * v, vy: fsin(a) * v * 0.7, t: 0, value });
 }
 
 function coins(w: World, x: number, y: number, n: number, each: number, speed = 1): void {
@@ -103,7 +104,7 @@ function collect(w: World, k: Pickup, quiet = false): void {
 /* ---------- baús ---------- */
 
 export function dropChest(w: World, tier: ChestTier, x: number, y: number): Chest {
-  const a = lootRand(w) * TAU, d = 30 + lootRand(w) * 30, to = { x: x + Math.cos(a) * d, y: y + Math.sin(a) * d * 0.6 };
+  const a = lootRand(w) * TAU, d = 30 + lootRand(w) * 30, to = { x: x + fcos(a) * d, y: y + fsin(a) * d * 0.6 };
   clampArena(w, to, 40);
   const c: Chest = { id: w.nextId++, tier, x: to.x, y: to.y, sx: x, sy: y, t: 0, open: -1 };
   w.chests.push(c);
@@ -288,15 +289,15 @@ export function updateLoot(w: World, dt: number): void {
   for (const c of w.chests) {
     c.t += dt;
     if (c.open >= 0) c.open += dt;
-    else if (alive && !w.offer && c.t >= 0.5 && Math.hypot(p.x - c.x, p.y - c.y) < PICKUP.open) openChest(w, c);
+    else if (alive && !w.offer && c.t >= 0.5 && fhypot(p.x - c.x, p.y - c.y) < PICKUP.open) openChest(w, c);
   }
   if (w.chests.length) w.chests = w.chests.filter((c) => c.open < 0 || c.open < 1.6);
   /* moedas e orbes: atrito, ímã e coleta. Com a sala limpa, tudo corre para o herói */
   if (w.pickups.length) {
-    const reach = w.phase !== 'fight' || buffOf(w, 'ima') ? 1e9 : PICKUP.magnet, drag = Math.exp(-4 * dt);
+    const reach = w.phase !== 'fight' || buffOf(w, 'ima') ? 1e9 : PICKUP.magnet, drag = fexp(-4 * dt);
     w.pickups = w.pickups.filter((k) => {
       k.t += dt;
-      const dx = p.x - k.x, dy = p.y - 20 - k.y, d = Math.hypot(dx, dy) || 1;
+      const dx = p.x - k.x, dy = p.y - 20 - k.y, d = fhypot(dx, dy) || 1;
       if (k.t >= PICKUP.delay && alive && d < reach) {
         const v = Math.min(PICKUP.pull, 260 + 1600 * (k.t - PICKUP.delay));
         k.vx = (dx / d) * v; k.vy = (dy / d) * v;
@@ -314,14 +315,14 @@ export function updateLoot(w: World, dt: number): void {
     if (m.t >= m.dur) { emit(w, { type: 'wisp', x: m.x, y: m.y - 40, kind: 'gone' }); w.wisp = null; }
     else {
       let ax = m.x - p.x, ay = m.y - p.y;
-      const d = Math.hypot(ax, ay) || 1, wob = Math.sin(m.t * 3.1 + m.id) * 0.9;
+      const d = fhypot(ax, ay) || 1, wob = fsin(m.t * 3.1 + m.id) * 0.9;
       ax /= d; ay /= d;
       /* longe do herói ela passeia; perto, corre */
       const urge = d < 360 ? 1 : 0.45, cx = (ARENA.x0 + ARENA.x1) / 2 - m.x, cy = (ARENA.y0 + ARENA.y1) / 2 - m.y;
       let vx = ax - ay * wob + cx * 0.0015, vy = ay + ax * wob + cy * 0.0025;
-      const len = Math.hypot(vx, vy) || 1;
+      const len = fhypot(vx, vy) || 1;
       vx = (vx / len) * WISP.speed * urge; vy = (vy / len) * WISP.speed * urge;
-      const k = 1 - Math.exp(-5 * dt);
+      const k = 1 - fexp(-5 * dt);
       m.vx += (vx - m.vx) * k; m.vy += (vy - m.vy) * k;
       m.x += m.vx * dt; m.y += m.vy * dt;
       clampArena(w, m, 30);

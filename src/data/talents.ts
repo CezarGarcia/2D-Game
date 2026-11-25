@@ -4,6 +4,7 @@
  * num Dom, e dois galhos laterais. Um anel de elos liga setores vizinhos, e cada elo leva a uma joia.
  * Um nó só recebe ponto se estiver ligado a um nó que já tem ponto.
  */
+import { fcos, fsin } from '../sim/fmath';
 
 export type Sector = 'forca' | 'vitalidade' | 'agilidade' | 'inteligencia' | 'espirito' | 'sorte';
 export type TalentKind = 'raiz' | 'comum' | 'chave' | 'ligacao' | 'joia' | 'dom';
@@ -269,5 +270,5 @@ export function talentBlockReason(ranks: TalentRanks, id: string, freePoints: nu
 /** Posição cartesiana do nó, com o centro da teia em (0, 0). */
 export function talentPos(n: TalentNode): { x: number; y: number } {
   const a = (n.ang * Math.PI) / 180;
-  return { x: Math.cos(a) * n.rad, y: Math.sin(a) * n.rad };
+  return { x: fcos(a) * n.rad, y: fsin(a) * n.rad };
 }

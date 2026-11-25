@@ -3,6 +3,7 @@
  * Não depende do Phaser nem do navegador: recebe comandos, avança um passo fixo e devolve eventos.
  * Isso permite testar as regras sem tela e, mais adiante, gravar partidas e conferi-las no servidor.
  */
+import { fhypot } from './fmath';
 import { ARENA, ENEMY, PLAYER, WAVE_DELAY, WAVE_OVERLAP } from '../data/balance';
 import {
   ALTAR_PITY, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, STAGE_ONLY_BLESSINGS, awakeningsFor, blessingCounts, compadriosFor,
@@ -261,8 +262,8 @@ export function step(w: World, inp: Input, dt: number): void {
       e.exposeT = max0(e.exposeT - dt);
       /* a Casca quebrada volta depois de um tempo */
       if (e.shellMax > 0 && e.shell <= 0 && e.hp > 0) { e.shellT -= dt; if (e.shellT <= 0) { e.shell = e.shellMax; emit(w, { type: 'shellBack', x: e.x, y: e.y, id: e.id }); } }
-      e.guarded = shells.some((c) => c !== e && Math.hypot(c.x - e.x, c.y - e.y) < ENEMY.caramujo.aura * (c.elite ? 1.3 : 1));
-      if (soak && !e.hidden && (w.flooded || w.puddles.some((q) => Math.hypot(e.x - q.x, e.y - q.y) < q.r) || w.zones.some((z) => z.kind === 'puddle' && Math.hypot(e.x - z.x, e.y - z.y) < z.r))) wet(w, e);
+      e.guarded = shells.some((c) => c !== e && fhypot(c.x - e.x, c.y - e.y) < ENEMY.caramujo.aura * (c.elite ? 1.3 : 1));
+      if (soak && !e.hidden && (w.flooded || w.puddles.some((q) => fhypot(e.x - q.x, e.y - q.y) < q.r) || w.zones.some((z) => z.kind === 'puddle' && fhypot(e.x - z.x, e.y - z.y) < z.r))) wet(w, e);
       updateEnemy(w, e, dt);
     }
     separate(w);

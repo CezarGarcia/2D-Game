@@ -2,6 +2,7 @@
  * Capítulo 2, Rios do Norte: Piranha-Cinza, Sapo-Cururu, Arraia de Areia, Caramujo-Concha,
  * Jacaré de Lodo, e os chefes Boto e Iara (docs/gdd/05).
  */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { ENEMY, PLAYER, type EnemyKind } from '../data/balance';
 import { addHazard, clampArena, emit, hurtPlayer, max0, rand, rayExit, setState, spawnEnemy, strike, targetOf, wrapAngle } from './core';
 import { chargeContact, lob, moveToward } from './enemies';
@@ -16,10 +17,10 @@ interface Fan { lines: number; spread: number; delay: number; width: number; len
 
 /** Leque de jatos d'água a partir do inimigo, na direção do alvo. */
 function fan(w: World, e: Enemy, T: { x: number; y: number }, J: Fan, offset = 0, wait = 0): void {
-  const base = Math.atan2(T.y - e.y, T.x - e.x) + offset;
+  const base = fatan2(T.y - e.y, T.x - e.x) + offset;
   for (let i = 0; i < J.lines; i++) {
     const a = base + (i - (J.lines - 1) / 2) * J.spread;
-    const [x2, y2] = rayExit(w, e.x, e.y, Math.cos(a), Math.sin(a), 0, J.len);
+    const [x2, y2] = rayExit(w, e.x, e.y, fcos(a), fsin(a), 0, J.len);
     addHazard(w, { kind: 'jet', tele: { shape: 'line', x: e.x, y: e.y, x2, y2, w: J.width, t: -wait, dur: J.delay }, damage: J.damage * e.dmg, slow: 0 });
   }
 }
@@ -44,7 +45,7 @@ function diveLoop(w: World, e: Enemy, M: { aim: number; radius: number; damage: 
 
 function updateBoto(w: World, e: Enemy, dt: number): void {
   const B = ENEMY.boto, T = targetOf(w, e);
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1, slow = e.slowT > 0 ? 0.6 : 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1, slow = e.slowT > 0 ? 0.6 : 1;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
   switch (e.state) {
     case 'idle': {
@@ -64,7 +65,7 @@ function updateBoto(w: World, e: Enemy, dt: number): void {
     case 'call':
       if (e.stateT >= B.callTime) {
         for (let i = 0; i < B.callCount; i++) {
-          const a = (i / B.callCount) * 6.283 + rand(w), pos = { x: e.x + Math.cos(a) * 150, y: e.y + Math.sin(a) * 120 };
+          const a = (i / B.callCount) * 6.283 + rand(w), pos = { x: e.x + fcos(a) * 150, y: e.y + fsin(a) * 120 };
           clampArena(w, pos, 20);
           spawnEnemy(w, { kind: 'piranha', x: pos.x, y: pos.y });
         }
@@ -97,7 +98,7 @@ const IARA_PATTERNS = [['jatos', 'canto', 'redemoinho'], ['onda', 'jatos', 'cant
 
 function updateIara(w: World, e: Enemy, dt: number): void {
   const I = ENEMY.iara, P = I.posture, T = targetOf(w, e), p = w.player, a = w.arena;
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1, slow = e.slowT > 0 ? 0.6 : 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1, slow = e.slowT > 0 ? 0.6 : 1;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
 
   w.bossTime += dt;
@@ -180,13 +181,13 @@ function updateIara(w: World, e: Enemy, dt: number): void {
       /* o canto puxa o herói; chegar perto dela dói. Quem resiste até o fim ganha uma janela */
       const C = I.canto;
       if (p.state !== 'dodge' && p.state !== 'dead' && !w.stats.uniques.escamaDaIara) {
-        const px = e.x - p.x, py = e.y - p.y, pd = Math.hypot(px, py) || 1;
+        const px = e.x - p.x, py = e.y - p.y, pd = fhypot(px, py) || 1;
         if (pd > 40) { p.x += (px / pd) * C.pull * dt; p.y += (py / pd) * C.pull * dt; }
       }
       e.cd = max0(e.cd - dt);
       if (e.cd <= 0) {
         e.cd = C.tick;
-        if (Math.hypot(p.x - e.x, p.y - e.y) < C.aura) hurtPlayer(w, C.damage * e.dmg, e.x, e.y, 0, { src: e, unblockable: true, water: true, soft: true });
+        if (fhypot(p.x - e.x, p.y - e.y) < C.aura) hurtPlayer(w, C.damage * e.dmg, e.x, e.y, 0, { src: e, unblockable: true, water: true, soft: true });
       }
       e.tele = { shape: 'circle', x: e.x, y: e.y, r: C.aura, t: C.duration, dur: C.duration };
       if (e.stateT >= C.duration) { e.tele = null; setState(e, 'exposed'); emit(w, { type: 'crash', x: e.x, y: e.y, text: 'SEM VOZ' }); }
@@ -204,7 +205,7 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
   if (k !== 'piranha' && k !== 'sapo' && k !== 'arraia' && k !== 'caramujo' && k !== 'jacare') return false;
 
   const T = targetOf(w, e), p = w.player;
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1), wm = e.windupMult, scale = e.radius / ENEMY[k].radius;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
 
@@ -213,10 +214,10 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
     if (e.state === 'chase') {
       face();
       /* nada em zigue-zague, o que dificulta acertar de longe */
-      const wob = Math.sin(w.time * 7 + e.id * 1.7) * 46, nx = -dy / d, ny = dx / d;
+      const wob = fsin(w.time * 7 + e.id * 1.7) * 46, nx = -dy / d, ny = dx / d;
       moveToward(e, T.x + nx * wob, T.y + ny * wob, S.speed * sp, dt);
       if (d < S.leapRange && e.cd <= 0) {
-        const lead = T === p ? 0.18 : 0, lx = T.x + p.vx * lead - e.x, ly = T.y + p.vy * lead - e.y, ld = Math.hypot(lx, ly) || 1;
+        const lead = T === p ? 0.18 : 0, lx = T.x + p.vx * lead - e.x, ly = T.y + p.vy * lead - e.y, ld = fhypot(lx, ly) || 1;
         e.dirX = lx / ld; e.dirY = ly / ld;
         const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius, S.leapLen);
         e.ax = x2; e.ay = y2;
@@ -244,8 +245,8 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
       if (e.cd <= 0 && d < S.range) { setState(e, 'spit'); e.flag = false; }
       else if (e.stateT >= S.hopEvery / sp) {
         /* pula para longe se o herói chega perto; senão, muda de lugar para não ser alvo parado */
-        const away = d < S.keepAway, a = away ? Math.atan2(-dy, -dx) + (rand(w) - 0.5) * 1.2 : rand(w) * 6.283;
-        e.dirX = Math.cos(a); e.dirY = Math.sin(a);
+        const away = d < S.keepAway, a = away ? fatan2(-dy, -dx) + (rand(w) - 0.5) * 1.2 : rand(w) * 6.283;
+        e.dirX = fcos(a); e.dirY = fsin(a);
         setState(e, 'hop');
       }
     } else if (e.state === 'hop') {
@@ -266,7 +267,7 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
     const S = ENEMY.arraia;
     if (e.state === 'buried') {
       e.hidden = true;
-      const near = Math.hypot(p.x - e.x, p.y - e.y) < S.revealRange;
+      const near = fhypot(p.x - e.x, p.y - e.y) < S.revealRange;
       if (near || (e.count > 0 && e.stateT >= S.buried) || (e.count === 0 && e.stateT >= S.buried * 2.5)) { e.hidden = false; setState(e, 'reveal'); emit(w, { type: 'reveal', x: e.x, y: e.y }); }
     } else if (e.state === 'reveal') {
       face();
@@ -274,7 +275,7 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
     } else if (e.state === 'aim') {
       face();
       const dur = S.aimTime * wm;
-      if (e.stateT < dur * 0.7) { const lead = T === p ? 0.2 : 0, lx = T.x + p.vx * lead - e.x, ly = T.y + p.vy * lead - e.y, ld = Math.hypot(lx, ly) || 1; e.dirX = lx / ld; e.dirY = ly / ld; }
+      if (e.stateT < dur * 0.7) { const lead = T === p ? 0.2 : 0, lx = T.x + p.vx * lead - e.x, ly = T.y + p.vy * lead - e.y, ld = fhypot(lx, ly) || 1; e.dirX = lx / ld; e.dirY = ly / ld; }
       const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, 0, S.stingRange);
       e.tele = { shape: 'line', x: e.x, y: e.y, x2, y2, w: 20, t: e.stateT, dur };
       if (e.stateT >= dur) {
@@ -321,9 +322,9 @@ export function updateChapter2(w: World, e: Enemy, dt: number): boolean {
     const J = ENEMY.jacare;
     if (e.state === 'chase') {
       /* vira devagar: dá para dar a volta nele, mas aí vem a rabada */
-      const want = Math.atan2(dy, dx), cur = Math.atan2(e.dirY, e.dirX), turn = 2.3 * sp * dt;
+      const want = fatan2(dy, dx), cur = fatan2(e.dirY, e.dirX), turn = 2.3 * sp * dt;
       const diff = wrapAngle(want - cur), na = cur + Math.max(-turn, Math.min(turn, diff));
-      e.dirX = Math.cos(na); e.dirY = Math.sin(na);
+      e.dirX = fcos(na); e.dirY = fsin(na);
       if (Math.abs(e.dirX) > 0.15) e.facing = e.dirX >= 0 ? 1 : -1;
       if (d > J.biteRange * 0.6 * scale) { e.x += e.dirX * J.speed * sp * dt; e.y += e.dirY * J.speed * sp * dt; e.walk += J.speed * sp * dt * 0.07; e.moving = true; }
       if (e.cd <= 0) {

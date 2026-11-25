@@ -2,6 +2,7 @@
  * Capítulos e fases. As salas de cada fase são fixas: saem de uma semente por fase, então todo
  * jogador encontra a mesma sequência e os tempos são comparáveis.
  */
+import { fhypot } from '../sim/fmath';
 import { ARENA, isBossKind, isMonster, type EliteMod, type EnemyKind, type SpawnDef } from './balance';
 import { BOSSES, MONSTERS } from './bestiary';
 import type { CompanionId, ElementId } from './content';
@@ -269,7 +270,7 @@ function place(rng: Rng, kind: EnemyKind, used: { x: number; y: number }[]): { x
       if (a === 'atirador' || a === 'conjurador') x = ARENA.x0 + w * (0.62 + rng() * 0.32);
       if (a === 'emboscada') x = ARENA.x0 + w * (0.28 + rng() * 0.64);
     }
-    if (used.every((u) => Math.hypot(u.x - x, u.y - y) > 76)) { used.push({ x, y }); return { x: Math.round(x), y: Math.round(y) }; }
+    if (used.every((u) => fhypot(u.x - x, u.y - y) > 76)) { used.push({ x, y }); return { x: Math.round(x), y: Math.round(y) }; }
   }
   const p = { x: Math.round(ARENA.x0 + w * 0.75), y: Math.round(ARENA.y0 + h * rng()) };
   used.push(p);

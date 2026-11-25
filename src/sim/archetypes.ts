@@ -3,6 +3,7 @@
  * enxame, bruto, atirador, investida, conjurador, protetor, emboscada, explosivo.
  * Os números vêm de src/data/bestiary.ts; o elemento do golpe vem do monstro.
  */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { PLAYER } from '../data/balance';
 import { MONSTERS, type MonsterDef, type MonsterKind } from '../data/bestiary';
 import { addHazard, clampArena, emit, hurtPlayer, rand, rayExit, setState, spawnEnemy, strike, targetOf } from './core';
@@ -18,7 +19,7 @@ export function archetypeStart(e: Enemy): Enemy['state'] {
 
 function enemyShot(w: World, e: Enemy, d: MonsterDef, ang: number, speed: number, tex: string, spin = false): void {
   w.projectiles.push({
-    id: w.nextId++, kind: spin ? 'spin' : 'eproj', x: e.x + Math.cos(ang) * 20, y: e.y + Math.sin(ang) * 20, vx: Math.cos(ang) * speed, vy: Math.sin(ang) * speed,
+    id: w.nextId++, kind: spin ? 'spin' : 'eproj', x: e.x + fcos(ang) * 20, y: e.y + fsin(ang) * 20, vx: fcos(ang) * speed, vy: fsin(ang) * speed,
     dist: 0, range: d.shot!.range, damage: d.damage * e.dmg, pierce: false, hit: [], charged: false, sx: e.x, sy: e.y, tx: 0, ty: 0, t: 0, dur: 0, tele: null,
     owner: e.id, element: d.element, tex,
   });
@@ -29,7 +30,7 @@ const KEEP: [number, number] = [240, 470];
 
 export function updateArchetype(w: World, e: Enemy, dt: number): void {
   const d = MONSTERS[e.kind as MonsterKind], T = targetOf(w, e), p = w.player;
-  const dx = T.x - e.x, dy = T.y - e.y, dist = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, dist = fhypot(dx, dy) || 1;
   const moon = 1 + 0.15 * w.moon;
   const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1) * moon, wm = e.windupMult / (1 + 0.1 * w.moon), scale = e.radius / d.radius;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
@@ -40,9 +41,9 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
       if (e.state === 'chase') {
         face();
         const a = e.id * 2.4, L = lead(0.22);
-        moveToward(e, L.x + Math.cos(a) * 30, L.y + Math.sin(a) * 30, d.speed * sp, dt);
+        moveToward(e, L.x + fcos(a) * 30, L.y + fsin(a) * 30, d.speed * sp, dt);
         if (dist < d.reach * scale && e.cd <= 0) {
-          const L2 = lead(0.18), lx = L2.x - e.x, ly = L2.y - e.y, ld = Math.hypot(lx, ly) || 1, reach = 34 + 46;
+          const L2 = lead(0.18), lx = L2.x - e.x, ly = L2.y - e.y, ld = fhypot(lx, ly) || 1, reach = 34 + 46;
           setState(e, 'windup'); e.dirX = lx / ld; e.dirY = ly / ld;
           e.tele = { shape: 'circle', x: e.x + e.dirX * reach, y: e.y + e.dirY * reach, r: d.area * scale, t: 0, dur: d.windup * wm };
           emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
@@ -97,7 +98,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
         if (e.cd <= 0) { setState(e, 'aim'); e.dirX = dx / dist; e.dirY = dy / dist; emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind }); }
       } else if (e.state === 'aim') {
         const aim = d.windup * wm;
-        if (e.stateT < aim * 0.7) { const L = lead(0.15), lx = L.x - e.x, ly = L.y - e.y, ld = Math.hypot(lx, ly) || 1; e.dirX = lx / ld; e.dirY = ly / ld; face(); }
+        if (e.stateT < aim * 0.7) { const L = lead(0.15), lx = L.x - e.x, ly = L.y - e.y, ld = fhypot(lx, ly) || 1; e.dirX = lx / ld; e.dirY = ly / ld; face(); }
         const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius);
         e.tele = { shape: 'line', x: e.x, y: e.y, x2, y2, w: d.area * scale, t: e.stateT, dur: aim };
         if (e.stateT >= aim) { e.tele = null; e.flag = false; setState(e, 'charge'); emit(w, { type: 'charge', x: e.x, y: e.y }); }
@@ -105,7 +106,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
         const v = 780 * Math.min(1.3, sp);
         e.x += e.dirX * v * dt; e.y += e.dirY * v * dt; e.walk += v * dt * 0.05; e.moving = true;
         chargeContact(w, e, d.damage * e.dmg, 520);
-        const wall = w.walls.find((b) => Math.hypot(b.x - e.x, b.y - e.y) < b.r + e.radius);
+        const wall = w.walls.find((b) => fhypot(b.x - e.x, b.y - e.y) < b.r + e.radius);
         if (clampArena(w, e, e.radius) || wall) { setState(e, 'stunned'); emit(w, { type: 'crash', x: e.x, y: e.y, text: 'TONTO' }); }
       } else if (e.state === 'stunned') {
         if (e.stateT >= d.recover * Math.max(0.6, wm)) { setState(e, 'roam'); e.cd = 1.3 * wm; }
@@ -124,7 +125,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
           const L = S.mode === 'lob' ? lead(S.flight * 0.8) : lead(0.12);
           e.ax = L.x; e.ay = L.y;
           if (S.mode === 'lob') { const t = { x: L.x, y: L.y }; clampArena(w, t, PLAYER.radius); e.ax = t.x; e.ay = t.y; }
-          else { const a = Math.atan2(L.y - e.y, L.x - e.x), [x2, y2] = rayExit(w, e.x, e.y, Math.cos(a), Math.sin(a), 0, S.range); e.tele = { shape: 'line', x: e.x, y: e.y, x2, y2, w: S.mode === 'fan' ? 30 : 22, t: 0, dur: d.windup * wm }; }
+          else { const a = fatan2(L.y - e.y, L.x - e.x), [x2, y2] = rayExit(w, e.x, e.y, fcos(a), fsin(a), 0, S.range); e.tele = { shape: 'line', x: e.x, y: e.y, x2, y2, w: S.mode === 'fan' ? 30 : 22, t: 0, dur: d.windup * wm }; }
           emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
         }
       } else if (e.state === 'aim') {
@@ -138,7 +139,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
               sx: e.x, sy: e.y, tx: e.ax, ty: e.ay, t: 0, dur: S.flight, tele: { shape: 'circle', x: e.ax, y: e.ay, r: S.radius * scale, t: 0, dur: S.flight }, owner: e.id, element: d.element, tex: S.tex,
             });
           } else {
-            const base = Math.atan2(e.ay - e.y, e.ax - e.x);
+            const base = fatan2(e.ay - e.y, e.ax - e.x);
             for (let i = 0; i < S.count; i++) enemyShot(w, e, d, base + (i - (S.count - 1) / 2) * S.spread, S.speed, S.tex, S.mode === 'spin');
           }
           emit(w, { type: 'spit', x: e.x, y: e.y });
@@ -160,7 +161,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
         if (e.stateT >= d.windup * wm) {
           for (let i = 0; i < C.count; i++) {
             const L = lead(0.3), a = rand(w) * Math.PI * 2, r = i === 0 ? 0 : C.spread * (0.5 + rand(w) * 0.6);
-            const pos = { x: L.x + Math.cos(a) * r, y: L.y + Math.sin(a) * r };
+            const pos = { x: L.x + fcos(a) * r, y: L.y + fsin(a) * r };
             clampArena(w, pos, 20);
             addHazard(w, {
               kind: d.element === 'tempestade' ? 'bolt' : d.element === 'sombra' ? 'shadow' : 'spell', element: d.element,
@@ -178,11 +179,11 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
     case 'emboscada': {
       if (e.state === 'buried') {
         e.hidden = true;
-        if (Math.hypot(p.x - e.x, p.y - e.y) < d.reach || (e.count > 0 && e.stateT >= 2.5) || e.stateT >= 7) { e.hidden = false; setState(e, 'reveal'); emit(w, { type: 'reveal', x: e.x, y: e.y }); }
+        if (fhypot(p.x - e.x, p.y - e.y) < d.reach || (e.count > 0 && e.stateT >= 2.5) || e.stateT >= 7) { e.hidden = false; setState(e, 'reveal'); emit(w, { type: 'reveal', x: e.x, y: e.y }); }
       } else if (e.state === 'reveal') {
         face();
         if (e.stateT >= 0.4 * wm) {
-          const L = lead(0.15), lx = L.x - e.x, ly = L.y - e.y, ld = Math.hypot(lx, ly) || 1;
+          const L = lead(0.15), lx = L.x - e.x, ly = L.y - e.y, ld = fhypot(lx, ly) || 1;
           e.dirX = lx / ld; e.dirY = ly / ld;
           const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius, 270);
           e.ax = x2; e.ay = y2;
@@ -238,7 +239,7 @@ export function updateArchetype(w: World, e: Enemy, dt: number): void {
 /** Um campeão protetor dá um tranco: mantido para o futuro. */
 export function summonNear(w: World, kind: MonsterKind, x: number, y: number, n: number): void {
   for (let i = 0; i < n; i++) {
-    const a = (i / n) * Math.PI * 2 + rand(w), pos = { x: x + Math.cos(a) * 120, y: y + Math.sin(a) * 100 };
+    const a = (i / n) * Math.PI * 2 + rand(w), pos = { x: x + fcos(a) * 120, y: y + fsin(a) * 100 };
     clampArena(w, pos, 20);
     spawnEnemy(w, { kind, x: pos.x, y: pos.y });
   }

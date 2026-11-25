@@ -2,6 +2,7 @@
  * O Curupira (docs/gdd/05). Três fases, barra de postura, janela de punição e fúria.
  * Fase 1: Rastro Falso e Assobio. Fase 2: soma Mata Viva e Estouro. Fase 3: montado, investidas em série.
  */
+import { fatan2, fcos, fhypot, fsin } from './fmath';
 import { ENEMY } from '../data/balance';
 import { addHazard, clampArena, emit, rand, rayExit, setState, spawnEnemy, targetOf } from './core';
 import { chargeContact, moveToward } from './enemies';
@@ -10,11 +11,11 @@ import type { Enemy, World } from './types';
 const PATTERNS = [['rastro', 'assobio'], ['rastro', 'mataViva', 'assobio', 'estouro'], ['investida', 'mataViva', 'investida', 'estouro']];
 
 function thornVolley(w: World, from: Enemy, tx: number, ty: number, owner: number): void {
-  const A = ENEMY.curupira.assobio, base = Math.atan2(ty - from.y, tx - from.x);
+  const A = ENEMY.curupira.assobio, base = fatan2(ty - from.y, tx - from.x);
   for (let i = -1; i <= 1; i++) {
     const a = base + i * 0.22;
     w.projectiles.push({
-      id: w.nextId++, kind: 'ethorn', x: from.x + Math.cos(a) * 20, y: from.y + Math.sin(a) * 20, vx: Math.cos(a) * A.thornSpeed, vy: Math.sin(a) * A.thornSpeed,
+      id: w.nextId++, kind: 'ethorn', x: from.x + fcos(a) * 20, y: from.y + fsin(a) * 20, vx: fcos(a) * A.thornSpeed, vy: fsin(a) * A.thornSpeed,
       dist: 0, range: 900, damage: A.thornDamage * from.dmg, pierce: false, hit: [], charged: false, sx: 0, sy: 0, tx: 0, ty: 0, t: 0, dur: 0, tele: null, owner,
     });
   }
@@ -33,17 +34,17 @@ function startPattern(w: World, e: Enemy, T: { x: number; y: number }): void {
   e.count++; e.flag = false; e.step = 0;
   if (e.pattern === 'rastro') {
     const a = rand(w) * Math.PI * 2, R = C.rastro;
-    const appear = { x: T.x + Math.cos(a) * R.dist, y: T.y + Math.sin(a) * R.dist * 0.75 };
+    const appear = { x: T.x + fcos(a) * R.dist, y: T.y + fsin(a) * R.dist * 0.75 };
     clampArena(w, appear, e.radius + 6);
     // as pegadas saem na direção oposta ao lado de onde ele realmente vem
-    const decoy = { x: T.x - Math.cos(a) * R.dist * 0.8, y: T.y - Math.sin(a) * R.dist * 0.6 };
+    const decoy = { x: T.x - fcos(a) * R.dist * 0.8, y: T.y - fsin(a) * R.dist * 0.6 };
     clampArena(w, decoy, 20);
     emit(w, { type: 'footprints', x: e.x, y: e.y, x2: decoy.x, y2: decoy.y });
     emit(w, { type: 'vanish', x: e.x, y: e.y });
     e.ax = appear.x; e.ay = appear.y; e.hidden = true; e.tele = null;
     setState(e, 'vanish');
   } else if (e.pattern === 'investida') {
-    const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+    const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
     e.dirX = dx / d; e.dirY = dy / d;
     setState(e, 'aim');
     emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
@@ -56,7 +57,7 @@ function startPattern(w: World, e: Enemy, T: { x: number; y: number }): void {
 export function updateCurupira(w: World, e: Enemy, dt: number): void {
   if (e.fake) { updateClone(w, e); return; }
   const C = ENEMY.curupira, P = C.posture, T = targetOf(w, e), p = w.player;
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
   const slow = e.slowT > 0 ? 0.6 : 1;
 
@@ -105,7 +106,7 @@ export function updateCurupira(w: World, e: Enemy, dt: number): void {
       if (e.stateT >= C.rastro.vanish) {
         const R = C.rastro;
         e.x = e.ax; e.y = e.ay; e.hidden = false;
-        const ddx = T.x - e.x, ddy = T.y - e.y, dd = Math.hypot(ddx, ddy) || 1;
+        const ddx = T.x - e.x, ddy = T.y - e.y, dd = fhypot(ddx, ddy) || 1;
         e.dirX = ddx / dd; e.dirY = ddy / dd; e.facing = ddx >= 0 ? 1 : -1;
         const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius, R.len);
         e.ax = x2; e.ay = y2;
@@ -146,9 +147,9 @@ export function updateCurupira(w: World, e: Enemy, dt: number): void {
       if (e.pattern === 'assobio') {
         const A = C.assobio;
         if (e.stateT >= A.cast) {
-          const base = Math.atan2(e.y - T.y, e.x - T.x);
+          const base = fatan2(e.y - T.y, e.x - T.x);
           for (let i = 1; i <= A.clones; i++) {
-            const a = base + (i * Math.PI * 2) / (A.clones + 1), pos = { x: T.x + Math.cos(a) * 250, y: T.y + Math.sin(a) * 190 };
+            const a = base + (i * Math.PI * 2) / (A.clones + 1), pos = { x: T.x + fcos(a) * 250, y: T.y + fsin(a) * 190 };
             clampArena(w, pos, 30);
             const c = spawnEnemy(w, { kind: 'curupira', x: pos.x, y: pos.y }, { fake: true, quiet: true });
             c.state = 'clone'; c.dmg = e.dmg; c.phase = e.phase;
@@ -161,7 +162,7 @@ export function updateCurupira(w: World, e: Enemy, dt: number): void {
         if (e.stateT >= M.cast) {
           for (let i = 0; i < M.lines; i++) {
             const a = rand(w) * Math.PI, ox = T.x + (rand(w) - 0.5) * 150, oy = T.y + (rand(w) - 0.5) * 110;
-            const [x1, y1] = rayExit(w, ox, oy, -Math.cos(a), -Math.sin(a), 0), [x2, y2] = rayExit(w, ox, oy, Math.cos(a), Math.sin(a), 0);
+            const [x1, y1] = rayExit(w, ox, oy, -fcos(a), -fsin(a), 0), [x2, y2] = rayExit(w, ox, oy, fcos(a), fsin(a), 0);
             addHazard(w, { kind: 'roots', tele: { shape: 'line', x: x1, y: y1, x2, y2, w: M.width, t: -i * 0.18, dur: M.delay }, damage: M.damage * e.dmg, slow: M.slow });
           }
           emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: 'mataViva' });

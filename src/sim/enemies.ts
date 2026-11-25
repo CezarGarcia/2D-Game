@@ -1,4 +1,5 @@
 /** Comportamento dos monstros comuns, dos elites e da Caipora. O Curupira fica em boss.ts. */
+import { fcos, fexp, fhypot, fsin } from './fmath';
 import { ENEMY, MOD, PLAYER } from '../data/balance';
 import { SPELL_NUM } from '../data/content';
 import { updateCurupira } from './boss';
@@ -11,7 +12,7 @@ import { clampArena, damageEnemy, emit, hurtPet, hurtPlayer, max0, rand, rayExit
 import type { Enemy, World } from './types';
 
 export function moveToward(e: Enemy, tx: number, ty: number, speed: number, dt: number): number {
-  const dx = tx - e.x, dy = ty - e.y, d = Math.hypot(dx, dy);
+  const dx = tx - e.x, dy = ty - e.y, d = fhypot(dx, dy);
   if (d < 2) { e.moving = false; return d; }
   e.x += (dx / d) * speed * dt; e.y += (dy / d) * speed * dt;
   e.walk += speed * dt * 0.11; e.moving = true;
@@ -21,11 +22,11 @@ export function moveToward(e: Enemy, tx: number, ty: number, speed: number, dt: 
 /** Contato de um inimigo em investida com o herói e o companheiro. Uma vez por investida. */
 export function chargeContact(w: World, e: Enemy, damage: number, knock: number): void {
   const p = w.player, pet = w.pet;
-  if (!e.flag && Math.hypot(p.x - e.x, p.y - e.y) < e.radius + PLAYER.radius + 4) {
+  if (!e.flag && fhypot(p.x - e.x, p.y - e.y) < e.radius + PLAYER.radius + 4) {
     e.flag = true;
     hurtPlayer(w, damage, e.x - e.dirX * 20, e.y - e.dirY * 20, knock, { src: e, melee: true });
   }
-  if (pet && pet.state !== 'down' && e.count >= 0 && Math.hypot(pet.x - e.x, pet.y - e.y) < e.radius + 14 && pet.flash <= 0) hurtPet(w, damage * 0.6);
+  if (pet && pet.state !== 'down' && e.count >= 0 && fhypot(pet.x - e.x, pet.y - e.y) < e.radius + 14 && pet.flash <= 0) hurtPet(w, damage * 0.6);
 }
 
 /** Projétil em arco com a marca do ponto de queda no chão. */
@@ -40,7 +41,7 @@ export function lob(w: World, e: Enemy, kind: 'seed' | 'glob', tx: number, ty: n
 export function updateEnemy(w: World, e: Enemy, dt: number): void {
   e.flash = max0(e.flash - dt); e.cd = max0(e.cd - dt); e.stateT += dt; e.moving = false; e.sinceHit += dt;
   e.aggroPet = max0(e.aggroPet - dt); e.slowT = max0(e.slowT - dt);
-  const decay = Math.exp(-9 * dt);
+  const decay = fexp(-9 * dt);
   e.x += e.kx * dt; e.y += e.ky * dt; e.kx *= decay; e.ky *= decay;
 
   if (e.poisonT > 0) {
@@ -93,7 +94,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
   if (wander(w, e, dt, 110 * e.speedMult)) { clampArena(w, e, e.radius); return; }
   if (isMonster(e.kind)) { updateArchetype(w, e, dt); return; }
   const T = targetOf(w, e);
-  const dx = T.x - e.x, dy = T.y - e.y, d = Math.hypot(dx, dy) || 1;
+  const dx = T.x - e.x, dy = T.y - e.y, d = fhypot(dx, dy) || 1;
   const sp = e.speedMult * (e.slowT > 0 ? 0.5 : 1), wm = e.windupMult;
   const face = () => { if (Math.abs(dx) > 4) e.facing = dx >= 0 ? 1 : -1; };
 
@@ -104,9 +105,9 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
       face();
       /* cerca o herói: cada saúva chega por um lado diferente e mira onde ele vai estar */
       const a = e.id * 2.4, pl = w.player, lead = T === pl ? 0.22 : 0;
-      moveToward(e, T.x + pl.vx * lead + Math.cos(a) * 30, T.y + pl.vy * lead + Math.sin(a) * 30, S.speed * sp, dt);
+      moveToward(e, T.x + pl.vx * lead + fcos(a) * 30, T.y + pl.vy * lead + fsin(a) * 30, S.speed * sp, dt);
       if (d < S.biteRange + (e.radius - S.radius) && e.cd <= 0) {
-        const lx = T.x + pl.vx * lead * 0.8 - e.x, ly = T.y + pl.vy * lead * 0.8 - e.y, ld = Math.hypot(lx, ly) || 1, reach = S.biteOffset + S.lunge;
+        const lx = T.x + pl.vx * lead * 0.8 - e.x, ly = T.y + pl.vy * lead * 0.8 - e.y, ld = fhypot(lx, ly) || 1, reach = S.biteOffset + S.lunge;
         setState(e, 'windup'); e.dirX = lx / ld; e.dirY = ly / ld;
         e.tele = { shape: 'circle', x: e.x + e.dirX * reach, y: e.y + e.dirY * reach, r: S.biteRadius * (e.radius / S.radius), t: 0, dur: S.windup * wm };
         emit(w, { type: 'telegraph', x: e.x, y: e.y, kind: e.kind });
@@ -192,14 +193,14 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
   } else if (e.kind === 'urutau') {
     const U = ENEMY.urutau;
     if (e.state === 'perched') {
-      if (Math.hypot(w.player.x - e.x, w.player.y - e.y) < U.revealRange) { e.hidden = false; setState(e, 'reveal'); emit(w, { type: 'reveal', x: e.x, y: e.y }); }
+      if (fhypot(w.player.x - e.x, w.player.y - e.y) < U.revealRange) { e.hidden = false; setState(e, 'reveal'); emit(w, { type: 'reveal', x: e.x, y: e.y }); }
     } else if (e.state === 'reveal') {
       face();
       if (e.stateT >= U.revealTime) setState(e, 'hover');
     } else if (e.state === 'hover') {
       face();
       const a = e.id * 1.9 + w.time * 1.4;
-      moveToward(e, T.x + Math.cos(a) * U.hoverDist, T.y + Math.sin(a) * U.hoverDist * 0.7, U.flySpeed * sp, dt);
+      moveToward(e, T.x + fcos(a) * U.hoverDist, T.y + fsin(a) * U.hoverDist * 0.7, U.flySpeed * sp, dt);
       if (e.stateT >= U.hover) {
         setState(e, 'aim'); e.dirX = dx / d; e.dirY = dy / d;
         const [x2, y2] = rayExit(w, e.x, e.y, e.dirX, e.dirY, e.radius, U.dashLen);
@@ -254,7 +255,7 @@ export function updateEnemy(w: World, e: Enemy, dt: number): void {
     } else if (e.state === 'call') {
       if (e.stateT >= K.callTime) {
         for (let i = 0; i < 3; i++) {
-          const a = rand(w) * 6.283, pos = { x: e.x + Math.cos(a) * 110, y: e.y + Math.sin(a) * 90 };
+          const a = rand(w) * 6.283, pos = { x: e.x + fcos(a) * 110, y: e.y + fsin(a) * 90 };
           clampArena(w, pos, 20);
           spawnEnemy(w, { kind: 'sauva', x: pos.x, y: pos.y });
         }
@@ -291,7 +292,7 @@ export function separate(w: World): void {
   for (let i = 0; i < es.length; i++) {
     for (let j = i + 1; j < es.length; j++) {
       const a = es[i], b = es[j];
-      const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy) || 0.01, min = (a.radius + b.radius) * 0.9;
+      const dx = b.x - a.x, dy = b.y - a.y, d = fhypot(dx, dy) || 0.01, min = (a.radius + b.radius) * 0.9;
       if (d >= min) continue;
       const fa = fixed(a), fb = fixed(b);
       if (fa && fb) continue;
@@ -306,7 +307,7 @@ export function separate(w: World): void {
   if (p.state === 'dodge' || p.state === 'dead') return;
   for (const e of es) {
     if (e.state === 'spawn' || e.state === 'charge' || e.state === 'dash' || e.state === 'leap' || e.state === 'hop' || e.hidden || e.fake) continue;
-    const dx = p.x - e.x, dy = p.y - e.y, d = Math.hypot(dx, dy) || 0.01, min = e.radius * 0.8 + PLAYER.radius;
+    const dx = p.x - e.x, dy = p.y - e.y, d = fhypot(dx, dy) || 0.01, min = e.radius * 0.8 + PLAYER.radius;
     if (d >= min) continue;
     p.x += (dx / d) * (min - d); p.y += (dy / d) * (min - d);
   }
