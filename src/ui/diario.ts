@@ -11,7 +11,9 @@ import {
   missionText, msToMidnight, canReroll, rerollMission, rerollsLeft, restInfo, type ExpeditionInfo, type Reward,
 } from '../meta/daily';
 import type { MissionState, Profile } from '../meta/profile';
+import { dailyOpen } from '../meta/challenge';
 import { MAIN_H, MAIN_W, type Ctx } from './ctx';
+import { dailyChallengeCard } from './desafios';
 import { backdrop, gemIcon, h, itemIcon, num, stat, ui } from './dom';
 import { tip, type TipRow, type TipSpec } from './tip';
 
@@ -145,6 +147,20 @@ function restPanel(p: Profile): HTMLElement {
   });
 }
 
+/** O descanso em forma de selo, quando o Desafio do Dia ocupa o painel dele. */
+function restChip(p: Profile): HTMLElement {
+  const r = restInfo(p), on = r.pool > 0;
+  return tip(h('span', { class: `dia-clock dia-restchip${on ? ' on' : ''}`, tabindex: 0 }, ui('descanso', 26), on ? h('b', null, 'x2') : null),
+    {
+      title: 'Bônus de descanso', color: '#cdb8ff', icon: ui('descanso', 36), tag: on ? 'XP x2' : undefined,
+      rows: [
+        on ? { icon: 'xp', text: 'Experiência em dobro guardada', value: num(r.pool), tone: 'ok' } : { text: 'Passe um dia fora e volte com experiência em dobro.' },
+        { icon: 'descanso', text: 'Por dia inteiro fora', value: `+${num(r.perDay)}` },
+        { icon: 'mais', text: `Acumula até ${REST_MAX_DAYS} dias`, value: num(r.cap) },
+      ],
+    });
+}
+
 /* ---------- expedições ---------- */
 
 function expTip(p: Profile, e: ExpeditionInfo): () => TipSpec {
@@ -199,9 +215,11 @@ export function renderDiario(c: Ctx): HTMLElement {
   const missions = h('section', 'dia-panel dia-missions',
     h('header', 'dia-head',
       h('span', 'plate', ui('diario', 30), 'Missões do dia'),
-      tip(h('span', { class: 'dia-clock', tabindex: 0 }, ui('relogio', 24), untilMidnight()), {
-        title: 'Novas missões', icon: ui('relogio', 36), rows: [{ text: 'Missões, baú e expedições mudam à meia-noite.', tone: 'dim' }, { icon: 'relogio', text: 'Falta', value: untilMidnight() }],
-      })),
+      h('span', 'dia-head-r',
+        dailyOpen(p) && restChip(p),
+        tip(h('span', { class: 'dia-clock', tabindex: 0 }, ui('relogio', 24), untilMidnight()), {
+          title: 'Novas missões', icon: ui('relogio', 36), rows: [{ text: 'Missões, baú e expedições mudam à meia-noite.', tone: 'dim' }, { icon: 'relogio', text: 'Falta', value: untilMidnight() }],
+        }))),
     h('div', 'dia-list', d.missions.map((m, i) => missionCard(c, m, i))),
     d.missions.length > 0 && chestRow(c));
 
@@ -219,5 +237,7 @@ export function renderDiario(c: Ctx): HTMLElement {
       })),
     expBody);
 
-  return h('div', 'diario', bg, h('div', 'dia-shade'), missions, restPanel(p), expeditions);
+  /* com o Desafio do Dia aberto, ele fica no lugar do painel de descanso, que vira um selo ao lado do relógio */
+  const daily = dailyChallengeCard(c);
+  return h('div', 'diario', bg, h('div', 'dia-shade'), missions, daily ?? restPanel(p), expeditions);
 }

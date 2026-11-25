@@ -4,6 +4,7 @@
  * O nível e os monstros sobem com o andar e passam pelos capítulos em ordem. Os andares são fixos
  * (saem de uma semente por andar), para o tempo do ranking ser comparável.
  */
+import { dailyChallengeStage, encantadosStage, isDailyChallengeId, isEncantadosId } from './challenge';
 import { fpow } from '../sim/fmath';
 import { ARENA, isBossKind } from './balance';
 import { BOSSES, type BossKind } from './bestiary';
@@ -86,6 +87,8 @@ export function isTowerId(id: string): boolean { return id.startsWith('torre-');
 export function findStage(id: string): StageDef | undefined {
   if (isTrainingId(id)) return trainingStage(id);
   if (isDreamId(id)) return dreamStage(id) ?? undefined;
+  if (isDailyChallengeId(id)) return dailyChallengeStage(id) ?? undefined;
+  if (isEncantadosId(id)) return encantadosStage();
   return isTowerId(id) ? towerRun(Number(id.slice(6))) : isExpeditionId(id) ? expeditionStage(id) ?? undefined : STAGE_BY_ID.get(id);
 }
 

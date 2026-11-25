@@ -2,6 +2,7 @@
  * Torre dos Cem Andares: a torre pintada no fundo, um medalhão a cada dez andares subindo por ela,
  * os recordes em ícone + número e o botão de subir, que sempre parte do marco atual.
  */
+import { encantadosPanel } from './desafios';
 import { stageShells, towerElement, wheelAffinity } from '../data/affinity';
 import { brewChip, brewPopup } from './garrafada';
 import { paintTowerBackdrop } from '../art/backdrops';
@@ -152,5 +153,5 @@ export function renderTorre(c: Ctx): HTMLElement {
       rows: [{ text: 'Cair encerra a subida, mas os andares vencidos ficam. Vencendo os dez, o próximo marco abre.', tone: 'dim' }],
     }));
 
-  return h('div', 'torre', bg, trail, medals, records, climb, brewPopup(c, shellWeak ? { weak: [shellWeak] } : {}));
+  return h('div', 'torre', bg, trail, medals, records, encantadosPanel(c), climb, brewPopup(c, shellWeak ? { weak: [shellWeak] } : {}));
 }

@@ -64,6 +64,8 @@ export interface UiState {
   heroSel: number | null;
   /** Painel da direita na tela do herói. */
   heroPane: 'item' | 'stats';
+  /** Arma escolhida para o Desafio dos Encantados (nulo = a da campanha). */
+  encWeapon: string | null;
   menu: ItemMenu | null;
   forgeMode: ForgeMode;
   forgeSel: number | null;
@@ -107,7 +109,7 @@ export interface UiState {
 
 export function newState(): UiState {
   return {
-    tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', menu: null,
+    tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', encWeapon: null, menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
     web: null, spellSel: null, spellEl: null, compFilter: null,
     alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false, village: false, building: 'rancho', walk: { id: null, chapter: 1, hours: 4 }, moment: null }, omens: {}, omenOpen: false, brew: null, brewOpen: false,

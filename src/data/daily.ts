@@ -166,7 +166,7 @@ function hash(text: string): number {
 }
 
 /** Aplica o modificador do dia a uma sala já montada. */
-function applyMod(room: RoomDef, mod: ExpModId, rng: Rng): void {
+export function applyExpMod(room: RoomDef, mod: ExpModId, rng: Rng): void {
   const all = room.waves.flat();
   const addMod = (m: EliteMod) => { for (const sp of all) if (!sp.mods?.includes(m)) sp.mods = [...(sp.mods ?? []), m]; };
   switch (mod) {
@@ -218,7 +218,7 @@ export function expeditionStage(id: string): StageDef | null {
       const n = level >= 3 ? 3 : 2, share = n === 3 ? 0.44 : 0.62;
       room.waves = Array.from({ length: n }, (_, w) => wave(rng, pool, budget * (share + w * 0.06), [], w > 0 ? championChance : 0));
     }
-    applyMod(room, k.mod, rng);
+    applyExpMod(room, k.mod, rng);
     rooms.push(room);
   }
   const enemies = rooms.reduce((s, r) => s + r.waves.reduce((a, w) => a + w.length, 0), 0);

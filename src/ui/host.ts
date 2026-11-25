@@ -4,6 +4,7 @@
  * chamam as funções de src/meta para alterá-lo e pedem para salvar.
  */
 import type { BrewId } from '../data/brews';
+import type { WeaponKind } from '../data/items';
 import type { OmenPick } from '../data/omens';
 import type { Profile } from '../meta/profile';
 import type { NodeResult } from '../meta/dream';
@@ -25,12 +26,14 @@ export interface UiHost {
   startTraining(): void;
   /** Joga a sala do nó em que o herói do Sonho está. */
   startDreamNode(): void;
+  /** Começa um desafio com ranking: o do dia (herói do dia) ou o dos Encantados (com a arma escolhida). */
+  startChallenge(kind: 'dia' | 'encantados', weapon?: WeaponKind): void;
   /** Apaga o progresso e recomeça do zero. */
   resetGame(): void;
 }
 
 export interface UiController {
-  showCamp(tab?: CampTab): void;
+  showCamp(tab?: CampTab | 'torre' | 'diario' | 'almanaque' | 'sonho'): void;
   showResults(stageId: string, rewards: StageRewards, hunt?: HuntSummary): void;
   /** Volta para o mapa da noite depois de uma sala do Sonho (ou para o resumo, se a noite acabou). */
   showDream(result: NodeResult | null): void;

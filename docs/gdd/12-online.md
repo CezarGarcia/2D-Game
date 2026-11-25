@@ -129,6 +129,24 @@ Hoje o jogo roda como página publicada no Claude, pensada para ser vista e test
 
 ## 7. Fases da etapa 5
 
+| Fase | Estado |
+|---|---|
+| 0 · Preparação, sem servidor | **Feita** |
+| 1 · Endereço próprio e contas | Decidido: Supabase, Google e link por e-mail, endereço gratuito |
+| 2 · Rankings verificados | — |
+| 3 · Fantasmas, cruzes e recados | — |
+| 4 · Mundo Online | Fica nesta etapa (decidido) |
+
+### Fase 0: o que entrou
+
+- **Contas iguais em todo navegador** (`src/sim/fmath.ts`): seno, cosseno, arco-tangente, exp, log, pow e hypot com polinômios da fdlibm, usados na simulação, nos dados e nas regras do herói. Um teste impede `Math.sin` e afins nesses diretórios. Calibração: 84,4% antes, 82,8% depois (32 fases, 4 partidas), dentro da variação.
+- **Gravação** (`src/sim/replay.ts`): comandos arredondados (`quantize`) antes de cada passo, ao vivo e na gravação; só os quadros que mudam, em inteiros de tamanho variável e base64; as escolhas do altar e da oferenda com o quadro em que aconteceram. `replayRun` refaz e `resultOf` tira o resultado. A cena manda a gravação no resultado da fase.
+- **Versão da simulação** (`virtual:sim-version`, em `sim-version.plugin.ts`): resumo de `src/sim`, `src/data` e `src/meta`, menos os arquivos só de texto.
+- **Desafio do Dia** (`src/data/challenge.ts`, `src/meta/challenge.ts`): o dia de Brasília decide capítulo, nível (o da fase 6 dele), modificador de expedição, arma, três feitiços de um elemento, companheiro e Supremo. Quatro salas e um altar, elite no fim. Abre ao libertar o Curupira e fica no Diário, no lugar do painel de descanso (que virou um selo ao lado do relógio). A primeira tentativa do dia vale para o ranking e paga resina por sala, e pó e um tomo na vitória; as outras são treino. O jogador automático que erra como gente venceu 16 de 28 dias.
+- **Desafio dos Encantados**: os oito chefes de capítulo seguidos (Curupira ao Esquecimento), um altar a cada dois, chefes do nível 45 e herói do 50. O jogador escolhe a arma; feitiços, companheiro e Supremo vêm da campanha, e o equipamento é o de referência. Abre depois do final e fica na Torre. A primeira vitória dá 2 Lágrimas. O jogador automático venceu 14 de 18 tentativas (3 por arma); com o herói no mesmo nível dos chefes, a borduna não passava do primeiro.
+- **Perfil na versão 6:** `challenges`.
+- **Testes:** `tests/fmath.test.ts`, `tests/replay.test.ts` (17 fases refeitas, adulteração, gravação malformada) e `tests/challenge.test.ts`, que refaz um Desafio do Dia só com o identificador e a escolha do herói, como o servidor vai fazer. Comparar Firefox e WebKit fica para quando houver os dois navegadores no ambiente de teste.
+
 Cada fase termina com o jogo funcionando, os testes passando e nada quebrado para quem joga sem conta.
 
 ### Fase 0 · Preparação, sem servidor (M)

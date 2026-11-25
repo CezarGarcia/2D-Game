@@ -9,6 +9,8 @@ import { music, unlockAudio } from './game/music';
 import { session } from './game/session';
 import { ACHIEVEMENT_BY_ID } from './data/achievements';
 import { isDreamId } from './data/dream';
+import type { HeroSpec } from './data/challenge';
+import { ENCANTADOS_ID, dailyChallengeId, dailyOpen, dailySpec, encantadosOpen, encantadosSpec, isChallengeId, settleChallenge, touchChallengeDay, type ChallengeSettled } from './meta/challenge';
 import { isTrainingId, trainingId } from './data/training';
 import { currentStageId, dreamContext, settleNode, type DreamContext } from './meta/dream';
 import { checkAchievements } from './meta/achievements';
@@ -89,11 +91,11 @@ const game = new Phaser.Game({
 /** Caçada automática em andamento: quantas partidas faltam e o que já rendeu. */
 let hunt: { stageId: string; left: number; total: number; sum: HuntSummary } | null = null;
 
-function launch(stageId: string, auto?: { speed: number; index: number; total: number }, dream?: DreamContext, omens?: OmenPick, brew?: BrewId): void {
+function launch(stageId: string, auto?: { speed: number; index: number; total: number }, dream?: DreamContext, omens?: OmenPick, brew?: BrewId, challenge?: HeroSpec): void {
   if (!ready) { pendingStage = stageId; return; }
   game.scene.stop('camp');
   game.scene.stop('stage');
-  game.scene.start('stage', { stageId, auto, dream, omens, brew });
+  game.scene.start('stage', { stageId, auto, dream, omens, brew, challenge });
 }
 
 const ui = mountUi(document.getElementById('ui')!, {
@@ -122,6 +124,15 @@ const ui = mountUi(document.getElementById('ui')!, {
     ui.hide(); hunt = null;
     launch(id, undefined, dreamContext(run));
   },
+  startChallenge: (kind, weapon) => {
+    const p = session.profile!;
+    if (!ready || (kind === 'dia' ? !dailyOpen(p) : !encantadosOpen(p))) return;
+    touchChallengeDay(p);
+    const id = kind === 'dia' ? dailyChallengeId(p.challenges.daily.day) : ENCANTADOS_ID;
+    const spec = kind === 'dia' ? dailySpec(p.challenges.daily.day) : encantadosSpec(p, weapon);
+    ui.hide(); hunt = null;
+    launch(id, undefined, undefined, undefined, undefined, spec);
+  },
   resetGame: () => {
     wipeSave();
     session.profile = newProfile();
@@ -129,6 +140,15 @@ const ui = mountUi(document.getElementById('ui')!, {
     ui.showCamp('mapa');
   },
 });
+
+/** Aviso do fim de um desafio: resultado, se vale para o ranking e se é recorde. */
+function challengeNote(r: ChallengeSettled): string {
+  const name = r.kind === 'dia' ? 'Desafio do Dia' : 'Desafio dos Encantados';
+  const t = Math.floor(r.result.time / 60) + ':' + String(Math.floor(r.result.time % 60)).padStart(2, '0');
+  const how = r.result.won ? `vitória em ${t}` : `caiu na sala ${r.result.rooms + 1}`;
+  const tag = r.kind === 'dia' ? (r.ranked ? ' · vale para o ranking' : ' · treino') : '';
+  return `${name}: ${how}${tag}${r.newBest ? ' · recorde!' : ''}`;
+}
 
 const afterStep = (fn: () => void) => game.events.once(Phaser.Core.Events.POST_STEP, fn);
 
@@ -147,6 +167,17 @@ session.onStageEnd = (outcome) => {
       game.scene.stop('stage'); game.scene.start('camp');
       ui.showDream(result);
       for (const id of result?.end?.achievements ?? []) { const a = ACHIEVEMENT_BY_ID.get(id); if (a) ui.notify(`Conquista: ${a.name}`); }
+    });
+    return;
+  }
+  /* desafio com ranking: guarda a tentativa e volta para a aba dele */
+  if (isChallengeId(outcome.stageId)) {
+    const r = settleChallenge(profile, outcome);
+    saveProfile(profile);
+    afterStep(() => {
+      game.scene.stop('stage'); game.scene.start('camp');
+      ui.showCamp(r?.kind === 'encantados' ? 'torre' : 'diario');
+      if (r) ui.notify(challengeNote(r));
     });
     return;
   }

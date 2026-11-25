@@ -31,6 +31,8 @@ import { isBoss } from '../sim/core';
 import { challengeLeft } from '../sim/loot';
 import { comboOf, spellCost } from '../sim/player';
 import { quantize, Recorder } from '../sim/replay';
+import { challengeSeed, type HeroSpec } from '../data/challenge';
+import { challengeProfile, isChallengeId } from '../meta/challenge';
 import { chooseBlessing, chooseOffer, createWorld, exitZone, step, type Buff, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
 import { CARD, HUD_SCALE, SLOT, TIER_COLORS, VITALS, bakeHud, duoCardTexture, plateTexture } from './hudart';
 import { music, unlockAudio } from './music';
@@ -178,29 +180,33 @@ export class StageScene extends Phaser.Scene {
   private hugeHit = Infinity;
   private boost: StatBoost = {};
   private omens: OmenPick = {};
+  /** Desafio com ranking: o herói escolhido (equipamento de referência) e a semente igual para todos. */
+  private challenge: HeroSpec | null = null;
 
   constructor() { super('stage'); }
 
-  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext; omens?: OmenPick; brew?: BrewId }): void {
+  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext; omens?: OmenPick; brew?: BrewId; challenge?: HeroSpec }): void {
     this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
     this.training = isTrainingId(this.stage.id);
     this.dream = isDreamId(this.stage.id) ? data.dream ?? null : null;
-    this.auto = data.auto && !this.training && !this.dream ? { ...data.auto } : null;
+    this.challenge = isChallengeId(this.stage.id) ? data.challenge ?? null : null;
+    const plain = !this.training && !this.dream && !this.challenge;
+    this.auto = data.auto && plain ? { ...data.auto } : null;
     /* Presságios da campanha: só os de combate, e só em fase comum */
-    this.omens = !this.training && !this.dream && !this.auto && this.stage.index >= 0 ? cleanOmens(data.omens, true) : {};
-    /* Garrafada: só fora do Sonho e do treino, e nunca na Caçada automática */
-    this.boost = this.dream?.boost ?? (data.brew && !this.training && !this.auto ? brewBoost(data.brew) : {});
+    this.omens = plain && !this.auto && this.stage.index >= 0 ? cleanOmens(data.omens, true) : {};
+    /* Garrafada: só fora do Sonho, do treino e dos desafios, e nunca na Caçada automática */
+    this.boost = this.dream?.boost ?? (data.brew && plain && !this.auto ? brewBoost(data.brew) : {});
   }
 
   create(): void {
     /* no Sonho o herói é o da noite (personagem de referência, bênçãos e amuletos que ele já juntou) */
-    const D = this.dream, profile = D?.profile ?? session.profile!;
+    const D = this.dream, C = this.challenge, profile = D?.profile ?? (C ? challengeProfile(C) : session.profile!);
     this.heroProfile = profile; this.amulets = D?.amulets ?? [];
     /* a caçada automática muda de semente a cada partida, para não repetir a mesma luta dez vezes */
-    const seed = D ? (parseDreamId(this.stage.id)?.seed ?? 1) | 1 : 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
+    const seed = D ? (parseDreamId(this.stage.id)?.seed ?? 1) | 1 : C ? challengeSeed(this.stage.id) : 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
     this.world = createWorld({
       stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets, this.boost), seed,
-      ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : omenWeight(this.omens) > 0 ? { foes: omenFoes(this.omens) } : {}),
+      ranked: isTowerId(this.stage.id) || !!D || !!C, ...(D ? { carry: D.carry, foes: D.foes } : omenWeight(this.omens) > 0 ? { foes: omenFoes(this.omens) } : {}),
       shells: D ? D.shells : this.training ? undefined : stageShells(this.stage, omenWeight(this.omens)),
       ...(isTowerId(this.stage.id) && stageShells(this.stage) ? { shellEl: towerElement(weekKey(), Number(this.stage.id.split('-')[1]) || 1) } : {}),
     });
@@ -395,7 +401,7 @@ export class StageScene extends Phaser.Scene {
           stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests,
           omens: omenWeight(this.omens),
           left: { hpFrac: Math.max(0, w.player.hp) / w.stats.maxHp, potions: w.player.potions, supremo: w.player.supremo, revives: w.revives, altarDry: w.altarDry }, trial: w.challenge?.state ?? null,
-          replay: this.auto ? undefined : this.rec.finish(),
+          replay: this.auto ? undefined : this.rec.finish(), hero: this.challenge ?? undefined,
         }),
       });
     });
@@ -1533,7 +1539,7 @@ export class StageScene extends Phaser.Scene {
     this.txtPotion = this.label(VX + VITALS.potion.x + 10, VY + VITALS.potion.y + 6, 19, '#f6ead0').setDepth(10003);
 
     /* cabeçalho: nome da fase numa placa, com as salas embaixo */
-    const title = this.training ? 'Terreiro de treino' : this.dream ? `${this.stage.name} · trecho ${this.dream.trecho} de ${this.dream.of}` : isTowerId(this.stage.id) ? 'Torre · andar 100' : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`;
+    const title = this.training ? 'Terreiro de treino' : this.dream ? `${this.stage.name} · trecho ${this.dream.trecho} de ${this.dream.of}` : isTowerId(this.stage.id) ? 'Torre · andar 100' : this.challenge ? this.stage.name : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`;
     this.txtInfo = this.label(30, 16, 22, '#f6ead0').setText(title);
     const single = this.training || !!this.dream;
     const tw = Math.max(170, Math.ceil(this.txtInfo.width) + 34, single ? 0 : 44 + this.stage.rooms.length * 26), th = single ? 42 : 64;

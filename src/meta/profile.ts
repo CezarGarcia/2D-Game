@@ -108,7 +108,7 @@ export const BUILD_SLOTS = 3;
 export interface Walk { id: CompanionId; chapter: number; hours: number; start: number }
 
 /** Versão atual do perfil salvo. Cada mudança de formato ganha um passo em `STEPS`. */
-export const PROFILE_VERSION = 5;
+export const PROFILE_VERSION = 6;
 
 export interface Profile {
   version: number;
@@ -163,6 +163,21 @@ export interface Profile {
   cordeis: { levels: Partial<Record<CordelId, number>>; equipped: CordelId[] };
   /** Aspectos de arma comprados, e o que está em uso em cada arma. */
   aspects: { owned: AspectId[]; equipped: Partial<Record<WeaponKind, AspectId>> };
+  /** Desafio do Dia e Desafio dos Encantados (src/meta/challenge.ts). */
+  challenges: ChallengeRecord;
+}
+
+/** Resultado de uma tentativa de desafio: vencer, salas vencidas e tempo. */
+export interface ChallengeResult { won: boolean; rooms: number; time: number; weapon: WeaponKind }
+
+export interface ChallengeRecord {
+  /** O dia (de Brasília), as tentativas dele, a primeira (a que vale para o ranking) e a melhor. */
+  daily: { day: string; tries: number; first: ChallengeResult | null; best: ChallengeResult | null; streak: number; lastWon: string };
+  encantados: { tries: number; wins: number; best: ChallengeResult | null; bestByWeapon: Partial<Record<WeaponKind, ChallengeResult>> };
+}
+
+export function newChallenges(): ChallengeRecord {
+  return { daily: { day: '', tries: 0, first: null, best: null, streak: 0, lastWon: '' }, encantados: { tries: 0, wins: 0, best: null, bestByWeapon: {} } };
 }
 
 /** O que fica do Sonho entre uma noite e outra. */
@@ -247,6 +262,7 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     nextItemId: 1, seed,
     life: newLife(), achievements: {}, uniquesFound: [], lootFilter: { dismantle: -1 }, builds: [null, null, null],
     dream: newDream(), village: {}, cordeis: { levels: {}, equipped: [] }, aspects: { owned: [], equipped: {} },
+    challenges: newChallenges(),
   };
   const start: [ItemType, string][] = [['facao', 'Facão de Mato'], ['gibao', 'Gibão de Couro'], ['chapeu', 'Chapéu de Couro']];
   for (const [type, name] of start) {
@@ -300,6 +316,8 @@ const STEPS: Record<number, (p: Profile) => void> = {
       c.temper = TEMPER_ORDER[v % TEMPER_ORDER.length]; c.bond = c.bond ?? 0;
     }
   },
+  /* v5 → v6: os desafios com ranking. Só campo novo. */
+  5: () => undefined,
 };
 
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
@@ -317,6 +335,7 @@ export function migrate(saved: Profile): Profile {
     cordeis: { levels: { ...(old.cordeis?.levels ?? {}) }, equipped: [...(old.cordeis?.equipped ?? [])] },
     aspects: { owned: [...(old.aspects?.owned ?? [])], equipped: { ...(old.aspects?.equipped ?? {}) } },
     andancas: { slots: [0, 1, 2].map((i) => old.andancas?.slots?.[i] ?? null), day: old.andancas?.day ?? '', hours: old.andancas?.hours ?? 0 },
+    challenges: { daily: { ...base.challenges.daily, ...(old.challenges?.daily ?? {}) }, encantados: { ...base.challenges.encantados, ...(old.challenges?.encantados ?? {}), bestByWeapon: { ...(old.challenges?.encantados?.bestByWeapon ?? {}) } } },
   };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];

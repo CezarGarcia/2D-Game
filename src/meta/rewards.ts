@@ -3,6 +3,7 @@
  * XP e ouro caem em fase fácil, o item com nome não sofre redução e tem azar com limite.
  */
 import type { Replay } from '../sim/replay';
+import type { HeroSpec } from '../data/challenge';
 import { TEMPER_ORDER } from '../data/tempers';
 import { OMEN } from '../data/omens';
 import { SUPREMOS, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
@@ -39,6 +40,8 @@ export interface StageOutcome {
   chests?: number;
   /** Gravação dos comandos, para o ranking refazer a partida no servidor (fora da Caçada automática). */
   replay?: Replay;
+  /** Herói dos desafios (arma, feitiços, companheiro, Supremo), que o servidor usa para refazer a partida. */
+  hero?: HeroSpec;
   /** Como o herói saiu (o Sonho leva isto para a sala seguinte): fração da vida, poções, carga do Supremo, quedas que sobraram e o azar do altar. */
   left?: { hpFrac: number; potions: number; supremo: number; revives: number; altarDry: number };
   /** Peso dos Presságios ligados nesta partida da campanha (0 ou ausente = nenhum). */
