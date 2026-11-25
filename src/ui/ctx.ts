@@ -4,8 +4,9 @@
  */
 import type { AchievementGroup } from '../data/achievements';
 import type { EnemyKind } from '../data/balance';
-import type { ElementId, SpellId } from '../data/content';
+import type { CompanionId, ElementId, SpellId } from '../data/content';
 import type { BrewId } from '../data/brews';
+import type { BuildingId } from '../data/village';
 import type { OmenPick } from '../data/omens';
 import type { NightChoice, NightEnd } from '../meta/dream';
 import type { Profile } from '../meta/profile';
@@ -90,6 +91,10 @@ export interface UiState {
     tab: 'heroi' | 'cordeis' | 'pressagios'; omens: OmenPick;
     /** Roda do Saci: o que animar no próximo desenho (tudo, ou só uma coluna) e se o próximo clique numa casa é um Assobio. */
     rolled: 'all' | number | null; whistle: boolean;
+    /** A cena da Aldeia aberta, a construção escolhida nela e a Andança que está sendo montada. */
+    village: boolean; building: BuildingId; walk: { id: CompanionId | null; chapter: number; hours: number };
+    /** Momento de exagero a mostrar no próximo desenho (sorte grande, Despertar): título, linha de baixo e cor. */
+    moment: { title: string; sub: string; color: string } | null;
   };
   /** Presságios marcados para a próxima fase da campanha, e se a janelinha deles está aberta. */
   omens: OmenPick; omenOpen: boolean;
@@ -105,7 +110,7 @@ export function newState(): UiState {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
     web: null, spellSel: null, spellEl: null, compFilter: null,
-    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false }, omens: {}, omenOpen: false, brew: null, brewOpen: false,
+    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false, village: false, building: 'rancho', walk: { id: null, chapter: 1, hours: 4 }, moment: null }, omens: {}, omenOpen: false, brew: null, brewOpen: false,
     options: false, confirm: null, toast: null,
   };
 }

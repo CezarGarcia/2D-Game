@@ -7,7 +7,7 @@ import { brewChip, brewPopup } from './garrafada';
 import { paintTowerBackdrop } from '../art/backdrops';
 import { COMPANIONS, ELEMENTS } from '../data/content';
 import { CHAPTERS, ENEMY_NAMES } from '../data/stages';
-import { FLOORS_PER_RUN, TOWER_FLOORS, towerChapter, towerLevel, towerRun } from '../data/tower';
+import { FLOORS_PER_RUN, TOWER_FLOORS, depthsScale, towerChapter, towerLevel, towerRun } from '../data/tower';
 import { weekKey, type Profile } from '../meta/profile';
 import { isTowerUnlocked } from '../meta/rewards';
 import { MAIN_H, MAIN_W, type Ctx } from './ctx';
@@ -21,7 +21,8 @@ const TX = 598, TOP = 66, BOTTOM = 630;
 
 interface Run { start: number; end: number }
 
-function runOf(start: number): Run { return { start, end: Math.min(TOWER_FLOORS, start + FLOORS_PER_RUN - 1) }; }
+/* nas Profundezas (depois do andar 100) as subidas continuam de dez em dez, sem teto */
+function runOf(start: number): Run { return { start, end: start > TOWER_FLOORS ? start + FLOORS_PER_RUN - 1 : Math.min(TOWER_FLOORS, start + FLOORS_PER_RUN - 1) }; }
 
 /** Chefe do décimo andar de uma subida. */
 function bossName(start: number): string {
@@ -114,8 +115,8 @@ export function renderTorre(c: Ctx): HTMLElement {
 
   /* ---------- recordes ---------- */
   const records = h('div', 'tower-records',
-    tip(h('div', { class: 'trec big', tabindex: 0 }, ui('torre', 52), h('span', 'trec-nums', h('b', null, num(t.best)), h('i', null, `/ ${TOWER_FLOORS}`))), {
-      title: 'Recorde', tag: `${t.best}/${TOWER_FLOORS}`, color: '#f2c14e', icon: ui('torre', 36),
+    tip(h('div', { class: 'trec big', tabindex: 0 }, ui('torre', 52), h('span', 'trec-nums', h('b', null, num(t.best)), h('i', null, t.best >= TOWER_FLOORS ? 'Profundezas' : `/ ${TOWER_FLOORS}`))), {
+      title: 'Recorde', tag: t.best >= TOWER_FLOORS ? `Profundezas: ${t.best}` : `${t.best}/${TOWER_FLOORS}`, color: '#f2c14e', icon: ui('torre', 36),
       rows: [{ icon: 'torre', text: 'Andar mais alto vencido', value: num(t.best) }, t.best >= MICO_FLOOR ? null : { icon: 'gaiola', text: `O ${COMPANIONS.mico.name} espera no andar ${MICO_FLOOR}`, tone: 'gold' }],
     }),
     tip(h('div', { class: 'trec', tabindex: 0 }, ui('relogio', 40), h('span', 'trec-nums', h('b', null, num(wk.best)), wk.best > 0 && h('i', null, clock(wk.time)))), {
@@ -133,7 +134,7 @@ export function renderTorre(c: Ctx): HTMLElement {
   const shells = stageShells({ id: `torre-${cur.start}`, chapter: 1, number: 0, index: -1 }), shellEl = shells ? towerElement(weekKey(), cur.start) : null, shellWeak = shellEl ? wheelAffinity(shellEl).weak[0] : null;
   const reward = (icon: string, value: string | null, title: string) => tip(h('span', { class: 'trew', tabindex: 0 }, ui(icon, 30), value && h('b', null, value)), { title, icon: ui(icon, 36) });
   const climb = h('div', 'tower-climb',
-    tip(h('div', { class: 'tc-head', tabindex: 0 }, h('b', null, `${cur.start}–${cur.end}`)), () => runTip(c.p, cur, 'now')),
+    tip(h('div', { class: `tc-head${cur.start > TOWER_FLOORS ? ' deep' : ''}`, tabindex: 0 }, h('b', null, `${cur.start}–${cur.end}`), cur.start > TOWER_FLOORS && h('em', null, `Profundezas · monstros com +${Math.round((depthsScale(cur.end).hp - 1) * 100)}% de vida`)), () => runTip(c.p, cur, 'now')),
     h('div', 'tc-row',
       tip(stat('xp', `Nv ${towerLevel(cur.start)}–${towerLevel(cur.end)}`, { size: 26 }), { title: 'Nível dos monstros', icon: ui('xp', 36), rows: [{ icon: 'poder', text: 'Sobe um pouco a cada andar.', tone: 'dim' }] }),
       tip(h('span', { class: 'stat', tabindex: 0 }, runChapters(cur).map((f) => ui(chapterIcon(f), 26))),

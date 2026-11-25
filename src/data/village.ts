@@ -3,7 +3,7 @@
  * Nesta etapa entram as que já têm o que melhorar. A cena da Aldeia e as outras construções vêm depois.
  */
 
-export type BuildingId = 'rancho' | 'mural' | 'casaDeFarinha' | 'casaDeCordel';
+export type BuildingId = 'rancho' | 'mural' | 'casaDeFarinha' | 'casaDeCordel' | 'viveiro' | 'barracaDoSaci';
 
 export interface BuildingDef {
   id: BuildingId;
@@ -48,6 +48,22 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
       { cost: 210, desc: 'Fôlego 14 para equipar Cordéis' },
       { cost: 320, desc: 'Fôlego 17 para equipar Cordéis' },
       { cost: 460, desc: 'Fôlego 20 para equipar Cordéis' },
+    ],
+  },
+  viveiro: {
+    id: 'viveiro', name: 'Viveiro', icon: 'companheiros', about: 'Onde os companheiros descansam, e de onde saem para as Andanças.',
+    levels: [
+      { cost: 60, desc: 'Abre as Andanças, com 1 vaga' },
+      { cost: 150, desc: '2 vagas de Andança' },
+      { cost: 300, desc: '3 vagas de Andança' },
+    ],
+  },
+  barracaDoSaci: {
+    id: 'barracaDoSaci', name: 'Barraca do Saci', icon: 'roda', about: 'O Saci montou banca. Diz que é para pagar o que deve.',
+    levels: [
+      { cost: 80, desc: '+1 Pulo em cada Roda do Saci' },
+      { cost: 170, desc: '+1 Assobio em cada Roda do Saci' },
+      { cost: 320, desc: '+1 giro grátis em cada Roda do Saci' },
     ],
   },
 };

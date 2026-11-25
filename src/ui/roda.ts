@@ -45,7 +45,7 @@ export function rodaPanel(c: Ctx, run: DreamRun, w: Roda): HTMLElement {
   const collect = () => {
     const out = collectRoda(c.p);
     if (!out) return;
-    if (out.jackpot) c.toast('Sorte grande!');
+    if (out.jackpot) st.moment = { title: 'Sorte grande!', sub: 'Quatro linhas do mesmo padrinho', color: '#ffe27a' };
     else if (!out.lines.length) c.toast('Nada desta vez', 'bad');
     st.whistle = false;
     c.commit(cost != null ? 'roda-girar' : 'roda-sair');

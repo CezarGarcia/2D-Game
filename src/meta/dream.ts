@@ -14,6 +14,7 @@ import {
   AWAKENINGS, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, MAX_POTIONS, STAGE_ONLY_BLESSINGS, blessingCounts, patronTier, patronCounts,
   type BaseBlessingId, type BlessingId, type CompanionId, type ElementId, type SpellId,
 } from '../data/content';
+import { BOND, TEMPER_ORDER, type TemperId } from '../data/tempers';
 import { DREAM, dreamNight, isPanelNode, nextNodes, nodeStageId, type DreamNode, type Night, type NodeKind, type Trecho } from '../data/dream';
 import { WEAPON_KINDS, type WeaponKind } from '../data/items';
 import { stageGold, stageXp } from '../data/progression';
@@ -22,10 +23,11 @@ import { CHAPTERS } from '../data/stages';
 import { BUILDINGS, type BuildingId } from '../data/village';
 import { redundantBlessing } from '../sim/world';
 import type { Carry } from '../sim/types';
+import { FALAS, type FalaFacts } from '../data/falas';
 import { checkAchievements } from './achievements';
 import { recordTally } from './life';
-import { addXp, allItems, knownSpells, maxPotions, profileRng, type Profile } from './profile';
-import type { StageOutcome } from './rewards';
+import { addXp, allItems, knownSpells, maxPotions, profileRng, weekKey, type Profile } from './profile';
+import { bondUp, type StageOutcome } from './rewards';
 import { readGrid, rodaWeights, spinGrid, type RodaRead, type RodaSymbol, type RodaWeights } from './roda';
 import { deriveStats, referenceProfile, type HeroStats, type StatBoost } from './stats';
 
@@ -87,6 +89,8 @@ export interface DreamRun {
   dry: number;
   /** Escolhas que esperam a atual ser resolvida. */
   later: Pending[];
+  /** Nível da Barraca do Saci quando a noite começou, e se esta é a Noite da Semana. */
+  barraca?: number; weekly?: boolean;
 }
 
 /** Como a noite acabou e o que o jogador traz dela. */
@@ -102,6 +106,8 @@ export interface NightEnd {
   weapon: WeaponKind; level: number;
   /** Conquistas alcançadas ao acordar. */
   achievements: string[];
+  /** Peso dos Presságios da noite, a fala de um Encantado (se houver uma nova) e se foi a Noite da Semana, com o recorde batido ou não. */
+  weight: number; fala: { id: string; who: ElementId; text: string } | null; weekly: { best: boolean } | null;
 }
 
 /** O que mudou ao resolver um nó de sala. */
@@ -334,7 +340,7 @@ export function validChoice(p: Profile, c: NightChoice): boolean {
 }
 
 /** Começa uma noite. A primeira de todas é curta: um trecho só. Devolve nulo se não puder. */
-export function startNight(p: Profile, c: NightChoice, seed?: number): DreamRun | null {
+export function startNight(p: Profile, c: NightChoice, seed?: number, weekly = false): DreamRun | null {
   if (!isDreamUnlocked(p) || p.dream.run || !validChoice(p, c)) return null;
   const s = (seed ?? Math.floor(profileRng(p)() * 0x7fffffff)) | 1;
   const patrons = p.supremos.slice(), chapters = dreamChapters(p);
@@ -352,6 +358,7 @@ export function startNight(p: Profile, c: NightChoice, seed?: number): DreamRun 
     pending: null, rolls: 0, seven: false,
     omens, cordeis: Object.fromEntries(worn.map((id) => [id, p.cordeis.levels[id] ?? 1])), aspect: aspectId && p.aspects.owned.includes(aspectId) && ASPECTS[aspectId].weapon === c.weapon ? aspectId : null,
     clock: 0, altars: 0, doubled: false, dry: 0, later: [],
+    barraca: village(p, 'barracaDoSaci'), weekly: !!weekly,
   };
   run.potions = potionCap(run);
   run.vintem += cordel(run, 'cantador');
@@ -724,7 +731,21 @@ export function wake(p: Profile, how: NightEnd['how'], now: Date = new Date()): 
   const end: NightEnd = {
     won, how, memories, xp, gold, levels: up.levels, talent, trechos, of: run.map.trechos.length, tally: run.tally,
     blessings: run.blessings.slice(), amulets: run.amulets.slice(), weapon: run.weapon, level: run.level, achievements: [],
+    weight: omenWeight(run.omens), fala: null, weekly: null,
   };
+  /* o companheiro da campanha ganha Laço pelos trechos vencidos */
+  if (trechos > 0) bondUp(p, trechos);
+  /* Noite da Semana: guarda o melhor resultado (venceu, depois trechos, depois tempo) */
+  if (run.weekly) {
+    const wk = weekKey(now), W = D.weekly.week === wk ? D.weekly : { week: wk, tries: 0, won: false, trechos: 0, time: 0 };
+    const better = (won && !W.won) || (won === W.won && (trechos > W.trechos || (trechos === W.trechos && (W.time === 0 || run.tally.time < W.time))));
+    D.weekly = { week: wk, tries: W.tries + 1, won: better ? won : W.won, trechos: better ? trechos : W.trechos, time: better ? Math.round(run.tally.time) : W.time };
+    end.weekly = { best: better };
+  }
+  /* uma fala que ainda não apareceu, de um Encantado já libertado */
+  const facts: FalaFacts = { won, how, trechos, of: end.of, weight: end.weight, nights: D.nights, wins: D.wins, awakened: run.blessings.filter((b) => BLESSINGS[b].kind === 'desperta').length, jackpots: D.jackpots ?? 0, amulets: run.amulets.length, blessings: run.blessings.length };
+  const fala = FALAS.find((f) => p.supremos.includes(f.who) && !D.falasSeen.includes(f.id) && f.when(facts));
+  if (fala) { D.falasSeen.push(fala.id); end.fala = { id: fala.id, who: fala.who, text: fala.text }; }
   end.achievements = checkAchievements(p, now);
   return end;
 }
@@ -821,9 +842,9 @@ function makeRoda(run: DreamRun): Roda {
   }
   return {
     kind: 'roda', patrons, grid: null, collected: true, spins: 0, paid: 0, last: null,
-    free: (has(run, 'moedaFurada') ? 2 : DREAM.roda.free) + cordel(run, 'fiadoSaci'),
-    pulos: DREAM.roda.pulos + (has(run, 'cabacaDoSaci') ? 1 : 0) + cordel(run, 'mocaVento'),
-    assobios: (has(run, 'apitoDeTaquara') ? 1 : 0) + cordel(run, 'assobiador'),
+    free: (has(run, 'moedaFurada') ? 2 : DREAM.roda.free) + cordel(run, 'fiadoSaci') + ((run.barraca ?? 0) >= 3 ? 1 : 0),
+    pulos: DREAM.roda.pulos + (has(run, 'cabacaDoSaci') ? 1 : 0) + cordel(run, 'mocaVento') + ((run.barraca ?? 0) >= 1 ? 1 : 0),
+    assobios: (has(run, 'apitoDeTaquara') ? 1 : 0) + cordel(run, 'assobiador') + ((run.barraca ?? 0) >= 2 ? 1 : 0),
   };
 }
 
@@ -920,4 +941,46 @@ export function collectRoda(p: Profile): RodaPayout | null {
   run.dry = read.lines.length ? 0 : (run.dry ?? 0) + 1;
   w.collected = true; w.last = out;
   return out;
+}
+
+/* ---------- Noite da Semana ---------- */
+
+/**
+ * A noite que é igual para todo mundo naquela semana: a mesma semente (o mesmo mapa) e os mesmos Presságios.
+ * O herói é o de cada um. O recorde fica guardado no perfil; vira ranking junto com a parte online.
+ */
+export function weeklyNight(week: string = weekKey()): { seed: number; omens: OmenPick } {
+  let v = 2166136261;
+  for (const ch of `noite|${week}`) v = Math.imul(v ^ ch.charCodeAt(0), 16777619);
+  const r = makeRng((v >>> 0) | 1), omens: OmenPick = {};
+  /* de três a quatro Presságios sorteados, um grau cada, e mais um grau no primeiro */
+  const pool = (['luaCheia', 'fome', 'maoPesada', 'bando', 'chefeTeimoso', 'cascaGrossa', 'mareContraria', 'poucasVelas', 'feiraCara', 'pressa', 'juizo'] as const).slice();
+  const n = 3 + (r() < 0.5 ? 1 : 0);
+  for (let i = 0; i < n; i++) { const id = pool.splice(Math.floor(r() * pool.length), 1)[0]; omens[id] = 1; }
+  return { seed: ((v >>> 0) % 0x7ffffffe) | 1, omens: cleanOmens(omens) };
+}
+
+/** Começa a Noite da Semana com o herói escolhido. Quantas vezes quiser; vale o melhor resultado. */
+export function startWeeklyNight(p: Profile, c: NightChoice, now: Date = new Date()): DreamRun | null {
+  if (p.dream.nights === 0) return null;
+  const w = weeklyNight(weekKey(now));
+  return startNight(p, { ...c, omens: w.omens }, w.seed, true);
+}
+
+/** O recorde desta semana (zerado se a semana virou). */
+export function weeklyRecord(p: Profile, now: Date = new Date()): Profile['dream']['weekly'] {
+  const wk = weekKey(now);
+  return p.dream.weekly?.week === wk ? p.dream.weekly : { week: wk, tries: 0, won: false, trechos: 0, time: 0 };
+}
+
+/* ---------- Temperamento ---------- */
+
+/** Sorteia outro Temperamento para um companheiro, por Lembranças. Nunca repete o que ele já tem. */
+export function rerollTemper(p: Profile, id: CompanionId): TemperId | null {
+  const c = p.companions[id];
+  if (!c || p.dream.memories < BOND.reroll) return null;
+  p.dream.memories -= BOND.reroll;
+  const pool = TEMPER_ORDER.filter((t) => t !== c.temper);
+  c.temper = pool[Math.floor(profileRng(p)() * pool.length)];
+  return c.temper;
 }

@@ -171,6 +171,8 @@ export class StageScene extends Phaser.Scene {
   private amulets: AmuletId[] = [];
   /** Quando cada monstro mostrou "Fraco!" ou "Resiste" pela última vez, para o aviso não repetir a cada golpe. */
   private affSaid = new Map<number, number>();
+  /** A partir de quanto um golpe conta como enorme nesta fase. */
+  private hugeHit = Infinity;
   private boost: StatBoost = {};
   private omens: OmenPick = {};
 
@@ -201,6 +203,7 @@ export class StageScene extends Phaser.Scene {
     });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
+    this.hugeHit = Math.max(60, this.world.stats.weaponDamage * this.world.stats.damageMult * 9);
     this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.affSaid.clear(); this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
     if (this.auto) this.tally.auto = true;
     this.views.clear(); this.shots.clear(); this.cards = [];
@@ -413,8 +416,11 @@ export class StageScene extends Phaser.Scene {
       case 'hit': {
         const soft = e.kind === 'poison' || e.kind === 'reflect' || e.kind === 'blast', pet = e.kind === 'pet';
         /* afinidade: o número sai maior e na cor do elemento quando acerta a fraqueza, e menor e cinza quando o monstro resiste */
+        /* golpe enorme (várias vezes o golpe de arma do herói): número maior e em brasa */
+        const huge = (e.value ?? 0) >= this.hugeHit;
         const aff = e.aff ?? 0, affColor = aff > 0 ? (e.el ? ELEMENTS[e.el as ElementId].color : '#9dffb0') : '#8f949c';
-        this.number(e.x, e.y - 70, String(e.value) + (e.crit ? '!' : ''), aff ? affColor : e.kind === 'poison' ? '#8fe36a' : e.armored ? '#c9c4bd' : e.crit ? '#ffd23f' : pet ? '#ffd9a0' : '#ffffff', (soft ? 20 : pet ? 22 : e.crit ? 38 : 28) * (aff > 0 ? 1.2 : aff < 0 ? 0.8 : 1));
+        this.number(e.x, e.y - 70, String(e.value) + (e.crit ? '!' : ''), aff ? affColor : huge ? '#ff8a3c' : e.kind === 'poison' ? '#8fe36a' : e.armored ? '#c9c4bd' : e.crit ? '#ffd23f' : pet ? '#ffd9a0' : '#ffffff', (soft ? 20 : pet ? 22 : e.crit ? 38 : 28) * (aff > 0 ? 1.2 : aff < 0 ? 0.8 : 1) * (huge ? 1.5 : 1), huge ? 1.2 : 0.8);
+        if (huge && !soft) { this.cameras.main.shake(110, 0.007); this.fx.push({ kind: 'ring', x: e.x, y: e.y - 30, t: 0, dur: 0.3, r0: 12, r1: 90, color: 0xff7a2a, width: 7 }); }
         if (aff && e.id != null) {
           const key = e.id * 2 + (aff > 0 ? 1 : 0), last = this.affSaid.get(key) ?? -9;
           if (this.clock - last > 1.1) { this.affSaid.set(key, this.clock); this.number(e.x, e.y - 104, aff > 0 ? 'FRACO!' : 'RESISTE', affColor, aff > 0 ? 24 : 19, 0.9); }
@@ -482,6 +488,8 @@ export class StageScene extends Phaser.Scene {
         if (BLESSINGS[e.kind as BlessingId].tier === 4) {
           /* Despertar e Compadrio: a tela pisca e sobem anéis dourados */
           this.cameras.main.flash(220, 255, 226, 150);
+          this.number(VIEW.w / 2, 200, BLESSINGS[e.kind as BlessingId].kind === 'desperta' ? 'DESPERTAR!' : 'COMPADRIO!', '#ffe27a', 60, 2);
+          this.hitstop = Math.max(this.hitstop, 0.12);
           for (let i = 0; i < 3; i++) this.fx.push({ kind: 'ring', x: p.x, y: p.y - 40, t: -i * 0.14, dur: 0.6, r0: 24, r1: 190, color: 0xffd23f, width: 9 });
         }
         this.announceSynergy();

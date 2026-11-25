@@ -132,11 +132,12 @@ export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quie
     mods = mods.slice();
     for (let i = 0; i < foes.eliteMods && left.length; i++) mods.push(left.splice(Math.floor(rand(w) * left.length), 1)[0]);
   }
-  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1) * (foes?.hp ?? 1) * (boss ? foes?.bossHp ?? 1 : 1));
+  const deep = w.cfg.rooms[w.room]?.deep;
+  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1) * (foes?.hp ?? 1) * (boss ? foes?.bossHp ?? 1 : 1) * (deep?.hp ?? 1));
   const e: Enemy = {
     id: w.nextId++, kind: def.kind, elite: !!def.elite, champion, mods,
     x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : champion ? CHAMPION.scale : 1),
-    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1) * (foes?.damage ?? 1),
+    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1) * (foes?.damage ?? 1) * (deep?.damage ?? 1),
     shell: 0, shellMax: 0, shellEl: null, exposeT: 0, shellT: 0, weakEl: null,
     speedMult: (boss ? 1 : enemySpeedMult(level)) * (mods.includes('veloz') ? MOD.veloz.speed : 1),
     windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1) * (foes?.windup ?? 1),

@@ -1612,3 +1612,119 @@
 .enc-ui .tc-row .brew-chip { min-width: 36px; padding: 0 7px; font-size: 0; gap: 0; }
 /* e fica no canto do painel da subida, fora da linha dos números */
 .enc-ui .tc-row .brew-chip { position: absolute; right: 10px; top: 12px; height: 34px; }
+
+/* =====================================================================
+   Fase 5: a Aldeia, as Andanças, a Noite da Semana e os momentos de exagero
+   ===================================================================== */
+.enc-ui .aldeia { color: var(--cream); }
+.enc-ui .aldeia-top { position: absolute; left: 12px; top: 10px; display: flex; align-items: center; gap: 12px; padding: 6px 14px 6px 8px; background: rgba(28, 15, 10, .86); border: 3px solid var(--ink); border-radius: 14px; box-shadow: 0 4px 0 rgba(0, 0, 0, .4); }
+.enc-ui .aldeia-top .btn .ico { transform: scaleX(-1); }
+.enc-ui .aldeia-name { font-weight: 900; font-size: 30px; line-height: 1; color: var(--gold); text-shadow: 0 3px 0 rgba(0, 0, 0, .55); }
+.enc-ui .aldeia-count { display: inline-flex; align-items: center; gap: 5px; font-weight: 900; font-size: 19px; }
+.enc-ui .aldeia .ss-mem { display: inline-flex; align-items: center; gap: 5px; padding: 2px 12px 2px 6px; background: rgba(8, 6, 28, .6); border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .aldeia .ss-mem b { font-weight: 900; font-size: 22px; color: #cdb8ff; }
+.enc-ui .vspot { position: absolute; width: 190px; height: 150px; margin: -128px 0 0 -95px; padding: 0; background: none; border: 0; border-radius: 18px; }
+.enc-ui .vspot-plate { position: absolute; left: 50%; bottom: -22px; transform: translateX(-50%); display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 15px; white-space: nowrap; color: var(--cream); background: rgba(28, 15, 10, .88); border: 2px solid var(--ink); border-radius: 99px; transition: transform .1s; }
+.enc-ui .vspot-plate b { font-weight: 900; }
+.enc-ui .vspot:not(.has) .vspot-plate { color: var(--dim); }
+.enc-ui .vspot:hover .vspot-plate { transform: translateX(-50%) translateY(-2px); filter: brightness(1.25); }
+.enc-ui .vspot.on .vspot-plate { color: var(--ink); background: linear-gradient(#ffe9a8, #f2b83c); }
+.enc-ui .vspot.on { box-shadow: inset 0 0 0 3px rgba(255, 226, 122, .7), 0 0 26px rgba(255, 226, 122, .35); background: rgba(255, 226, 122, .1); }
+.enc-ui .vspot-up { position: absolute; right: 34px; top: 6px; display: grid; place-items: center; width: 26px; height: 26px; background: var(--ok); border: 2px solid var(--ink); border-radius: 50%; animation: enc-bob 1.2s ease-in-out infinite; }
+.enc-ui .vfolk { position: absolute; width: 96px; height: 112px; margin: -104px 0 0 -48px; pointer-events: auto; }
+.enc-ui .panel.aldeia-panel { right: 12px; top: 12px; width: 372px; height: 650px; padding: 14px 14px 12px; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.enc-ui .vp-head { display: flex; align-items: center; gap: 12px; }
+.enc-ui .vp-head b { display: block; font-weight: 900; font-size: 24px; line-height: 1.05; color: var(--gold); text-shadow: 0 2px 0 rgba(0, 0, 0, .5); }
+.enc-ui .vp-head span { font-size: 15px; line-height: 1.15; color: var(--cream2); }
+.enc-ui .vp-ico { display: grid; place-items: center; flex: none; width: 62px; height: 62px; background: radial-gradient(circle at 50% 30%, #7a7468, #3a352e 78%); border: 3px solid var(--ink); border-radius: 16px; }
+.enc-ui .vp-ico .ico { filter: grayscale(1) brightness(.75); }
+.enc-ui .vp-ico.has { background: radial-gradient(circle at 50% 30%, #fff0b8, #d99a2e 78%); }
+.enc-ui .vp-ico.has .ico { filter: none; }
+.enc-ui .vp-levels { display: flex; flex-direction: column; gap: 4px; }
+.enc-ui .vp-level { display: flex; align-items: center; gap: 8px; padding: 4px 8px; font-size: 15.5px; line-height: 1.1; color: var(--dim); background: rgba(0, 0, 0, .25); border-radius: 9px; }
+.enc-ui .vp-level i { display: grid; place-items: center; flex: none; width: 22px; height: 22px; font-style: normal; font-weight: 900; font-size: 13px; color: var(--cream2); background: #130d09; border: 2px solid var(--ink); border-radius: 50%; }
+.enc-ui .vp-level span { flex: 1; }
+.enc-ui .vp-level em { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-weight: 900; color: #cdb8ff; }
+.enc-ui .vp-level.done { color: var(--cream); }
+.enc-ui .vp-level.done i { background: var(--ok); }
+.enc-ui .vp-level.next { color: #fff; box-shadow: inset 0 0 0 2px var(--gold); }
+.enc-ui .btn.vp-build { gap: 10px; min-height: 44px; font-size: 21px; }
+.enc-ui .vp-cost { display: inline-flex; align-items: center; gap: 3px; }
+.enc-ui .vp-max { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 8px; font-weight: 900; color: var(--ok); background: rgba(0, 0, 0, .25); border-radius: 10px; }
+.enc-ui .vp-note { padding: 10px 12px; font-size: 16px; line-height: 1.2; color: var(--cream2); background: rgba(0, 0, 0, .25); border-radius: 10px; }
+.enc-ui .vp-sub { display: flex; align-items: center; gap: 6px; font-weight: 900; font-size: 18px; color: var(--cream); }
+.enc-ui .vp-hours { margin-left: auto; padding: 1px 10px; font-size: 14px; color: var(--ok); background: rgba(0, 0, 0, .3); border-radius: 99px; }
+.enc-ui .vp-hours.out { color: var(--bad); }
+.enc-ui .walks { display: flex; flex-direction: column; gap: 5px; }
+.enc-ui .walk { display: flex; align-items: center; gap: 6px; min-height: 46px; padding: 4px 6px; background: rgba(0, 0, 0, .28); border: 2px solid var(--ink); border-radius: 11px; }
+.enc-ui .walk.empty { justify-content: center; font-size: 15px; color: var(--dim); border-style: dashed; }
+.enc-ui .walk.ready { box-shadow: inset 0 0 0 2px var(--ok); }
+.enc-ui .walk.setup .chip { height: 32px; padding: 0 8px; gap: 4px; font-size: 14.5px; }
+.enc-ui .walk.setup .btn { margin-left: auto; }
+.enc-ui .walk-who { display: grid; place-items: center; flex: none; width: 32px; height: 32px; background: radial-gradient(circle at 50% 30%, color-mix(in srgb, var(--ec) 60%, #fff), color-mix(in srgb, var(--ec) 55%, #111) 80%); border: 2px solid var(--ink); border-radius: 50%; }
+.enc-ui .walk-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.enc-ui .walk-mid b { font-weight: 900; font-size: 15.5px; line-height: 1; }
+.enc-ui .walk-mid span { font-size: 13px; color: var(--cream2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.enc-ui .mates { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 4px; overflow-y: auto; padding-right: 3px; scrollbar-width: thin; scrollbar-color: #8a5a34 rgba(0, 0, 0, .3); }
+.enc-ui .mate { display: flex; align-items: center; gap: 7px; padding: 3px 6px; background: rgba(0, 0, 0, .25); border: 2px solid var(--ink); border-radius: 10px; }
+.enc-ui .mate.on { box-shadow: inset 0 0 0 2px var(--gold); }
+.enc-ui .mate-mid { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.enc-ui .mate-mid b { font-weight: 900; font-size: 15px; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.enc-ui .mate-mid span { display: flex; align-items: center; gap: 4px; font-size: 13.5px; color: var(--cream2); }
+.enc-ui .mate-bond { display: inline-flex; gap: 2px; margin-left: 6px; }
+.enc-ui .mate-bond u { width: 8px; height: 8px; background: #130d09; border: 1.5px solid var(--ink); border-radius: 50%; text-decoration: none; }
+.enc-ui .mate-bond u.on { background: #ff7ab0; }
+.enc-ui .mate-roll { display: inline-flex; align-items: center; gap: 2px; padding: 0 7px 0 4px; height: 24px; font-weight: 900; font-size: 13px; color: var(--ink); background: #cdb8ff; border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .mate-roll:disabled { color: #fff; background: #5a4f7a; }
+.enc-ui .mate-roll:hover:not(:disabled) { filter: brightness(1.15); }
+
+/* cartões da Aldeia e da Noite da Semana, na preparação do Sonho */
+.enc-ui .aldeia-card { display: flex; align-items: center; gap: 12px; margin-top: auto; padding: 8px 12px; text-align: left; color: var(--cream); background: linear-gradient(180deg, #6b3f23, #4c2b17); border: 3px solid var(--ink); border-radius: 14px; box-shadow: inset 0 2px 0 rgba(255, 214, 150, .26), 0 4px 0 rgba(0, 0, 0, .45); transition: transform .1s, filter .1s; }
+.enc-ui .aldeia-card:hover { transform: translateY(-2px); filter: brightness(1.15); }
+.enc-ui .aldeia-card-ico { display: grid; place-items: center; flex: none; width: 56px; height: 56px; background: radial-gradient(circle at 50% 30%, #fff0b8, #d99a2e 78%); border: 3px solid var(--ink); border-radius: 14px; }
+.enc-ui .aldeia-card-mid { flex: 1; display: flex; flex-direction: column; }
+.enc-ui .aldeia-card-mid b { font-weight: 900; font-size: 24px; line-height: 1.05; color: var(--gold); }
+.enc-ui .aldeia-card-mid span { font-size: 14.5px; color: var(--cream2); }
+.enc-ui .aldeia-card-up { display: grid; place-items: center; width: 26px; height: 26px; background: var(--ok); border: 2px solid var(--ink); border-radius: 50%; animation: enc-bob 1.2s ease-in-out infinite; }
+.enc-ui .weekly { display: flex; flex-direction: column; gap: 6px; padding: 8px 10px; background: rgba(8, 6, 28, .5); border: 2px solid var(--ink); border-radius: 14px; box-shadow: inset 0 0 0 2px rgba(205, 184, 255, .35); }
+.enc-ui .weekly-top { display: flex; align-items: center; gap: 8px; }
+.enc-ui .weekly-top b { font-weight: 900; font-size: 20px; color: var(--moon); }
+.enc-ui .weekly-peso { display: inline-flex; align-items: center; gap: 4px; margin-left: auto; padding: 0 10px; font-weight: 900; font-size: 15px; color: #e3d0ff; background: #3a1f5e; border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .weekly-omens { display: flex; flex-wrap: wrap; gap: 4px; }
+.enc-ui .weekly-omen { display: inline-flex; align-items: center; gap: 3px; padding: 0 8px 0 3px; font-size: 13.5px; color: #ffd0c8; background: rgba(74, 31, 110, .6); border-radius: 99px; }
+.enc-ui .weekly-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.enc-ui .weekly-rec { font-size: 14.5px; color: var(--cream2); }
+
+/* fim da noite: fala, Noite da Semana */
+.enc-ui .fala { display: flex; align-items: center; gap: 12px; align-self: stretch; padding: 4px 14px 4px 6px; background: rgba(8, 6, 28, .5); border: 2px solid var(--ink); border-radius: 14px; box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--ec) 55%, transparent); }
+.enc-ui .fala-cv { flex: none; }
+.enc-ui .fala-text { display: flex; flex-direction: column; gap: 2px; }
+.enc-ui .fala-text b { font-weight: 900; font-size: 17px; color: var(--ec); }
+.enc-ui .fala-text span { font-size: 18px; line-height: 1.2; color: var(--cream); }
+.enc-ui .end-weekly { display: inline-flex; align-items: center; gap: 6px; padding: 2px 16px 2px 8px; font-weight: 900; font-size: 17px; color: #e3d0ff; background: #3a1f5e; border: 2px solid var(--ink); border-radius: 99px; }
+.enc-ui .end-weekly.best { color: var(--ink); background: linear-gradient(#ffe27a, #f2a531); }
+.enc-ui .end-card { gap: 10px; padding-bottom: 16px; }
+.enc-ui .end-actions .btn.big { min-height: 50px; font-size: 24px; padding: 4px 20px; }
+
+/* momento de exagero */
+.enc-ui .moment { position: absolute; inset: 0; z-index: 9; display: grid; place-items: center; overflow: hidden; background: rgba(4, 3, 14, .78); cursor: pointer; animation: enc-moment 1.7s ease-in forwards; }
+@keyframes enc-moment { 0% { opacity: 0; } 8% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; visibility: hidden; } }
+.enc-ui .moment-beam { position: absolute; left: 50%; top: -10%; width: 360px; height: 120%; margin-left: -180px; background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--mc) 55%, transparent) 40%, #fff 50%, color-mix(in srgb, var(--mc) 55%, transparent) 60%, transparent); filter: blur(14px); transform-origin: 50% 0; animation: enc-beam .5s cubic-bezier(.2, 1.4, .4, 1) both; }
+@keyframes enc-beam { from { transform: scaleY(0) scaleX(.2); opacity: 0; } to { transform: none; opacity: .9; } }
+.enc-ui .moment-text { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; animation: enc-moment-text .45s cubic-bezier(.2, 1.5, .4, 1) .12s both; }
+@keyframes enc-moment-text { from { transform: scale(.5); opacity: 0; } }
+.enc-ui .moment-text b { font-weight: 900; font-size: 84px; line-height: 1; color: var(--mc); text-shadow: 0 6px 0 var(--ink), 0 0 40px var(--mc); -webkit-text-stroke: 3px var(--ink); paint-order: stroke fill; }
+.enc-ui .moment-text span { padding: 2px 22px; font-weight: 900; font-size: 26px; color: var(--ink); background: var(--mc); border: 3px solid var(--ink); border-radius: 99px; }
+
+/* Profundezas da Torre */
+.enc-ui .tc-head.deep { flex-direction: column; }
+.enc-ui .tc-head.deep em { font-style: normal; font-size: 13.5px; color: #e3d0ff; }
+
+/* com fala ou Noite da Semana, o resumo aperta para caber */
+.enc-ui .end-card.compact { gap: 8px; }
+.enc-ui .end-card.compact .end-fact { padding: 5px 4px; }
+.enc-ui .end-card.compact .end-fact .ico { width: 24px; height: 24px; }
+.enc-ui .end-card.compact .end-gain { padding: 6px 14px; flex-direction: row; gap: 8px; min-width: 0; }
+.enc-ui .end-card.compact .end-gain .ico { width: 34px; height: 34px; }
+.enc-ui .end-card.compact .end-gain.big b { font-size: 32px; }
+.enc-ui .end-card.compact .end-build { padding: 6px 10px; gap: 5px; }

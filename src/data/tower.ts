@@ -18,8 +18,16 @@ export const FLOORS_PER_RUN = 10;
 export function towerLevel(floor: number): number {
   return Math.min(60, 3 + Math.round(floor * 0.57));
 }
+/** Capítulo dos monstros do andar. Nas Profundezas (depois do 100), cada dez andares são de um capítulo, em roda. */
 export function towerChapter(floor: number): number {
+  if (floor > TOWER_FLOORS) return 1 + (Math.floor((floor - TOWER_FLOORS - 1) / FLOORS_PER_RUN) % 8);
   return Math.min(8, 1 + Math.floor((floor - 1) / 12.5));
+}
+/** Profundezas: depois do andar 100 o nível não sobe mais, então a vida e o dano dos monstros crescem a cada andar. */
+export const DEPTHS = { hpPerFloor: 0.03, damagePerFloor: 0.012 };
+export function depthsScale(floor: number): { hp: number; damage: number } {
+  const n = Math.max(0, floor - TOWER_FLOORS);
+  return { hp: Math.pow(1 + DEPTHS.hpPerFloor, n), damage: Math.pow(1 + DEPTHS.damagePerFloor, n) };
 }
 
 /** Monstros comuns de um capítulo (sem chefes). */
@@ -37,9 +45,10 @@ const CHAPTER_BOSSES: Record<number, BossKind[] | string[]> = {
 function floorRoom(floor: number): RoomDef {
   const rng = makeRng(90001 + floor * 131), chapter = towerChapter(floor), level = towerLevel(floor);
   const room: RoomDef = { type: 'combat', waves: [], bg: floor % 3, level, floor, artChapter: chapter };
+  if (floor > TOWER_FLOORS) room.deep = depthsScale(floor);
   const t = TERRAIN[chapter];
   if (floor % 10 === 0) {
-    const list = CHAPTER_BOSSES[chapter], kind = list[(floor / 10) % 2 === 1 ? 0 : 1] as StageDef['kinds'][number];
+    const list = CHAPTER_BOSSES[chapter], kind = list[floor > TOWER_FLOORS ? 1 : (floor / 10) % 2 === 1 ? 0 : 1] as StageDef['kinds'][number];
     room.type = 'boss';
     room.waves = [[{ kind, x: Math.round(ARENA.x0 + (ARENA.x1 - ARENA.x0) * 0.72), y: Math.round((ARENA.y0 + ARENA.y1) / 2), elite: true }]];
     if (t) { const tt = t(rng, 11); if (tt.dark) room.dark = true; if (tt.moon) room.moon = true; }
@@ -47,14 +56,15 @@ function floorRoom(floor: number): RoomDef {
   }
   if (t) Object.assign(room, t(rng, 6));
   if (chapter === 2) room.puddles = [{ x: 500 + Math.round(rng() * 300), y: 300 + Math.round(rng() * 200), r: 90 }];
-  const budget = 8 + floor * 0.16, pool = poolOf(chapter);
+  const budget = 8 + Math.min(floor, TOWER_FLOORS) * 0.16, pool = poolOf(chapter);
   room.waves = [wave(rng, pool, budget, [], 0.2), wave(rng, pool, budget * 1.1, [], 0.35)];
   return room;
 }
 
 /** Uma corrida da Torre como se fosse uma fase: 10 andares e um altar depois do quinto. */
 export function towerRun(start: number): StageDef {
-  const first = Math.max(1, Math.min(TOWER_FLOORS - FLOORS_PER_RUN + 1, start));
+  /* até o 100, a subida começa no máximo no 91; nas Profundezas, de dez em dez, sem fim */
+  const first = start > TOWER_FLOORS ? start : Math.max(1, Math.min(TOWER_FLOORS - FLOORS_PER_RUN + 1, start));
   const rooms: RoomDef[] = [];
   for (let f = first; f < first + FLOORS_PER_RUN; f++) {
     rooms.push(floorRoom(f));
@@ -63,7 +73,7 @@ export function towerRun(start: number): StageDef {
   const last = first + FLOORS_PER_RUN - 1, enemies = rooms.reduce((a, r) => a + r.waves.flat().length, 0);
   return {
     id: `torre-${first}`, chapter: 0, index: -1, number: first,
-    name: `Torre · andares ${first} a ${last}`, intro: 'Dez andares e um chefe no último. Cair encerra a subida, mas os andares vencidos ficam.',
+    name: first > TOWER_FLOORS ? `Profundezas · andares ${first} a ${last}` : `Torre · andares ${first} a ${last}`, intro: 'Dez andares e um chefe no último. Cair encerra a subida, mas os andares vencidos ficam.',
     level: towerLevel(last), rooms, starTime: Math.round((enemies * 1.9 + rooms.length * 8 + 90) / 5) * 5,
     kinds: Array.from(new Set(rooms.flatMap((r) => r.waves.flat().map((s) => s.kind)))), final: 'chefao', map: { x: 0, y: 0 },
   };

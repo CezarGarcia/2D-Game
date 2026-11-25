@@ -38,6 +38,8 @@ export interface RoomDef {
   trial?: { kind: 'ligeiro' | 'intocado'; limit: number };
   /** Sala de altar: de que padrinho são as bênçãos e até que raridade elas vão (o Sonho). */
   altar?: { patron?: ElementId | null; maxTier?: 1 | 2 | 3; minTier?: 1 | 2 | 3 };
+  /** Profundezas da Torre: vida e dano dos monstros desta sala, multiplicados. */
+  deep?: { hp: number; damage: number };
   /** Torre: nível dos monstros desta sala (senão vale o da fase), andar e capítulo de onde vêm a arte e o terreno. */
   level?: number;
   floor?: number;

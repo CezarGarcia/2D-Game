@@ -694,12 +694,12 @@ export function makePet(w: World): Companion | null {
   const id = w.stats.companion;
   if (!id) return null;
   const def = COMPANIONS[id], p = w.player;
-  const hp = Math.round(def.hp * (1 + 0.3 * (w.stats.level - 1)) * w.stats.companionMult);
+  const hp = Math.round(def.hp * (1 + 0.3 * (w.stats.level - 1)) * w.stats.companionMult * w.stats.petHpMult);
   return { id, x: p.x - 50, y: p.y + 18, hp, maxHp: hp, state: 'follow', stateT: 0, cd: 2, atkCd: 0, tauntT: 0, facing: 1, walk: 0, moving: false, target: 0, flash: 0, sx: 0, sy: 0 };
 }
 
 function petDamage(w: World, pet: Companion): number {
-  return COMPANIONS[pet.id].damage * levelScale(w.stats.level) * w.stats.companionMult;
+  return COMPANIONS[pet.id].damage * levelScale(w.stats.level) * w.stats.companionMult * w.stats.petDamageMult;
 }
 
 export function updatePet(w: World, inp: Input, dt: number): void {

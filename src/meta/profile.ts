@@ -11,6 +11,7 @@ import { MAX_LEVEL_CAMPAIGN, xpNeeded } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
 import { canAddTalent, canRemoveTalent, talentSpent, talentsConnected, type TalentRanks } from '../data/talents';
 import type { AspectId } from '../data/aspects';
+import { TEMPER_ORDER, type TemperId } from '../data/tempers';
 import type { WeaponKind } from '../data/items';
 import type { CordelId } from '../data/cordeis';
 import type { BuildingId } from '../data/village';
@@ -103,8 +104,11 @@ export interface Build {
 }
 export const BUILD_SLOTS = 3;
 
+/** Uma Andança em curso: o companheiro, o capítulo, as horas e o instante da saída (ms). */
+export interface Walk { id: CompanionId; chapter: number; hours: number; start: number }
+
 /** Versão atual do perfil salvo. Cada mudança de formato ganha um passo em `STEPS`. */
-export const PROFILE_VERSION = 4;
+export const PROFILE_VERSION = 5;
 
 export interface Profile {
   version: number;
@@ -124,7 +128,10 @@ export interface Profile {
   /** Encantados libertados, que podem ser chamados como Supremo. */
   supremos: ElementId[];
   supremo: ElementId | null;
-  companions: Partial<Record<CompanionId, { level: number }>>;
+  /** Companheiros resgatados: nível, Temperamento (sorteado no resgate) e fases jogadas juntos, que sobem o Laço. */
+  companions: Partial<Record<CompanionId, { level: number; temper?: TemperId; bond?: number }>>;
+  /** Andanças: quem saiu, para onde e quando; e as horas já pagas hoje (o limite diário). */
+  andancas: { slots: (Walk | null)[]; day: string; hours: number };
   companion: CompanionId | null;
   potions: number;
   stages: Record<string, StageRecord>;
@@ -168,6 +175,9 @@ export interface DreamRecord {
   trials: number; awakened: number; compadrios: number; synergy7: number;
   /** Armas com que já venceu uma noite, e amuletos e causos já vistos (para o Almanaque). */
   weaponsWon: string[]; amuletsSeen: string[]; causosSeen: string[];
+  /** Falas dos Encantados já ouvidas, e a Noite da Semana: a semana, as tentativas e o melhor resultado dela. */
+  falasSeen: string[];
+  weekly: { week: string; tries: number; won: boolean; trechos: number; time: number };
   /** Maior Peso de Presságios de uma noite vencida, giros da Roda do Saci e vezes em que a grade inteira fechou. */
   bestWeight: number; spins: number; jackpots: number;
   /** A noite em andamento, guardada entre um nó e outro. */
@@ -175,7 +185,7 @@ export interface DreamRecord {
 }
 
 export function newDream(): DreamRecord {
-  return { memories: 0, total: 0, nights: 0, wins: 0, bestTrecho: 0, trials: 0, awakened: 0, compadrios: 0, synergy7: 0, weaponsWon: [], amuletsSeen: [], causosSeen: [], bestWeight: 0, spins: 0, jackpots: 0, run: null };
+  return { memories: 0, total: 0, nights: 0, wins: 0, bestTrecho: 0, trials: 0, awakened: 0, compadrios: 0, synergy7: 0, weaponsWon: [], amuletsSeen: [], causosSeen: [], falasSeen: [], weekly: { week: '', tries: 0, won: false, trechos: 0, time: 0 }, bestWeight: 0, spins: 0, jackpots: 0, run: null };
 }
 
 export interface MissionState {
@@ -230,7 +240,7 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     materials: { mata: 0, po: 0, lagrima: 0, tomo: 0 },
     loadout: ['dardo', null, null],
     spellLevels: {}, supremos: [], supremo: null,
-    companions: {}, companion: null, potions: MAX_POTIONS,
+    companions: {}, companion: null, potions: MAX_POTIONS, andancas: { slots: [null, null, null], day: '', hours: 0 },
     stages: {}, starChests: 0, curupiraFreed: false,
     gems: {}, tower: { best: 0, checkpoint: 1, week: '', weekBest: 0, weekTime: 0 }, credits: false,
     daily: { day: '', seed: Math.imul(seed, 2654435761) >>> 0 || 1, missions: [], chest: false, expeditions: [], expRuns: 0, expFirst: [], lastSeen: '', rest: 0, restDays: 0, rerolls: 0 },
@@ -280,6 +290,16 @@ const STEPS: Record<number, (p: Profile) => void> = {
     const run = p.dream?.run as unknown as Record<string, unknown> | null | undefined;
     if (run) Object.assign(run, { omens: run.omens ?? {}, cordeis: run.cordeis ?? {}, aspect: run.aspect ?? null, clock: run.clock ?? 0, doubled: run.doubled ?? false, dry: run.dry ?? 0, later: run.later ?? [], bought: run.bought ?? false, altars: run.altars ?? 0 });
   },
+  /* v4 → v5: os companheiros já resgatados ganham um Temperamento, sorteado com a semente do perfil (sempre o mesmo para o mesmo save) */
+  4: (p) => {
+    let v = (p.seed >>> 0) || 1;
+    for (const id of Object.keys(p.companions ?? {}).sort() as CompanionId[]) {
+      const c = p.companions[id];
+      if (!c || c.temper) continue;
+      v = (Math.imul(v, 1664525) + 1013904223) >>> 0;
+      c.temper = TEMPER_ORDER[v % TEMPER_ORDER.length]; c.bond = c.bond ?? 0;
+    }
+  },
 };
 
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
@@ -296,6 +316,7 @@ export function migrate(saved: Profile): Profile {
     dream: { ...base.dream, ...(old.dream ?? {}) }, village: { ...(old.village ?? {}) },
     cordeis: { levels: { ...(old.cordeis?.levels ?? {}) }, equipped: [...(old.cordeis?.equipped ?? [])] },
     aspects: { owned: [...(old.aspects?.owned ?? [])], equipped: { ...(old.aspects?.equipped ?? {}) } },
+    andancas: { slots: [0, 1, 2].map((i) => old.andancas?.slots?.[i] ?? null), day: old.andancas?.day ?? '', hours: old.andancas?.hours ?? 0 },
   };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];

@@ -2,6 +2,7 @@
  * O que uma fase paga e quando ela está disponível. Regras de docs/gdd/01-progressao-e-dificuldade.md:
  * XP e ouro caem em fase fácil, o item com nome não sofre redução e tem azar com limite.
  */
+import { TEMPER_ORDER } from '../data/tempers';
 import { OMEN } from '../data/omens';
 import { SUPREMOS, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { ELEMENT_ORDER } from '../data/content';
@@ -41,6 +42,12 @@ export interface StageOutcome {
   omens?: number;
   /** Desafio da última sala (a Provação do Sonho): como terminou. */
   trial?: 'ativo' | 'vencido' | 'perdido' | null;
+}
+
+/** O companheiro que está com o herói ganha Laço: uma fase (ou um trecho do Sonho) juntos. O Leal ganha em dobro. */
+export function bondUp(p: Profile, n: number): void {
+  const c = p.companion ? p.companions[p.companion] : null;
+  if (c) c.bond = (c.bond ?? 0) + n * (c.temper === 'leal' ? 2 : 1);
 }
 
 export interface StageRewards {
@@ -247,10 +254,12 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
     out.stars = [rec.stars[0], rec.stars[1], rec.stars[2]];
     if (rec.bestTime == null || o.time < rec.bestTime) { rec.bestTime = Math.round(o.time * 10) / 10; out.bestTime = true; }
     rec.cleared = true; rec.clears++;
+    bondUp(p, 1);
     if (peso > 0) rec.omen = Math.max(rec.omen ?? 0, peso);
 
     if (stage.rescue && !p.companions[stage.rescue] && (stage.rescue !== 'onca' || o.deaths === 0)) {
-      p.companions[stage.rescue] = { level: 1 };
+      /* o Temperamento é sorteado no resgate */
+      p.companions[stage.rescue] = { level: 1, temper: TEMPER_ORDER[Math.floor(profileRng(p)() * TEMPER_ORDER.length)], bond: 0 };
       if (!p.companion) p.companion = stage.rescue;
       out.rescued = stage.rescue;
     }
@@ -319,7 +328,8 @@ export function applyTowerOutcome(p: Profile, o: StageOutcome): StageRewards {
   const newBest = climbed > t.best;
   if (newBest) t.best = climbed;
   if (climbed > t.weekBest || (climbed === t.weekBest && climbed > 0 && o.time < t.weekTime)) { t.weekBest = climbed; t.weekTime = Math.round(o.time * 10) / 10; }
-  if (o.won) t.checkpoint = Math.min(91, run.number + FLOORS_PER_RUN);
+  /* vencido o andar 100, a subida continua nas Profundezas, de dez em dez */
+  if (o.won) t.checkpoint = t.best >= 100 ? run.number + FLOORS_PER_RUN : Math.min(91, run.number + FLOORS_PER_RUN);
   out.tower = { from: run.number, floors: floors.length, best: t.best, newBest, weekBest: t.weekBest };
   p.gold += out.gold;
   p.materials.mata += out.materials.mata; p.materials.po += out.materials.po; p.materials.tomo += out.materials.tomo;

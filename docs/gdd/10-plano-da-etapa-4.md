@@ -13,7 +13,7 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 | 2 · Bênçãos com padrinho | **Feita** |
 | 3 · O Sonho, o núcleo | **Feita** |
 | 4 · Roda, Presságios, Cordéis e Aspectos | **Feita** |
-| 5 · Aldeia, companheiros, pós-jogo e exagero | A fazer |
+| 5 · Aldeia, companheiros, pós-jogo e exagero | **Feita em parte** (ver abaixo) |
 
 ### O que mudou em relação ao plano nas fases 0 e 1
 
@@ -86,6 +86,35 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 
   O Peso 16 ficou na meta (10% a 25%) sem Cordéis. Com Cordéis o Peso 0 fica fácil, de propósito: é o que empurra o jogador para os Presságios.
 - **Ficou para a fase 5:** o chefe misturado ("Eco"), a Noite Funda, os folhetos rasgados que liberam itens no sorteio e as falas dos Encantados ao acordar.
+
+### O que entrou da fase 5, e o que ficou de fora
+
+**Entrou:**
+
+- **A Aldeia como cena** (`src/art/aldeia.ts`, `src/ui/aldeia.ts`), aberta pela aba Sonho. Seis construções desenhadas por código, cinza enquanto não existem e coloridas depois; o cenário inteiro ganha cor conforme a aldeia cresce. Os Encantados libertados ficam em volta da fogueira. Clicar numa construção abre o painel dela.
+- **Duas construções novas:** o **Viveiro** (1 a 3 vagas de Andança) e a **Barraca do Saci** (+1 Pulo, depois +1 Assobio, depois +1 giro grátis em cada Roda).
+- **Temperamento e Laço** (`src/data/tempers.ts`). Oito temperamentos, sorteados no resgate; um save antigo ganha o de cada companheiro na migração, sempre igual para o mesmo save. O Laço sobe de 1 a 5 com as fases jogadas juntos (4, 12, 28 e 60) e dá +3% de dano e vida ao companheiro por nível. Trocar o temperamento custa 40 Lembranças, no Viveiro.
+- **Andanças** (`src/meta/andancas.ts`). Quem não está com o herói sai por 1, 4 ou 8 horas para um capítulo vencido e volta com ouro, Resina, Pó e às vezes uma gema do elemento do capítulo. Contam com o relógio, com o jogo fechado. Por dia, só as primeiras 8 horas rendem, somando as vagas.
+- **Falas** (`src/data/falas.ts`). Ao acordar, um Encantado libertado comenta a noite com uma fala que ainda não tinha dito: 22 falas, escolhidas pelo que aconteceu.
+- **Noite da Semana.** O mesmo mapa e os mesmos Presságios (três ou quatro, sorteados pela semana) para todo mundo até segunda-feira. O herói é o de cada um, pode-se tentar à vontade e o perfil guarda o melhor resultado. O ranking fica para a parte online.
+- **Profundezas da Torre.** Vencido o andar 100, a subida continua de dez em dez, sem teto: cada bloco é de um capítulo, em roda, e os monstros ganham 3% de vida e 1,2% de dano por andar.
+- **Momentos de exagero.** Sorte grande da Roda e Despertar escurecem a tela, com um facho de luz e o nome em letras grandes (some sozinho, ou com um clique); na fase, o Despertar ganhou o aviso grande. Golpes enormes (nove vezes o golpe de arma) saem maiores e em brasa. O resumo da noite pode ser salvo como imagem.
+- **Perfil na versão 5.**
+
+**Diferente do plano:**
+
+- **Nenhum sistema passou a depender de construção.** O plano previa que a Roda pedisse a Barraca do Saci e os Cordéis, a Casa de Cordel. Como os dois já estavam liberados desde a fase 4, as construções só melhoram o que existe; tirar do jogador o que ele já tinha seria pior.
+- **O Temperamento não vale no Sonho**, onde o companheiro é o de referência, como o resto do herói. O Laço sobe lá (um ponto por trecho vencido).
+- **Sem rapadura:** a troca de temperamento custa Lembranças, para não criar mais um material.
+- **Leal e Medroso** mudaram de efeito, para caberem no que o companheiro já faz: o Leal ganha Laço em dobro; o Medroso volta rápido depois de cair e causa 10% menos dano.
+
+**Ficou de fora:**
+
+- **Desafio dos Encantados** (todos os chefes em sequência).
+- O chefe misturado (**Eco**) e a **Noite Funda** (quarto trecho sem fim).
+- Os **folhetos rasgados** que liberam bênçãos, amuletos e causos aos poucos.
+- Da Aldeia do 09: a Forja do Boitatá, o Coreto e os níveis do Terreiro de Treino.
+- Os enfeites e as falas por nível de Laço.
 
 ## O que o código atual já dá
 

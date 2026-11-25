@@ -18,18 +18,20 @@ import { ITEM_TYPES, type WeaponKind } from '../data/items';
 import { CHAPTERS, ENEMY_NAMES } from '../data/stages';
 import { BUILDINGS, BUILDING_ORDER } from '../data/village';
 import {
-  abandonNight, build, buildCost, buyAmulet, buyBlessing, buyHeal, causoAffordable, chooseAmulet, chooseBlessingOffer, chooseCauso, currentNode, currentStageId, currentTrecho, defaultChoice,
+  abandonNight, buildCost, buyAmulet, buyBlessing, buyHeal, causoAffordable, chooseAmulet, chooseBlessingOffer, chooseCauso, currentNode, currentStageId, currentTrecho, defaultChoice,
   dreamChapters, enterNode, feiraPrice, fountainHeal, isDreamUnlocked, leaveNode, memoryBonus, nightOptions, reachable, removeBlessing, rerollFeira, runStats, startNight, upgradable, useFountain, validChoice,
-  breath, equippedCordeis, forgottenSlot, isLate,
+  breath, equippedCordeis, forgottenSlot, isLate, startWeeklyNight, weeklyNight, weeklyRecord,
   type DreamRun, type NightChoice, type NightEnd, type Resolved,
 } from '../meta/dream';
 import { OMENS, OMEN_ORDER, HURRY_SECONDS, omenGrade, omenMemories, omenWeight } from '../data/omens';
 import { CORDEIS, cordelCost, type CordelId } from '../data/cordeis';
 import { MAIN_H, MAIN_W, type Ctx } from './ctx';
+import { renderAldeia } from './aldeia';
+import { saveNightSummary } from './resumo';
 import { rodaPanel } from './roda';
 import { aspectPicks, cordeisView, omensView } from './sonhoprep';
 import { backdrop, clock, h, hdCanvas, itemIcon, num, pct, s, signed, stat, ui, type Child } from './dom';
-import { drawFigure } from './retratos';
+import { FREED, drawFigure } from './retratos';
 import { tip, type TipRow, type TipSpec } from './tip';
 
 const sky = () => backdrop('sonho', MAIN_W, MAIN_H, (g) => paintDreamBackdrop(g, MAIN_W, MAIN_H));
@@ -149,18 +151,8 @@ function prepScreen(c: Ctx): HTMLElement {
     if (!startNight(c.p, { ...ch, omens: st.omens })) { c.toast('Escolha a arma e pelo menos um feitiço', 'bad'); return; }
     c.commit();
   };
-  const buildings = BUILDING_ORDER.map((id) => {
-    const b = BUILDINGS[id], lv = p.village[id] ?? 0, cost = buildCost(p, id), can = cost != null && p.dream.memories >= cost;
-    return tip(h('div', `vila${lv > 0 ? ' has' : ''}`,
-      h('span', 'vila-ico', ui(b.icon, 34)),
-      h('div', 'vila-mid',
-        h('div', 'vila-name', b.name, h('span', 'vila-pips', b.levels.map((_, i) => h('i', i < lv ? 'on' : null)))),
-        h('div', 'vila-desc', cost != null ? b.levels[lv].desc : 'No nível máximo')),
-      cost != null
-        ? h('button', { type: 'button', class: `btn small${can ? ' primary' : ''}`, disabled: !can, 'data-fk': `vila-${id}`, onclick: () => { if (build(c.p, id)) { c.toast(`${b.name}: nível ${lv + 1}`); c.commit(`vila-${id}`); } } }, ui('lembranca', 20), num(cost))
-        : h('span', 'vila-max', ui('check', 22))),
-    () => ({ title: b.name, icon: ui(b.icon, 36), tag: `${lv}/${b.levels.length}`, sub: b.about, rows: b.levels.map((l, i) => ({ icon: i < lv ? 'check' : 'lembranca', text: l.desc, value: i < lv ? undefined : num(l.cost), tone: i < lv ? 'ok' as const : i === lv ? undefined : 'dim' as const })) }));
-  });
+  const villageTotal = BUILDING_ORDER.reduce((n, id) => n + BUILDINGS[id].levels.length, 0), villageHave = BUILDING_ORDER.reduce((n, id) => n + (p.village[id] ?? 0), 0);
+  const villageCan = BUILDING_ORDER.some((id) => { const cost = buildCost(p, id); return cost != null && p.dream.memories >= cost; });
 
   return h('div', 'sonho', sky(),
     h('section', { class: 'panel sonho-prep', 'aria-label': 'Antes de dormir' },
@@ -187,8 +179,31 @@ function prepScreen(c: Ctx): HTMLElement {
           { title: 'Cordéis equipados', icon: ui('cordel', 36), tag: `${wornCost}/${breath(p)}`, rows: worn.length ? worn.map((id: CordelId) => ({ icon: CORDEIS[id].icon, text: `${CORDEIS[id].name}: ${CORDEIS[id].desc(CORDEIS[id].values[(p.cordeis.levels[id] ?? 1) - 1])}` })) : [{ text: 'Nenhum folheto equipado.', tone: 'dim' as const }] }),
         h('span', 'ss-patrons', p.supremos.map((el) => tip(h('i', { style: `--ec:${ELEMENTS[el].color}`, tabindex: 0 }, ui(el, 22)), { title: `Padrinho: ${PATRONS[el].name}`, color: ELEMENTS[el].color, sub: PATRONS[el].style, rows: [{ text: 'Os altares do Sonho só trazem bênçãos dos Encantados que você já libertou.', tone: 'dim' }] })))),
       h('button', { type: 'button', class: 'btn primary big sonho-go', disabled: !ok, 'data-fk': 'dormir', onclick: start }, ui('sonho', 34), 'Dormir'),
-      h('div', 'ss-vila-title', ui('descanso', 24), 'Aldeia'),
-      h('div', 'ss-vila', buildings)));
+      weeklyCard(c, ch),
+      tip(h('button', { type: 'button', class: 'aldeia-card', 'data-fk': 'aldeia-abrir', onclick: () => { st.village = true; c.redraw('aldeia-voltar'); } },
+        h('span', 'aldeia-card-ico', ui('descanso', 40)),
+        h('span', 'aldeia-card-mid', h('b', null, 'Aldeia'), h('span', null, `${villageHave} de ${villageTotal} melhorias${villageCan ? ' · dá para construir' : ''}`)),
+        villageCan && h('i', 'aldeia-card-up', ui('mais', 18)), ui('seta', 26)),
+      { title: 'Aldeia', icon: ui('descanso', 36), rows: [{ text: 'As construções que as Lembranças pagam, o Viveiro com as Andanças e os companheiros.' }, ...BUILDING_ORDER.map((id) => ({ icon: BUILDINGS[id].icon, text: BUILDINGS[id].name, value: `${p.village[id] ?? 0}/${BUILDINGS[id].levels.length}` }))] })));
+}
+
+/** O cartão da Noite da Semana: os Presságios dela, o recorde e o botão de entrar. */
+function weeklyCard(c: Ctx, ch: NightChoice): HTMLElement | null {
+  const p = c.p;
+  if (p.dream.nights === 0) return null;
+  const w = weeklyNight(), rec = weeklyRecord(p), ok = validChoice(p, ch), weight = omenWeight(w.omens);
+  const go = () => { if (startWeeklyNight(c.p, ch)) c.commit(); else c.toast('Escolha a arma e pelo menos um feitiço', 'bad'); };
+  return tip(h('div', 'weekly',
+    h('div', 'weekly-top', ui('lua', 28), h('b', null, 'Noite da Semana'), h('span', 'weekly-peso', ui('olho', 18), `Peso ${weight}`)),
+    h('div', 'weekly-omens', OMEN_ORDER.filter((id) => omenGrade(w.omens, id) > 0).map((id) => h('span', 'weekly-omen', ui(OMENS[id].icon, 20), OMENS[id].name))),
+    h('div', 'weekly-foot',
+      h('span', 'weekly-rec', rec.tries ? (rec.won ? `Vencida em ${clock(rec.time)}` : `Melhor: ${rec.trechos} ${rec.trechos === 1 ? 'trecho' : 'trechos'}`) : 'Ainda não tentou'),
+      h('button', { type: 'button', class: 'btn small primary', disabled: !ok, 'data-fk': 'noite-semana', onclick: go }, 'Entrar'))),
+  { title: 'Noite da Semana', icon: ui('lua', 36), sub: `+${pct(omenMemories(w.omens))} de Lembranças`, subColor: '#86e07a', rows: [
+    { text: 'O mesmo mapa e os mesmos Presságios para todo mundo, até segunda-feira. O herói é o seu. Pode tentar quantas vezes quiser; vale o melhor resultado.' },
+    ...OMEN_ORDER.filter((id) => omenGrade(w.omens, id) > 0).map((id) => ({ icon: OMENS[id].icon, text: OMENS[id].desc(omenGrade(w.omens, id)), tone: 'bad' as const })),
+    rec.tries ? { icon: 'coroa', text: 'Tentativas nesta semana', value: String(rec.tries) } : null,
+  ] });
 }
 
 /* ---------- o mapa do trecho ---------- */
@@ -302,7 +317,12 @@ function amuletPick(c: Ctx, options: AmuletId[]): HTMLElement {
 
 function blessPick(c: Ctx, run: DreamRun, options: BlessingId[]): HTMLElement {
   const have = blessingCounts(run.blessings);
-  const take = (i: number) => { const b = chooseBlessingOffer(c.p, i); if (b) c.toast(`${BLESSINGS[b].name}`); c.commit(); };
+  const take = (i: number) => {
+    const b = chooseBlessingOffer(c.p, i);
+    if (b && BLESSINGS[b].kind !== 'normal') c.st.dream.moment = { title: BLESSINGS[b].name, sub: BLESSINGS[b].kind === 'desperta' ? 'Despertar' : 'Compadrio', color: BLESSING_TIER_COLOR[BLESSINGS[b].tier] };
+    else if (b) c.toast(`${BLESSINGS[b].name}`);
+    c.commit();
+  };
   return overlay('choose', [ui('altar', 34), 'O Rancho te abençoa: escolha uma'],
     [h('div', 'dp-cards', options.map((id, i) => blessCard(id, have[id] ?? 0, h('span', 'bcard-take', 'Escolher'), () => take(i), `ben-${i}`)))], null);
 }
@@ -403,7 +423,7 @@ function nightScreen(c: Ctx, run: DreamRun): HTMLElement {
   const hint = pend ? null : run.at == null ? 'A noite começa. Escolha por onde entrar.' : !run.done && here ? 'Você saiu no meio desta sala. Clique nela para entrar de novo.' : 'Escolha o próximo passo.';
   return h('div', 'sonho night', sky(), h('div', 'sonho-dim'),
     h('div', { class: 'night-in', inert: !!panel }, heroBar(c, run), nightMap(c, run), hint && h('div', 'dhint', hint), carried(run)),
-    panel);
+    panel, momentOverlay(c));
 }
 
 /* ---------- acordar ---------- */
@@ -416,12 +436,12 @@ function endScreen(c: Ctx, e: NightEnd): HTMLElement {
   const fact = (icon: string, value: Child, label: string) => h('div', 'end-fact', ui(icon, 30), h('b', null, value), h('span', null, label));
   const close = (tab: 'sonho' | 'mapa') => { c.st.dream.end = null; c.st.dream.choice = null; c.go(tab); };
   return h('div', 'sonho end', sky(),
-    h('div', `end-card${e.won ? ' won' : ''}`,
+    h('div', `end-card${e.won ? ' won' : ''}${e.fala || e.weekly ? ' compact' : ''}`,
       h('div', 'end-ribbon', title),
-      h('p', 'end-sub', sub),
+      !(e.fala || e.weekly) && h('p', 'end-sub', sub),
       h('div', 'end-facts',
         fact('coroa', `${e.trechos}/${e.of}`, e.of === 1 ? 'trecho' : 'trechos'), fact('dano', num(e.tally.rooms), 'salas'), fact('elite', num(e.tally.elites), 'elites'),
-        fact('caveira', num(e.tally.trials), 'provações'), fact('execucao', num(e.tally.kills), 'monstros'), fact('relogio', clock(e.tally.time), 'de luta')),
+        e.weight > 0 ? fact('olho', String(e.weight), 'de Peso') : fact('caveira', num(e.tally.trials), 'provações'), fact('execucao', num(e.tally.kills), 'monstros'), fact('relogio', clock(e.tally.time), 'de luta')),
       h('div', 'end-gains',
         h('div', 'end-gain big', ui('lembranca', 54), h('b', null, `+${num(e.memories)}`), h('span', null, 'Lembranças')),
         e.xp > 0 && h('div', 'end-gain', ui('xp', 40), h('b', null, `+${num(e.xp)}`), h('span', null, 'experiência')),
@@ -431,15 +451,34 @@ function endScreen(c: Ctx, e: NightEnd): HTMLElement {
       h('div', 'end-build',
         h('div', 'cr-list', ids.length ? ids.map((id) => blessChip(id, counts[id]!)) : h('em', null, 'Sem bênçãos nesta noite')),
         e.amulets.length > 0 && h('div', 'cr-list', e.amulets.map((a) => amuletChip(a, 40)))),
+      e.weekly && h('div', `end-weekly${e.weekly.best ? ' best' : ''}`, ui('lua', 24), e.weekly.best ? 'Noite da Semana: novo recorde seu!' : 'Noite da Semana: o seu recorde continua de pé.'),
+      e.fala && falaBox(c, e.fala),
       h('div', 'end-actions',
+        tip(h('button', { type: 'button', class: 'btn big', 'data-fk': 'fim-imagem', onclick: () => { saveNightSummary(e, e.level); c.toast('Imagem salva'); } }, ui('item', 28), 'Salvar imagem'), { title: 'Salvar imagem', rows: [{ text: 'Guarda o resumo desta noite como uma imagem, pronta para mostrar a alguém.' }] }),
         h('button', { type: 'button', class: 'btn big', 'data-fk': 'fim-mapa', onclick: () => close('mapa') }, ui('mapa', 30), 'Mapa'),
         h('button', { type: 'button', class: 'btn big primary', 'data-fk': 'res-principal', onclick: () => close('sonho') }, ui('sonho', 30), 'Voltar ao Sonho'))));
+}
+
+/** A fala de um Encantado ao acordar, com o retrato dele. */
+function falaBox(c: Ctx, f: NonNullable<NightEnd['fala']>): HTMLElement {
+  const W = 84, H = 92, { cv } = hdCanvas(W, H, 'fala-cv');
+  c.animate(cv, (g, t) => { g.clearRect(0, 0, W, H); drawFigure(g, FREED[ELEMENT_ORDER.indexOf(f.who)], { x: 0, y: 0, w: W, h: H }, t, 0.98, ELEMENTS[f.who].color); });
+  return h('div', { class: 'fala', style: `--ec:${ELEMENTS[f.who].color}` }, cv, h('div', 'fala-text', h('b', null, PATRONS[f.who].name), h('span', null, `“${f.text}”`)));
+}
+
+/** Momento de exagero (sorte grande, Despertar): a tela escurece, uma luz desce e o nome aparece grande. Some sozinho, ou com um clique. */
+export function momentOverlay(c: Ctx): HTMLElement | null {
+  const m = c.st.dream.moment;
+  if (!m) return null;
+  c.st.dream.moment = null;
+  return h('div', { class: 'moment', style: `--mc:${m.color}`, onclick: (e: Event) => (e.currentTarget as HTMLElement).remove(), 'aria-live': 'polite' }, h('div', 'moment-beam'), h('div', 'moment-text', h('b', null, m.title), h('span', null, m.sub)));
 }
 
 export function renderSonho(c: Ctx): HTMLElement {
   const p = c.p, st = c.st.dream;
   if (st.end) return endScreen(c, st.end);
   if (!isDreamUnlocked(p)) return lockedScreen();
+  if (st.village && !p.dream.run) return renderAldeia(c);
   if (!p.dream.run) return prepScreen(c);
   return nightScreen(c, p.dream.run);
 }

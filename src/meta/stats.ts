@@ -4,6 +4,7 @@
  */
 import type { AmuletId } from '../data/amulets';
 import { ASPECTS, type AspectId } from '../data/aspects';
+import { BOND, bondLevel } from '../data/tempers';
 import { knowledgeMap } from './life';
 import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, patronCounts, patronTier, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { BEATEN_BY, PACT_COST, GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
@@ -72,6 +73,8 @@ export interface HeroStats {
   altarChoices: number;
   companion: CompanionId | null;
   companionMult: number; petCooldownMult: number; petFastRevive: boolean; petDouble: boolean;
+  /** Temperamento do companheiro: dano e vida dele, à parte do resto. */
+  petDamageMult: number; petHpMult: number;
   loadout: (SpellId | null)[];
   /** Nível do feitiço em cada espaço. */
   spellLevels: number[];
@@ -384,7 +387,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
     companion,
     companionMult: 1 + 0.05 * rank('bomTrato') + 0.5 * bl('parceria'),
     petCooldownMult: 1 - 0.05 * rank('faro'),
-    petFastRevive: !!rank('seteVidas'), petDouble: !!rank('ataqueCombinado'),
+    petFastRevive: !!rank('seteVidas'), petDouble: !!rank('ataqueCombinado'), petDamageMult: 1, petHpMult: 1,
     loadout: p.loadout.slice(0, 3),
     spellLevels: p.loadout.slice(0, 3).map((id) => Math.min(MAX_SPELL_LEVEL + 1, (id ? spellLevel(p, id) : 1) + levelBonus)),
     supremo: p.supremo && p.supremos.includes(p.supremo) ? p.supremo : null,
@@ -405,6 +408,20 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
     },
   };
   if (aspect === 'peixeirasSaci') out.passives.perfectWhirl = true;
+  /* Temperamento e Laço do companheiro que está com o herói */
+  const mate = companion ? p.companions[companion] : null;
+  if (mate) {
+    const bond = 1 + BOND.perLevel * (bondLevel(mate.bond) - 1);
+    out.petDamageMult *= bond; out.petHpMult *= bond;
+    switch (mate.temper) {
+      case 'brabo': out.petDamageMult *= 1.15; out.petHpMult *= 0.9; break;
+      case 'manso': out.petHpMult *= 1.2; out.petDamageMult *= 0.9; break;
+      case 'ligeiro': out.petCooldownMult *= 0.85; break;
+      case 'sortudo': out.luck += 10; break;
+      case 'medroso': out.petFastRevive = true; out.petDamageMult *= 0.9; break;
+      default: break;
+    }
+  }
   nightExtras(out, amulets, boost);
   return out;
 }
