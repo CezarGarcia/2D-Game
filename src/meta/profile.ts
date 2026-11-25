@@ -10,6 +10,8 @@ import {
 import { MAX_LEVEL_CAMPAIGN, xpNeeded } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
 import { canAddTalent, canRemoveTalent, talentSpent, talentsConnected, type TalentRanks } from '../data/talents';
+import type { BuildingId } from '../data/village';
+import type { DreamRun } from './dream';
 
 export type AttrKey = 'forca' | 'agilidade' | 'inteligencia' | 'vitalidade' | 'espirito' | 'sorte';
 export const ATTRS: { key: AttrKey; label: string; desc: string; perPoint: string }[] = [
@@ -97,7 +99,7 @@ export interface Build {
 export const BUILD_SLOTS = 3;
 
 /** Versão atual do perfil salvo. Cada mudança de formato ganha um passo em `STEPS`. */
-export const PROFILE_VERSION = 2;
+export const PROFILE_VERSION = 3;
 
 export interface Profile {
   version: number;
@@ -141,6 +143,28 @@ export interface Profile {
   uniquesFound: string[];
   lootFilter: LootFilter;
   builds: (Build | null)[];
+  /** O Sonho: Lembranças, recordes e a noite em andamento (src/meta/dream.ts). */
+  dream: DreamRecord;
+  /** Nível de cada construção da Aldeia (src/data/village.ts). */
+  village: Partial<Record<BuildingId, number>>;
+}
+
+/** O que fica do Sonho entre uma noite e outra. */
+export interface DreamRecord {
+  /** Lembranças para gastar, e todas as já trazidas do Sonho. */
+  memories: number; total: number;
+  nights: number; wins: number;
+  /** Trecho mais fundo já alcançado (1 a 3). */
+  bestTrecho: number;
+  trials: number; awakened: number; compadrios: number; synergy7: number;
+  /** Armas com que já venceu uma noite, e amuletos e causos já vistos (para o Almanaque). */
+  weaponsWon: string[]; amuletsSeen: string[]; causosSeen: string[];
+  /** A noite em andamento, guardada entre um nó e outro. */
+  run: DreamRun | null;
+}
+
+export function newDream(): DreamRecord {
+  return { memories: 0, total: 0, nights: 0, wins: 0, bestTrecho: 0, trials: 0, awakened: 0, compadrios: 0, synergy7: 0, weaponsWon: [], amuletsSeen: [], causosSeen: [], run: null };
 }
 
 export interface MissionState {
@@ -201,6 +225,7 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     daily: { day: '', seed: Math.imul(seed, 2654435761) >>> 0 || 1, missions: [], chest: false, expeditions: [], expRuns: 0, expFirst: [], lastSeen: '', rest: 0, restDays: 0, rerolls: 0 },
     nextItemId: 1, seed,
     life: newLife(), achievements: {}, uniquesFound: [], lootFilter: { dismantle: -1 }, builds: [null, null, null],
+    dream: newDream(), village: {},
   };
   const start: [ItemType, string][] = [['facao', 'Facão de Mato'], ['gibao', 'Gibão de Couro'], ['chapeu', 'Chapéu de Couro']];
   for (const [type, name] of start) {
@@ -237,6 +262,8 @@ const STEPS: Record<number, (p: Profile) => void> = {
     p.life = life;
     p.uniquesFound = Array.from(new Set([...(p.inventory ?? []), ...Object.values(p.equipped ?? {})].map((it) => it?.unique).filter((u): u is string => !!u)));
   },
+  /* v2 → v3: o Sonho e a Aldeia. Só campos novos, que `migrate` completa com os padrões. */
+  2: () => undefined,
 };
 
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
@@ -250,6 +277,7 @@ export function migrate(saved: Profile): Profile {
     life: { ...base.life, ...(old.life ?? {}) }, achievements: { ...(old.achievements ?? {}) }, uniquesFound: [...(old.uniquesFound ?? [])],
     lootFilter: { ...base.lootFilter, ...(old.lootFilter ?? {}) },
     builds: Array.from({ length: BUILD_SLOTS }, (_, i) => old.builds?.[i] ?? null),
+    dream: { ...base.dream, ...(old.dream ?? {}) }, village: { ...(old.village ?? {}) },
   };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];

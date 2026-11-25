@@ -9,6 +9,10 @@ import { ARENA, ENEMY, PLAYER, TICK, VIEW, enemyBase, isBossKind, isMonster } fr
 import { BOSSES, MONSTERS, type BossKind } from '../data/bestiary';
 import { artChaptersOf, findStage, isTowerId } from '../data/tower';
 import { isTrainingId } from '../data/training';
+import { AMULETS, type AmuletId } from '../data/amulets';
+import { isDreamId, parseDreamId } from '../data/dream';
+import type { DreamContext } from '../meta/dream';
+import type { Profile } from '../meta/profile';
 import { boitataBody } from '../sim/bosses';
 import {
   BLESSINGS, BLESSING_TIER_COLOR, BLESSING_TIER_LABEL, COMPANIONS, ELEMENTS, ELEMENT_ORDER, PATRONS, PATRON_STEPS, PATRON_TIERS, REACTIONS, SPELLS, SUPREMOS, blessingCounts,
@@ -157,20 +161,30 @@ export class StageScene extends Phaser.Scene {
   private txtPause!: Phaser.GameObjects.Text;
   private pauseVeil!: Phaser.GameObjects.Rectangle;
   private synY = 170;
+  /** O Sonho: o herói da noite e o que ele traz da sala anterior (nulo fora do Sonho). */
+  private dream: DreamContext | null = null;
+  private heroProfile!: Profile;
+  private amulets: AmuletId[] = [];
 
   constructor() { super('stage'); }
 
-  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number } }): void {
+  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext }): void {
     this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
     this.training = isTrainingId(this.stage.id);
-    this.auto = data.auto && !this.training ? { ...data.auto } : null;
+    this.dream = isDreamId(this.stage.id) ? data.dream ?? null : null;
+    this.auto = data.auto && !this.training && !this.dream ? { ...data.auto } : null;
   }
 
   create(): void {
-    const profile = session.profile!;
+    /* no Sonho o herói é o da noite (personagem de referência, bênçãos e amuletos que ele já juntou) */
+    const D = this.dream, profile = D?.profile ?? session.profile!;
+    this.heroProfile = profile; this.amulets = D?.amulets ?? [];
     /* a caçada automática muda de semente a cada partida, para não repetir a mesma luta dez vezes */
-    const seed = 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
-    this.world = createWorld({ stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile), seed, ranked: isTowerId(this.stage.id) });
+    const seed = D ? (parseDreamId(this.stage.id)?.seed ?? 1) | 1 : 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
+    this.world = createWorld({
+      stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets), seed,
+      ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : {}),
+    });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
     this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
@@ -181,7 +195,7 @@ export class StageScene extends Phaser.Scene {
     this.buffIcons = []; this.buffShown = ''; this.goldAcc = 0; this.goldAccT = 0;
 
     const tower = isTowerId(this.stage.id);
-    const petChapter = session.profile?.companion ? sheetChapter(session.profile.companion) : 0;
+    const petChapter = this.heroProfile.companion ? sheetChapter(this.heroProfile.companion) : 0;
     const ecos = this.stage.rooms.some((r) => r.waves.some((wv) => wv.some((d) => d.kind === 'ecos')));
     ensureChapterArt(this, [...artChaptersOf(this.stage), ...(petChapter ? [petChapter] : [])], tower ? 'torre' : this.stage.chapter, ecos ? ECHO_SHEETS : []);
     this.extras.clear(); this.segs = [];
@@ -272,7 +286,7 @@ export class StageScene extends Phaser.Scene {
   private setPaused(v: boolean): void {
     this.paused = v;
     music.duck(v);
-    if (v) this.banner('PAUSADO', this.training ? 'Esc continua  ·  X volta ao acampamento' : this.auto ? 'Esc continua  ·  X encerra a caçada' : 'Esc continua  ·  X abandona a fase', '#f1ebd8');
+    if (v) this.banner('PAUSADO', this.training ? 'Esc continua  ·  X volta ao acampamento' : this.dream ? 'Esc continua  ·  X acorda (a noite acaba aqui)' : this.auto ? 'Esc continua  ·  X encerra a caçada' : 'Esc continua  ·  X abandona a fase', '#f1ebd8');
     else { this.txtBanner.setVisible(false); this.txtSub.setVisible(false); }
     /* pausado, o título sobe para a lista das sinergias caber embaixo dele */
     const list = v ? this.synergyText() : '';
@@ -355,7 +369,10 @@ export class StageScene extends Phaser.Scene {
     this.time.delayedCall(delay, () => {
       this.tweens.add({
         targets: this.fade, alpha: 1, duration: 300,
-        onComplete: () => session.onStageEnd({ stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests }),
+        onComplete: () => session.onStageEnd({
+          stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests,
+          left: { hpFrac: Math.max(0, w.player.hp) / w.stats.maxHp, potions: w.player.potions, supremo: w.player.supremo, revives: w.revives, altarDry: w.altarDry }, trial: w.challenge?.state ?? null,
+        }),
       });
     });
   }
@@ -414,7 +431,7 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'death':
         sfx.play('death');
-        this.banner('VOCÊ CAIU', w.revives > 0 ? 'A sala recomeça com metade da vida' : 'Fim da fase', '#ff6b5a');
+        this.banner('VOCÊ CAIU', w.revives > 0 ? (this.dream ? 'O Muiraquitã te levanta: a sala recomeça' : 'A sala recomeça com metade da vida') : this.dream ? 'Você vai acordar' : 'Fim da fase', '#ff6b5a');
         break;
       case 'revive':
         this.txtBanner.setVisible(false); this.txtSub.setVisible(false);
@@ -423,10 +440,12 @@ export class StageScene extends Phaser.Scene {
         break;
       case 'lose': music.sting('derrota'); this.finish(false, 500); break;
       case 'win':
+        /* altar do Sonho: escolher a bênção já encerra, sem festa */
+        if (this.dream && this.stage.rooms[w.room]?.type === 'altar') { this.finish(true, 450); break; }
         this.banner(this.winTitle(), this.auto && this.auto.index < this.auto.total ? `Tempo ${this.fmt(w.time)}  ·  a próxima já começa` : `Tempo ${this.fmt(w.time)}`, '#ffb238');
         sfx.play('win');
         music.sting('vitoria');
-        this.finish(true, this.auto ? Math.max(500, 1500 / this.auto.speed) : 1900);
+        this.finish(true, this.auto ? Math.max(500, 1500 / this.auto.speed) : this.dream ? 1300 : 1900);
         break;
       case 'roomStart': this.onRoomStart(e.value!); break;
       case 'roomClear':
@@ -619,6 +638,7 @@ export class StageScene extends Phaser.Scene {
 
   private winTitle(): string {
     if (isTowerId(this.stage.id)) return 'ANDARES VENCIDOS';
+    if (this.dream) return this.stage.final === 'chefao' ? 'CHEFE VENCIDO' : 'SALA VENCIDA';
     if (this.stage.number !== 12) return 'FASE VENCIDA';
     if (this.stage.chapter === 8) return 'O ESQUECIMENTO SE DESFEZ';
     const name = CHAPTERS[this.stage.chapter - 1]?.encantado ?? '';
@@ -884,7 +904,7 @@ export class StageScene extends Phaser.Scene {
   }
 
   private pickBlessing(i: number): void {
-    const profile = session.profile!, restat = (b: BlessingId[]) => deriveStats(profile, b);
+    const profile = this.heroProfile, amulets = this.amulets, restat = (b: BlessingId[]) => deriveStats(profile, b, amulets);
     if (this.world.offer ? chooseOffer(this.world, i, restat) : chooseBlessing(this.world, i, restat)) { this.latch.attack = false; this.clearCards(); this.handleEvents(); }
   }
 
@@ -1459,9 +1479,10 @@ export class StageScene extends Phaser.Scene {
     this.txtPotion = this.label(VX + VITALS.potion.x + 10, VY + VITALS.potion.y + 6, 19, '#f6ead0').setDepth(10003);
 
     /* cabeçalho: nome da fase numa placa, com as salas embaixo */
-    const title = this.training ? 'Terreiro de treino' : isTowerId(this.stage.id) ? 'Torre · andar 100' : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`;
+    const title = this.training ? 'Terreiro de treino' : this.dream ? `${this.stage.name} · trecho ${this.dream.trecho} de ${this.dream.of}` : isTowerId(this.stage.id) ? 'Torre · andar 100' : this.stage.index < 0 ? `Expedição · ${this.stage.name}` : `${this.stage.id} · ${this.stage.name}`;
     this.txtInfo = this.label(30, 16, 22, '#f6ead0').setText(title);
-    const tw = Math.max(170, Math.ceil(this.txtInfo.width) + 34, this.training ? 0 : 44 + this.stage.rooms.length * 26), th = this.training ? 42 : 64;
+    const single = this.training || !!this.dream;
+    const tw = Math.max(170, Math.ceil(this.txtInfo.width) + 34, single ? 0 : 44 + this.stage.rooms.length * 26), th = single ? 42 : 64;
     this.add.image(14, 8, plateTexture(this, tw, th)).setOrigin(0).setScale(HUD_SCALE).setDepth(9999);
     this.roomDotsX = 32;
     /* relógio (ou, no treino, as teclas) */
@@ -1511,6 +1532,13 @@ export class StageScene extends Phaser.Scene {
       this.autoHint = this.label(VIEW.w / 2, 56, 15, '#d9cdb4').setOrigin(0.5, 0).setText('V muda a velocidade  ·  Esc pausa');
     }
     if (this.training) this.buildMeter();
+    /* amuletos da noite: uma fileira de medalhas embaixo do relógio */
+    this.amulets.forEach((id, i) => {
+      const moon = this.stage.rooms.some((r) => r.moon) ? 84 : 0, a = AMULETS[id], x = VIEW.w - 36 - moon - (i % 9) * 38, y = 76 + Math.floor(i / 9) * 38, col = Phaser.Display.Color.HexStringToColor(a.color).color;
+      this.add.circle(x, y, 17, 0x1c0f0a, 1).setDepth(10000);
+      this.add.circle(x, y, 15, 0x3a2416, 1).setStrokeStyle(2, col).setDepth(10001);
+      if (this.textures.exists('ui_' + a.icon)) this.add.image(x, y, 'ui_' + a.icon).setScale(INV * 0.36).setDepth(10002);
+    });
   }
 
   /* ---------- medidor de dano do Terreiro ---------- */
@@ -1674,7 +1702,7 @@ export class StageScene extends Phaser.Scene {
     if (isTowerId(this.stage.id)) this.txtInfo.setText(`Torre · andar ${fl ?? this.stage.rooms[Math.max(0, w.room - 1)]?.floor ?? ''}`);
     if (!this.training) {
       const x0 = this.roomDotsX, y0 = 56;
-      this.stage.rooms.forEach((r, i) => {
+      if (!this.dream) this.stage.rooms.forEach((r, i) => {
         const x = x0 + i * 26, done = i < w.room || (i === w.room && (w.phase === 'cleared' || w.phase === 'won')), cur = i === w.room;
         const col = done ? 0xffb238 : cur ? 0xffffff : 0x8a6a4a, bigDot = r.type === 'boss' || r.type === 'elite';
         if (r.type === 'altar') { g.fillStyle(0x1c0f0a, 1).fillCircle(x, y0, 10); g.fillStyle(done ? 0xffb238 : cur ? 0x9be7c0 : 0x8a6a4a, 1).fillTriangle(x - 6, y0, x, y0 - 7, x + 6, y0).fillTriangle(x - 6, y0, x, y0 + 7, x + 6, y0); }
@@ -1687,7 +1715,9 @@ export class StageScene extends Phaser.Scene {
 
     /* ouro achado, desafio da sala e efeitos de baú */
     const found = Math.round(w.loot.gold - this.goldAcc);
-    this.goldIcon.setVisible(found > 0); this.txtGold.setVisible(found > 0).setText(String(found));
+    /* no Sonho o ouro da sala não vale: o que conta são os vinténs da noite */
+    if (this.dream) { this.goldIcon.setVisible(true); this.txtGold.setVisible(true).setText(`${this.dream.vintem} vinténs`); }
+    else { this.goldIcon.setVisible(found > 0); this.txtGold.setVisible(found > 0).setText(String(found)); }
     const ch = w.challenge;
     if (ch) {
       const now = ch.kind === 'ligeiro' ? `${Math.ceil(challengeLeft(w))} s` : `${Math.min(ch.limit + 1, w.hitsTaken - ch.hits0)}/${ch.limit} golpes`;

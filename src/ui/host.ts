@@ -4,6 +4,7 @@
  * chamam as funções de src/meta para alterá-lo e pedem para salvar.
  */
 import type { Profile } from '../meta/profile';
+import type { NodeResult } from '../meta/dream';
 import type { StageRewards } from '../meta/rewards';
 
 export type CampTab = 'mapa' | 'heroi' | 'ferreiro' | 'talentos' | 'feiticos' | 'companheiros';
@@ -20,6 +21,8 @@ export interface UiHost {
   startStage(stageId: string, opts?: { auto?: { runs: number; speed: number } }): void;
   /** Abre o Terreiro de treino. */
   startTraining(): void;
+  /** Joga a sala do nó em que o herói do Sonho está. */
+  startDreamNode(): void;
   /** Apaga o progresso e recomeça do zero. */
   resetGame(): void;
 }
@@ -27,6 +30,8 @@ export interface UiHost {
 export interface UiController {
   showCamp(tab?: CampTab): void;
   showResults(stageId: string, rewards: StageRewards, hunt?: HuntSummary): void;
+  /** Volta para o mapa da noite depois de uma sala do Sonho (ou para o resumo, se a noite acabou). */
+  showDream(result: NodeResult | null): void;
   /** Aviso curto por cima da tela atual (conquistas). */
   notify(text: string): void;
   hide(): void;

@@ -3,7 +3,8 @@
  * `makeBot` aceita um atraso de reação e uma chance de perceber cada aviso, para imitar uma pessoa:
  * com reação 0 e percepção 1 ele esquiva de tudo; com 0,27 s e 0,72 joga como alguém atento mas falível.
  */
-import { deriveStats } from '../meta/stats';
+import type { BlessingId } from '../data/content';
+import { deriveStats, type HeroStats } from '../meta/stats';
 import type { Profile } from '../meta/profile';
 import { chooseBlessing, chooseOffer, exitZone, NO_INPUT, type Enemy, type Input, type Telegraph, type World } from './world';
 
@@ -13,7 +14,8 @@ export const HUMAN: BotOpts = { react: 0.27, notice: 0.72, seed: 1 };
 
 export const idleAt = (w: World): Input => ({ ...NO_INPUT, spell: [false, false, false], aimX: w.player.x + 100, aimY: w.player.y });
 
-export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => Input {
+/** `restat` recalcula o herói quando ele escolhe uma bênção (o Sonho passa o seu, que conta os amuletos). */
+export function makeBot(profile: Profile, o: BotOpts = PERFECT, restat: (b: BlessingId[]) => HeroStats = (b) => deriveStats(profile, b)): (w: World) => Input {
   let rng = o.seed * 2654435761 >>> 0;
   const next = () => { rng = (Math.imul(rng, 1664525) + 1013904223) >>> 0; return rng / 4294967296; };
   const seen = new Map<string, { at: number; noticed: boolean }>();
@@ -31,8 +33,8 @@ export function makeBot(profile: Profile, o: BotOpts = PERFECT): (w: World) => I
   };
   return (w: World): Input => {
     const p = w.player;
-    if (w.phase === 'altar') { chooseBlessing(w, 0, (b) => deriveStats(profile, b)); return idleAt(w); }
-    if (w.offer) { chooseOffer(w, 0, (b) => deriveStats(profile, b)); return idleAt(w); }
+    if (w.phase === 'altar') { chooseBlessing(w, 0, restat); return idleAt(w); }
+    if (w.offer) { chooseOffer(w, 0, restat); return idleAt(w); }
     /* baú fechado: com a sala limpa vai buscar; na luta, só se estiver perto */
     const chest = w.chests.filter((c) => c.open < 0 && c.t >= 0.5).sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
     const toChest = chest ? { ...idleAt(w), mx: Math.sign(chest.x - p.x) * (Math.abs(chest.x - p.x) > 6 ? 1 : 0), my: Math.sign(chest.y - p.y) * (Math.abs(chest.y - p.y) > 6 ? 1 : 0) } : null;

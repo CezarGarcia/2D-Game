@@ -45,6 +45,8 @@ export const UI_ICON_KEYS = [
   'diario', 'expedicao', 'descanso',
   // etapa 4: almanaque, conquistas, treino, caçada automática, filtro de saque, builds, troca de missão
   'almanaque', 'conquista', 'treino', 'auto', 'filtro', 'build', 'trocar',
+  // o Sonho
+  'sonho', 'lembranca', 'vintem', 'amuleto',
 ] as const;
 export type UiIconKey = typeof UI_ICON_KEYS[number];
 
@@ -1152,6 +1154,37 @@ var I = {
   },
   /* duas setas trocando de lugar */
   trocar: function (c) { arcArrow(c, 20, 20, 12.8, 3.5, 5.86, '#ffb52e', 3.7, 5.2); arcArrow(c, 20, 20, 12.8, .36, 2.72, '#ffb52e', 3.7, 5.2); },
+
+  /* ===== o Sonho ===== */
+  /* lua minguante sobre uma nuvem, com estrelas */
+  sonho: function (c) {
+    P(c, function (c) { moonP(c, 21, 16, 13.4, .58, -.5); }, '#ffe9a8', { k: 1.8, lw: 2.3, sh: GSH, hi: 'rgba(255,255,255,.5)' });
+    spark(c, 31.6, 8.4, 3.6, '#fff', SOMD); spark(c, 7.6, 9.6, 2.6, '#fff', SOMD); spark(c, 33.4, 19.6, 2.2, '#e6dcff', SOMD);
+    P(c, function (c) { cloudP(c, 19.6, 30.6, 1); }, '#cdb8ff', { k: 1.4, lw: 2.2, sh: SSH, hi: 'rgba(255,255,255,.45)' });
+  },
+  /* Lembrança: uma luzinha guardada num frasco de vidro */
+  lembranca: function (c) {
+    P(c, function (c) { rr(c, 14.4, 3.4, 11.2, 5.6, 1.8); }, '#96562b', { k: .6, lw: 2 });
+    P(c, function (c) { c.moveTo(15.4, 9); c.lineTo(24.6, 9); c.quadraticCurveTo(34.6, 14, 33.6, 25.6); c.quadraticCurveTo(32.6, 36.6, 20, 36.6); c.quadraticCurveTo(7.4, 36.6, 6.4, 25.6); c.quadraticCurveTo(5.4, 14, 15.4, 9); c.closePath(); }, '#3a2a70', {
+      k: 1.8, lw: 2.3, sh: 'rgba(10,0,40,.45)', hi: 'rgba(200,190,255,.35)', inn: function (c) { dot(c, 20, 24, 9.6, 'rgba(255,230,140,.28)'); dot(c, 20, 24, 6.2, 'rgba(255,240,170,.5)'); },
+    });
+    spark(c, 20, 24, 6.4, '#fff3a8', TEMD); spark(c, 20, 24, 2.8, '#fff');
+    shine(c, 12.4, 18, 1.6, 3.6, .5, .5);
+  },
+  /* vintém: moeda de cobre com um furo */
+  vintem: function (c) {
+    P(c, function (c) { el(c, 20, 20, 14.6, 14.6); }, '#d98a4a', { k: 2, lw: 2.3, sh: 'rgba(110,40,0,.45)', hi: 'rgba(255,230,190,.5)' });
+    P(c, function (c) { el(c, 20, 20, 10.4, 10.4); }, '#e9a565', { k: .8, lw: 1.5, sh: 'rgba(110,40,0,.3)' });
+    P(c, function (c) { rr(c, 16.6, 16.6, 6.8, 6.8, 1.2); }, '#3a2014', { k: 0, lw: 1.5 });
+    shine(c, 13, 12.6, 3, 1.4, -.6, .6);
+  },
+  /* amuleto: medalha num cordão */
+  amuleto: function (c) {
+    rope(c, function (c) { c.moveTo(6, 4); c.quadraticCurveTo(6, 19, 20, 20.6); c.quadraticCurveTo(34, 19, 34, 4); }, '#c9a26b', 2);
+    P(c, function (c) { el(c, 20, 26.4, 10.6, 10.6); }, GOLD, { k: 1.8, lw: 2.3, sh: GSH, hi: 'rgba(255,255,220,.5)' });
+    P(c, function (c) { el(c, 20, 26.4, 6.4, 6.4); }, '#3fae5a', { k: 1, lw: 1.6, sh: LEAFSH, hi: 'rgba(220,255,220,.5)' });
+    P(c, function (c) { rr(c, 17.8, 13.6, 4.4, 4.6, 1.4); }, GOLD2, { k: .4, lw: 1.6 });
+  },
 };
 
 function unknown(c) { P(c, function (c) { poly(c, [20, 6, 34, 20, 20, 34, 6, 20]); }, CRM, { k: 2 }); dot(c, 20, 20, 3, DK); }

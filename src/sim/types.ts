@@ -245,6 +245,24 @@ export interface StageConfig {
   seed: number;
   /** Partida com ranking (Torre): o bônus de conhecer o inimigo não vale. */
   ranked?: boolean;
+  /** O Sonho: o que o herói traz do nó anterior, no lugar de começar inteiro. */
+  carry?: Carry;
+  /** Multiplicadores de vida e de dano dos monstros (maldições de Causo e, depois, os Presságios). */
+  foes?: { hp: number; damage: number };
+}
+
+/** O que passa de uma sala do Sonho para a seguinte. As bênçãos já têm que estar contadas em `stats`. */
+export interface Carry {
+  blessings: BlessingId[];
+  /** Fração da vida máxima com que o herói entra. */
+  hpFrac: number;
+  potions: number;
+  /** Altares seguidos só com bênçãos comuns. */
+  altarDry: number;
+  /** Quedas que ainda permitem continuar. */
+  revives: number;
+  /** Carga do Supremo, de 0 a 100. */
+  supremo: number;
 }
 
 export type Phase = 'fight' | 'cleared' | 'altar' | 'dead' | 'won' | 'lost';

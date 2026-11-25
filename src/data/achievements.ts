@@ -3,19 +3,22 @@
  * uma meta e uma função que lê o progresso do perfil. O prêmio é pequeno de propósito: ouro e material, nunca poder grande.
  * As regras (conferir e pegar o prêmio) estão em src/meta/achievements.ts.
  */
+import { AMULET_ORDER } from './amulets';
+import { CAUSO_ORDER } from './causos';
 import { BLESSING_ORDER, COMPANION_ORDER } from './content';
 import { GEM_MAX, MAX_RARITY, UNIQUES, type Item } from './items';
 import { BESTIARY_KINDS } from './lore';
 import { STAGES } from './stages';
 import type { Profile } from '../meta/profile';
 
-export type AchievementGroup = 'campanha' | 'combate' | 'colecao' | 'oficio' | 'segredos';
+export type AchievementGroup = 'campanha' | 'combate' | 'colecao' | 'oficio' | 'sonho' | 'segredos';
 
 export const ACHIEVEMENT_GROUPS: { id: AchievementGroup; name: string; icon: string }[] = [
   { id: 'campanha', name: 'Campanha', icon: 'mapa' },
   { id: 'combate', name: 'Combate', icon: 'dano' },
   { id: 'colecao', name: 'Coleção', icon: 'almanaque' },
   { id: 'oficio', name: 'Ofício', icon: 'ferreiro' },
+  { id: 'sonho', name: 'Sonho', icon: 'sonho' },
   { id: 'segredos', name: 'Segredos', icon: 'cadeado' },
 ];
 
@@ -111,6 +114,26 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     ['expedicoes_10', 'Pé na estrada', 'Vença 10 expedições', 'expedicao', 10, (p) => p.life.expeditions, { gold: 350, mata: 25 }],
     ['expedicoes_50', 'Bússola gasta', 'Vença 50 expedições', 'expedicao', 50, (p) => p.life.expeditions, { gold: 1500, mata: 90, po: 10 }],
     ['cacada_10', 'Deixa comigo', 'Vença 10 fases na Caçada automática', 'auto', 10, (p) => p.life.autoWins, { gold: 300, mata: 20 }],
+  ]),
+  ...G('sonho', [
+    ['primeira_noite', 'Boa noite', 'Durma pela primeira vez', 'sonho', 1, (p) => p.dream.nights, { gold: 150, mata: 10 }],
+    ['noite_vencida', 'Sonho inteiro', 'Vença uma noite completa', 'sonho', 1, (p) => p.dream.wins, { gold: 500, mata: 30, tomo: 1 }],
+    ['noites_5', 'Sono pesado', 'Vença 5 noites', 'sonho', 5, (p) => p.dream.wins, { gold: 1200, mata: 60, tomo: 2 }],
+    ['noites_20', 'Dono do sonho', 'Vença 20 noites', 'sonho', 20, (p) => p.dream.wins, { gold: 3000, mata: 150, lagrima: 1 }],
+    ['trecho_2', 'Mais fundo', 'Vença o chefe do segundo trecho', 'coroa', 2, (p) => p.dream.bestTrecho, { gold: 300, mata: 20 }],
+    ['lembrancas_500', 'Boa memória', 'Traga 500 Lembranças do Sonho', 'lembranca', 500, (p) => p.dream.total, { gold: 600, mata: 40 }],
+    ['lembrancas_3000', 'Memória de elefante', 'Traga 3.000 Lembranças do Sonho', 'lembranca', 3000, (p) => p.dream.total, { gold: 2500, mata: 120, lagrima: 1 }],
+    ['armas_sonho_3', 'Três jeitos de sonhar', 'Vença noites com 3 armas diferentes', 'aprimorar', 3, (p) => p.dream.weaponsWon.length, { gold: 800, mata: 40 }],
+    ['armas_sonho_6', 'Seis jeitos de sonhar', 'Vença uma noite com cada uma das seis armas', 'aprimorar', 6, (p) => p.dream.weaponsWon.length, { gold: 2500, mata: 120, lagrima: 1 }],
+    ['despertar_1', 'Despertou', 'Desperte uma bênção', 'altar', 1, (p) => p.dream.awakened, { gold: 400, po: 5 }],
+    ['despertar_10', 'Olhos abertos', 'Desperte 10 bênçãos', 'altar', 10, (p) => p.dream.awakened, { gold: 1500, po: 15, tomo: 3 }],
+    ['compadrio_1', 'Compadres', 'Receba um Compadrio', 'companheiros', 1, (p) => p.dream.compadrios, { gold: 500, po: 6 }],
+    ['sinergia_7', 'Afilhado querido', 'Junte 7 bênçãos do mesmo padrinho numa noite', 'supremo', 1, (p) => p.dream.synergy7, { gold: 900, po: 10, tomo: 2 }],
+    ['amuletos_10', 'Pescoço pesado', 'Encontre 10 amuletos diferentes', 'amuleto', 10, (p) => p.dream.amuletsSeen.length, { gold: 600, mata: 30 }],
+    ['amuletos_todos', 'Corpo fechado', 'Encontre todos os amuletos', 'amuleto', AMULET_ORDER.length, (p) => p.dream.amuletsSeen.length, { gold: 2000, mata: 100, lagrima: 1 }],
+    ['causos_todos', 'Contador de causo', 'Viva todos os causos', 'credito', CAUSO_ORDER.length, (p) => p.dream.causosSeen.length, { gold: 1200, mata: 60, tomo: 3 }],
+    ['provacoes_5', 'Provado', 'Vença 5 Provações', 'caveira', 5, (p) => p.dream.trials, { gold: 800, po: 10 }],
+    ['aldeia_3', 'Primeiras casas', 'Faça 3 melhorias na Aldeia', 'descanso', 3, (p) => Object.values(p.village).reduce((n, v) => n + (v ?? 0), 0), { gold: 500, mata: 30 }],
   ]),
   ...G('segredos', [
     ['mae_do_ouro', 'Mãe-do-Ouro', 'Alcance a Mãe-do-Ouro 10 vezes', 'ouro', 10, (p) => p.life.wisps, { gold: 800 }, true],

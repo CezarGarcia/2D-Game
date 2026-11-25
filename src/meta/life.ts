@@ -33,11 +33,23 @@ export function knowledgeMap(life: LifeStats): Partial<Record<EnemyKind, number>
 
 const add = (rec: Record<string, number>, key: string, n: number) => { if (n > 0) rec[key] = (rec[key] ?? 0) + n; };
 
+/** O que aconteceu dentro de uma sala ou fase: abates por tipo, reações, esquivas, o maior golpe. Vale também para os nós do Sonho. */
+export function recordTally(p: Profile, o: StageOutcome): void {
+  const L = p.life, t = o.tally;
+  L.deaths += o.deaths; L.perfects += o.perfects; L.seconds += Math.max(0, Math.round(o.time)); L.chests += o.chests ?? 0;
+  if (!t) return;
+  for (const kind of Object.keys(t.killsBy)) add(L.kills, kind, t.killsBy[kind]);
+  L.champions += t.champions; L.elites += t.elites; L.bosses += t.bosses;
+  L.parries += t.parries; L.pots += t.pots; L.wisps += t.wisps; L.casts += t.casts; L.reactions += t.reactions; L.supremos += t.supremos; L.potions += t.potions;
+  for (const el of Object.keys(t.castsBy)) add(L.castsBy, el, t.castsBy[el as keyof typeof t.castsBy] ?? 0);
+  if (t.maxHit > L.maxHit) L.maxHit = t.maxHit;
+}
+
 /** Soma uma partida terminada (fase, Torre ou expedição) aos contadores. Chame uma vez por partida. */
 export function recordRun(p: Profile, o: StageOutcome, r: StageRewards, ctx: { weapon: ItemType; expedition?: boolean }): void {
   const L = p.life, t = o.tally;
-  L.runs++; L.deaths += o.deaths; L.perfects += o.perfects; L.seconds += Math.max(0, Math.round(o.time));
-  L.chests += o.chests ?? 0; L.gold += Math.max(0, r.gold);
+  recordTally(p, o);
+  L.runs++; L.gold += Math.max(0, r.gold);
   if (o.won) {
     L.wins++;
     if (o.deaths === 0) L.flawless++;
@@ -47,13 +59,6 @@ export function recordRun(p: Profile, o: StageOutcome, r: StageRewards, ctx: { w
   }
   L.towerFloors += r.tower?.floors ?? 0;
   for (const b of o.blessings ?? []) add(L.blessings, b, 1);
-  if (t) {
-    for (const kind of Object.keys(t.killsBy)) add(L.kills, kind, t.killsBy[kind]);
-    L.champions += t.champions; L.elites += t.elites; L.bosses += t.bosses;
-    L.parries += t.parries; L.pots += t.pots; L.wisps += t.wisps; L.casts += t.casts; L.reactions += t.reactions; L.supremos += t.supremos; L.potions += t.potions;
-    for (const el of Object.keys(t.castsBy)) add(L.castsBy, el, t.castsBy[el as keyof typeof t.castsBy] ?? 0);
-    if (t.maxHit > L.maxHit) L.maxHit = t.maxHit;
-  }
   for (const it of [...r.items, ...r.soldOverflow.map((s) => s.item)]) if (it.unique && !p.uniquesFound.includes(it.unique)) p.uniquesFound.push(it.unique);
 }
 

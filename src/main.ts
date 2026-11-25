@@ -5,7 +5,9 @@ import { StageScene } from './game/StageScene';
 import { music, unlockAudio } from './game/music';
 import { session } from './game/session';
 import { ACHIEVEMENT_BY_ID } from './data/achievements';
+import { isDreamId } from './data/dream';
 import { isTrainingId, trainingId } from './data/training';
+import { currentStageId, dreamContext, settleNode, type DreamContext } from './meta/dream';
 import { checkAchievements } from './meta/achievements';
 import { inventoryFull, loadProfile, newProfile, saveProfile, wipeSave } from './meta/profile';
 import { settleStage, touchDay } from './meta/daily';
@@ -84,11 +86,11 @@ const game = new Phaser.Game({
 /** Caçada automática em andamento: quantas partidas faltam e o que já rendeu. */
 let hunt: { stageId: string; left: number; total: number; sum: HuntSummary } | null = null;
 
-function launch(stageId: string, auto?: { speed: number; index: number; total: number }): void {
+function launch(stageId: string, auto?: { speed: number; index: number; total: number }, dream?: DreamContext): void {
   if (!ready) { pendingStage = stageId; return; }
   game.scene.stop('camp');
   game.scene.stop('stage');
-  game.scene.start('stage', { stageId, auto });
+  game.scene.start('stage', { stageId, auto, dream });
 }
 
 const ui = mountUi(document.getElementById('ui')!, {
@@ -104,6 +106,13 @@ const ui = mountUi(document.getElementById('ui')!, {
     } else { hunt = null; launch(stageId); }
   },
   startTraining: () => { ui.hide(); hunt = null; launch(trainingId(session.profile!.level)); },
+  startDreamNode: () => {
+    /* a sala do nó em que o herói do Sonho está, com o que ele traz das salas anteriores */
+    const run = session.profile!.dream.run, id = run ? currentStageId(run) : null;
+    if (!run || !id || !ready) return;
+    ui.hide(); hunt = null;
+    launch(id, undefined, dreamContext(run));
+  },
   resetGame: () => {
     wipeSave();
     session.profile = newProfile();
@@ -119,6 +128,17 @@ session.onStageEnd = (outcome) => {
   /* o Terreiro não paga nada nem entra em contador nenhum: só volta para a tela do herói */
   if (isTrainingId(outcome.stageId)) {
     afterStep(() => { game.scene.stop('stage'); game.scene.start('camp'); ui.showCamp('heroi'); });
+    return;
+  }
+  /* um nó do Sonho: volta para o mapa da noite, ou para o resumo se a noite acabou */
+  if (isDreamId(outcome.stageId)) {
+    const result = settleNode(profile, outcome);
+    saveProfile(profile);
+    afterStep(() => {
+      game.scene.stop('stage'); game.scene.start('camp');
+      ui.showDream(result);
+      for (const id of result?.end?.achievements ?? []) { const a = ACHIEVEMENT_BY_ID.get(id); if (a) ui.notify(`Conquista: ${a.name}`); }
+    });
     return;
   }
   const rewards = settleStage(profile, outcome);

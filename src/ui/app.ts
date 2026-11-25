@@ -14,6 +14,7 @@ import { claimableCount, restInfo, touchDay } from '../meta/daily';
 import { isForgeUnlocked, isTowerUnlocked, type StageRewards } from '../meta/rewards';
 import { deriveStats, powerOf } from '../meta/stats';
 import { claimableAchievements } from '../meta/achievements';
+import { isDreamUnlocked, type NodeResult } from '../meta/dream';
 import { renderAlmanaque } from './almanaque';
 import { renderCompanheiros } from './companheiros';
 import { renderDiario } from './diario';
@@ -25,6 +26,7 @@ import { renderHeroi, renderItemMenu } from './heroi';
 import type { HuntSummary, UiController, UiHost } from './host';
 import { defaultStage, dismissStory, pendingStory, renderMapa } from './mapa';
 import { renderResultado } from './resultado';
+import { renderSonho } from './sonho';
 import { renderTalentos } from './talentos';
 import { renderTorre } from './torre';
 import { mountTips, tip } from './tip';
@@ -33,10 +35,10 @@ import { mountTips, tip } from './tip';
 const TABS: { id: Tab; label: string }[] = [
   { id: 'mapa', label: 'Mapa' }, { id: 'heroi', label: 'Herói' }, { id: 'ferreiro', label: 'Ferreiro' },
   { id: 'talentos', label: 'Talentos' }, { id: 'feiticos', label: 'Feitiços' }, { id: 'companheiros', label: 'Companheiros' },
-  { id: 'torre', label: 'Torre' }, { id: 'diario', label: 'Diário' }, { id: 'almanaque', label: 'Almanaque' },
+  { id: 'torre', label: 'Torre' }, { id: 'sonho', label: 'Sonho' }, { id: 'diario', label: 'Diário' }, { id: 'almanaque', label: 'Almanaque' },
 ];
 /* o que abre cada aba trancada */
-const TAB_LOCK: Partial<Record<Tab, string>> = { ferreiro: 'Abre ao vencer a fase 1-2', torre: 'Abre ao libertar o Curupira (fase 1-12)' };
+const TAB_LOCK: Partial<Record<Tab, string>> = { ferreiro: 'Abre ao vencer a fase 1-2', torre: 'Abre ao libertar o Curupira (fase 1-12)', sonho: 'Abre ao libertar a Iara (fase 2-12)' };
 const TOAST_MS = 2200;
 const NOTE_MS = 4200;
 
@@ -220,25 +222,26 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     const daily = claimableCount(p);
     if (daily > 0) out.diario = { n: daily, why: daily === 1 ? 'Recompensa para pegar' : `${daily} recompensas para pegar` };
     const ach = claimableAchievements(p).length;
+    if (p.dream.run) out.sonho = { n: '!', why: 'Há uma noite em andamento' };
     if (ach > 0) out.almanaque = { n: ach, why: ach === 1 ? 'Conquista com prêmio para pegar' : `${ach} conquistas com prêmio para pegar` };
     return out;
   }
 
   function dock(): HTMLElement {
     const p = host.getProfile(), bd = badges();
-    const shut: Partial<Record<Tab, boolean>> = { ferreiro: !isForgeUnlocked(p), torre: !isTowerUnlocked(p) };
+    const shut: Partial<Record<Tab, boolean>> = { ferreiro: !isForgeUnlocked(p), torre: !isTowerUnlocked(p), sonho: !isDreamUnlocked(p) };
     return h('nav', { class: 'dock', 'aria-label': 'Acampamento' }, TABS.map((t, i) => {
       const b = bd[t.id], locked = !!shut[t.id], on = st.tab === t.id;
       return tip(h('button', {
         type: 'button', class: `dock-btn${on ? ' on' : ''}${locked ? ' locked' : ''}`, 'aria-current': on ? 'page' : null,
         'aria-label': t.label + (b ? `, ${b.why}` : ''), 'data-fk': `tab-${t.id}`, onclick: () => showCamp(t.id),
       },
-      h('span', 'dock-ico', ui(t.id, 38)),
+      h('span', 'dock-ico', ui(t.id, 34)),
       h('span', 'dock-label', t.label),
       b && !on && h('span', 'dock-badge', b.n),
       locked && h('span', 'dock-lock', ui('cadeado', 22))),
       () => ({
-        title: t.label, tag: `Tecla ${i + 1}`,
+        title: t.label, tag: `Tecla ${(i + 1) % 10}`,
         rows: [b ? { icon: 'novo', text: b.why, tone: 'gold' } : null, locked ? { icon: 'cadeado', text: TAB_LOCK[t.id] ?? 'Trancado', tone: 'bad' } : null],
       }));
     }));
@@ -254,6 +257,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       case 'torre': return renderTorre(ctx);
       case 'diario': return renderDiario(ctx);
       case 'almanaque': return renderAlmanaque(ctx);
+      case 'sonho': return renderSonho(ctx);
       default: return renderMapa(ctx);
     }
   }
@@ -351,6 +355,16 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
     window.setTimeout(() => el.remove(), NOTE_MS);
   }
 
+  /** Volta de uma sala do Sonho: o mapa da noite com um aviso do que ela rendeu, ou o resumo se a noite acabou. */
+  function showDream(result: NodeResult | null): void {
+    st.dream.end = result?.end ?? null;
+    showCamp('sonho');
+    if (!result || result.end) return;
+    const bits = [result.vintem > 0 ? `+${result.vintem} vinténs` : '', result.memories > 0 ? `+${result.memories} Lembranças` : ''].filter(Boolean).join('  ·  ');
+    if (result.trial === false) ctx.toast('Provação perdida: metade da vida ficou lá', 'bad');
+    else if (bits) ctx.toast(result.trial ? `Provação vencida!  ${bits}` : bits);
+  }
+
   function showResults(stageId: string, rewards: StageRewards, hunt?: HuntSummary): void {
     if (!root.hidden && mode === 'camp') seeTab(st.tab);
     mode = 'results'; results = { stageId, rewards, hunt };
@@ -383,8 +397,10 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
       if (st.tab === 'mapa' && pendingStory(host.getProfile()) != null) { dismissStory(host.getProfile()); render(); e.preventDefault(); }
       return;
     }
-    if (mode === 'camp' && !st.confirm && e.key.length === 1 && e.key >= '1' && e.key <= String(TABS.length)) {
-      showCamp(TABS[Number(e.key) - 1].id);
+    /* 1 a 9 abrem as nove primeiras abas e 0, a décima */
+    const tabKey = e.key.length === 1 && e.key >= '0' && e.key <= '9' ? (Number(e.key) + 9) % 10 : -1;
+    if (mode === 'camp' && !st.confirm && tabKey >= 0 && tabKey < TABS.length && !(e.target instanceof HTMLInputElement)) {
+      showCamp(TABS[tabKey].id);
       e.preventDefault();
     }
   });
@@ -392,7 +408,7 @@ export function mountUi(root: HTMLElement, host: UiHost): UiController {
   stage.addEventListener('contextmenu', (e) => e.preventDefault());
 
   return {
-    showCamp, showResults, hide, notify,
+    showCamp, showResults, showDream, hide, notify,
     get visible() { return !root.hidden; },
   };
 }

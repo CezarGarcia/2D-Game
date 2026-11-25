@@ -34,6 +34,10 @@ export interface StageOutcome {
   foundGold?: number;
   /** Baús abertos na fase. */
   chests?: number;
+  /** Como o herói saiu (o Sonho leva isto para a sala seguinte): fração da vida, poções, carga do Supremo, quedas que sobraram e o azar do altar. */
+  left?: { hpFrac: number; potions: number; supremo: number; revives: number; altarDry: number };
+  /** Desafio da última sala (a Provação do Sonho): como terminou. */
+  trial?: 'ativo' | 'vencido' | 'perdido' | null;
 }
 
 export interface StageRewards {

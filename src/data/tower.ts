@@ -7,6 +7,7 @@
 import { ARENA, isBossKind } from './balance';
 import { BOSSES, type BossKind } from './bestiary';
 import { expeditionStage, isExpeditionId } from './daily';
+import { dreamStage, isDreamId } from './dream';
 import { makeRng } from './rng';
 import { isTrainingId, trainingStage } from './training';
 import { STAGES, STAGE_BY_ID, TERRAIN, wave, type RoomDef, type StageDef } from './stages';
@@ -73,6 +74,7 @@ export function isTowerId(id: string): boolean { return id.startsWith('torre-');
 /** Fase, corrida da Torre ou expedição pelo identificador. */
 export function findStage(id: string): StageDef | undefined {
   if (isTrainingId(id)) return trainingStage(id);
+  if (isDreamId(id)) return dreamStage(id) ?? undefined;
   return isTowerId(id) ? towerRun(Number(id.slice(6))) : isExpeditionId(id) ? expeditionStage(id) ?? undefined : STAGE_BY_ID.get(id);
 }
 

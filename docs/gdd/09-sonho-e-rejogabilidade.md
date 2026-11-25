@@ -48,7 +48,7 @@ Quando o andarilho dorme, o Esquecimento o puxa para um sonho feito das lembran�
 Isso dá à repetição um motivo dentro da história, e as falas da Aldeia comentam o que aconteceu na noite anterior.
 
 - **Abre** depois de vencer a Iara (fase 2-12). A primeira noite é curta (um trecho só) e serve de tutorial.
-- **Duração:** 25 a 35 minutos por noite completa.
+- **Duração:** 25 a 35 minutos por noite completa. (A primeira versão, sem Roda, Presságios e Cordéis, fica em 15 a 20; ver `10-plano-da-etapa-4.md`.)
 - **Nome do modo:** "O Sonho". O nome "Travessia" já é de uma expedição diária.
 
 ### Com que herói se entra

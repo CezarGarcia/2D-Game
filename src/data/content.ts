@@ -441,6 +441,9 @@ export const BLESSING_WEIGHT: Record<BlessingTier, number> = { 1: 60, 2: 30, 3: 
 export const BLESSING_TIER_LABEL: Record<BlessingTier, string> = { 1: 'Comum', 2: 'Rara', 3: 'Épica', 4: 'Lendária' };
 export const BLESSING_TIER_COLOR: Record<BlessingTier, string> = { 1: '#9BE7C0', 2: '#6AA5FF', 3: '#BC8CFF', 4: '#FFB238' };
 /** Altares seguidos só com bênçãos comuns antes de o próximo garantir uma rara ou melhor. */
+/** Bênçãos que só mexem no que a fase paga (ouro e experiência): não aparecem no Sonho, que não paga por sala. */
+export const STAGE_ONLY_BLESSINGS: readonly BaseBlessingId[] = ['ouro', 'sabedoria'];
+
 export const ALTAR_PITY = 2;
 
 /** Quantas vezes cada bênção já foi escolhida. */

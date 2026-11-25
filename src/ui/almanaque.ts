@@ -4,7 +4,9 @@
  */
 import { paintHeroBackdrop } from '../art/backdrops';
 import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, type AchievementDef, type AchievementGroup, type AchievementReward } from '../data/achievements';
+import { AMULETS, AMULET_ORDER, AMULET_RARITY } from '../data/amulets';
 import type { EnemyKind } from '../data/balance';
+import { CAUSOS, CAUSO_ORDER } from '../data/causos';
 import { COMPANION_ORDER, ELEMENTS } from '../data/content';
 import { ITEM_TYPES, RARITIES, UNIQUES } from '../data/items';
 import { BESTIARY, BESTIARY_KINDS, ENEMY_LORE, type BestiaryEntry } from '../data/lore';
@@ -22,12 +24,14 @@ const ROLE_LABEL = { comum: 'Comum', elite: 'Grande elite', chefe: 'Encantado' }
 
 /* ---------- quanto do Almanaque já foi preenchido ---------- */
 
-export function almanacCounts(p: Profile): { done: number; total: number; ach: [number, number]; beasts: [number, number]; uniques: [number, number] } {
+export function almanacCounts(p: Profile): { done: number; total: number; ach: [number, number]; beasts: [number, number]; uniques: [number, number]; dream: [number, number] } {
   const ach: [number, number] = [ACHIEVEMENTS.filter((a) => p.achievements[a.id]).length, ACHIEVEMENTS.length];
   const beasts: [number, number] = [BESTIARY_KINDS.filter((k) => killsOf(p.life, k) > 0).length, BESTIARY_KINDS.length];
   const uniques: [number, number] = [Object.keys(UNIQUES).filter((u) => p.uniquesFound.includes(u)).length, Object.keys(UNIQUES).length];
   const comp = COMPANION_ORDER.filter((id) => p.companions[id]).length;
-  return { done: ach[0] + beasts[0] + uniques[0] + comp, total: ach[1] + beasts[1] + uniques[1] + COMPANION_ORDER.length, ach, beasts, uniques };
+  /* amuletos e causos do Sonho têm a aba deles, mas ficam fora da conta geral: quem não sonha não perde o Almanaque cheio */
+  const dream: [number, number] = [AMULET_ORDER.filter((a) => p.dream.amuletsSeen.includes(a)).length + CAUSO_ORDER.filter((id) => p.dream.causosSeen.includes(id)).length, AMULET_ORDER.length + CAUSO_ORDER.length];
+  return { done: ach[0] + beasts[0] + uniques[0] + comp, total: ach[1] + beasts[1] + uniques[1] + COMPANION_ORDER.length, ach, beasts, uniques, dream };
 }
 
 /* ---------- conquistas ---------- */
@@ -209,17 +213,43 @@ function uniquesView(c: Ctx): HTMLElement {
   return h('div', 'alm-body uniques', h('div', 'uniq-grid', cards));
 }
 
+/* ---------- o Sonho: amuletos e causos ---------- */
+
+function sonhoView(c: Ctx): HTMLElement {
+  const p = c.p;
+  const amulets = AMULET_ORDER.map((id) => {
+    const a = AMULETS[id], seen = p.dream.amuletsSeen.includes(id), r = AMULET_RARITY[a.rarity];
+    return tip(h('div', { class: `uniq${seen ? '' : ' unseen'}`, style: `--rar:${r.color}`, tabindex: 0 },
+      h('span', 'uniq-ico', ui(a.icon, 46)),
+      h('span', 'uniq-mid', h('span', 'uniq-name', seen ? a.name : '???'), h('span', 'uniq-sub', seen ? `Amuleto · ${r.label}` : 'Ainda não achado no Sonho'))),
+    () => ({ title: seen ? a.name : 'Amuleto', color: seen ? r.color : undefined, icon: ui(a.icon, 36), sub: seen ? `Amuleto · ${r.label}` : 'Ainda não achado', subColor: seen ? undefined : '#ff7b6b',
+      rows: seen ? [{ text: a.desc }, 'sep' as const, { text: a.lore, tone: 'dim' as const }] : [{ text: 'Elites, provações, chefes, a Feira e alguns causos do Sonho dão amuletos.', tone: 'dim' as const }] }));
+  });
+  const causos = CAUSO_ORDER.map((id) => {
+    const d = CAUSOS[id], seen = p.dream.causosSeen.includes(id);
+    return tip(h('div', { class: `uniq${seen ? '' : ' unseen'}`, style: `--rar:${d.color}`, tabindex: 0 },
+      h('span', 'uniq-ico', ui('credito', 46)),
+      h('span', 'uniq-mid', h('span', 'uniq-name', seen ? d.title : '???'), h('span', 'uniq-sub', seen ? 'Causo' : 'Ainda não ouvido'))),
+    () => ({ title: seen ? d.title : 'Causo', color: seen ? d.color : undefined, icon: ui('credito', 36), sub: seen ? 'Causo do Sonho' : 'Ainda não ouvido', subColor: seen ? undefined : '#ff7b6b',
+      rows: seen ? [{ text: d.text }, 'sep' as const, { text: d.lore, tone: 'dim' as const }] : [{ text: 'Os causos aparecem nos nós de Causo do mapa do Sonho. Os que você ainda não ouviu vêm primeiro.', tone: 'dim' as const }] }));
+  });
+  return h('div', 'alm-body uniques', h('div', 'uniq-grid',
+    h('div', 'uniq-head', ui('amuleto', 26), 'Amuletos'), amulets,
+    h('div', 'uniq-head', ui('credito', 26), 'Causos'), causos));
+}
+
 /* ---------- a tela ---------- */
 
 const TABS: { id: AlmTab; label: string; icon: string }[] = [
   { id: 'conquistas', label: 'Conquistas', icon: 'conquista' },
   { id: 'bestiario', label: 'Bestiário', icon: 'caveira' },
   { id: 'itens', label: 'Itens com nome', icon: 'estrela' },
+  { id: 'sonho', label: 'Sonho', icon: 'sonho' },
 ];
 
 export function renderAlmanaque(c: Ctx): HTMLElement {
   const p = c.p, st = c.st.alm, n = almanacCounts(p), wait = claimableAchievements(p).length;
-  const count: Record<AlmTab, [number, number]> = { conquistas: n.ach, bestiario: n.beasts, itens: n.uniques };
+  const count: Record<AlmTab, [number, number]> = { conquistas: n.ach, bestiario: n.beasts, itens: n.uniques, sonho: n.dream };
   return h('div', 'almanaque',
     backdrop('companheiros', MAIN_W, MAIN_H, (g) => paintHeroBackdrop(g, MAIN_W, MAIN_H)),
     h('div', 'alm-shade'),
@@ -235,5 +265,5 @@ export function renderAlmanaque(c: Ctx): HTMLElement {
           { icon: 'estrela', text: 'Itens com nome', value: `${n.uniques[0]} / ${n.uniques[1]}` },
           { icon: 'companheiros', text: 'Companheiros', value: `${COMPANION_ORDER.filter((id) => p.companions[id]).length} / ${COMPANION_ORDER.length}` },
         ] })),
-    st.tab === 'bestiario' ? bestiaryView(c) : st.tab === 'itens' ? uniquesView(c) : achievementsView(c));
+    st.tab === 'bestiario' ? bestiaryView(c) : st.tab === 'itens' ? uniquesView(c) : st.tab === 'sonho' ? sonhoView(c) : achievementsView(c));
 }

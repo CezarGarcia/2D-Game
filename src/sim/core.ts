@@ -121,11 +121,12 @@ export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quie
   const base = enemyBase(def.kind), level = w.level, mods = def.mods ?? [];
   const boss = isBossKindAny(def.kind);
   const elite = !!def.elite && !boss, champion = !!def.champion && !elite && !boss;
-  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1));
+  const foes = w.cfg.foes;
+  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1) * (foes?.hp ?? 1));
   const e: Enemy = {
     id: w.nextId++, kind: def.kind, elite: !!def.elite, champion, mods,
     x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : champion ? CHAMPION.scale : 1),
-    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1),
+    dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1) * (foes?.damage ?? 1),
     speedMult: (boss ? 1 : enemySpeedMult(level)) * (mods.includes('veloz') ? MOD.veloz.speed : 1),
     windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1),
     state: 'spawn', stateT: 0, facing: -1, dirX: -1, dirY: 0, tele: null,
@@ -199,6 +200,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   if (e.crackT > 0) dmg *= 1.15 + B.crackBonus;
   if (B.mataViva && (e.rootT > 0 || e.slowT > 0 || e.poisonT > 0)) dmg *= 1 + B.mataViva;
   if (B.lowHpBonus && e.hp < e.maxHp * 0.3) dmg *= 1 + B.lowHpBonus;
+  if (B.fullFoeBonus && e.hp >= e.maxHp * 0.9) dmg *= 1 + B.fullFoeBonus;
   if (B.burnBonus && e.burnT > 0) dmg *= 1 + B.burnBonus;
   if (B.spellStatusBonus && source === 'spell' && (e.poisonT > 0 || e.wetT > 0 || e.chargeT > 0 || e.burnT > 0 || e.crackT > 0 || e.curseT > 0 || e.confuseT > 0)) dmg *= 1 + B.spellStatusBonus;
   if (e.curseT > 0) dmg *= 1 + (e.curseBonus || 0.15);
@@ -303,7 +305,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     w.kills++;
     if (s.manaOnKill) p.mana = Math.min(s.maxMana, p.mana + s.manaOnKill);
     if (s.manaOnElite && (e.elite || isBoss(e))) p.mana = s.maxMana;
-    if (s.onKillExplode && source !== 'blast') w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 105 * s.spellArea, t: 0, dur: 0.14, tick: 0, power: Math.max(e.maxHp * 0.3, s.weaponDamage * s.damageMult * 1.2) });
+    if (source !== 'blast' && (s.onKillExplode || (B.killExplodeChance > 0 && rand(w) < B.killExplodeChance))) w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 105 * s.spellArea, t: 0, dur: 0.14, tick: 0, power: Math.max(e.maxHp * 0.3, s.weaponDamage * s.damageMult * 1.2) });
     if (s.talents.sedeDeBriga) { p.stacks = Math.min(PLAYER.sedeDeBriga.max, p.stacks + 1); p.stackT = PLAYER.sedeDeBriga.duration; emit(w, { type: 'stack', x: p.x, y: p.y, value: p.stacks }); }
     if (e.mods.includes('explosivo')) {
       addHazard(w, { kind: 'blast', tele: { shape: 'circle', x: e.x, y: e.y, r: MOD.explosivo.radius, t: 0, dur: MOD.explosivo.delay }, damage: MOD.explosivo.damage * e.dmg, slow: 0 });
@@ -311,6 +313,15 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     if (s.passives.killHeal) healPlayer(w, s.maxHp * s.passives.killHeal, true);
     if (B.killBurn && e.burnT > 0) { p.mana = Math.min(s.maxMana, p.mana + 8); healPlayer(w, s.maxHp * 0.02, true); }
     if (B.killHaste) { p.windStacks = Math.min(WIND.max, p.windStacks + 1); p.windT = WIND.duration; }
+    if (B.killPushEvery > 0 && w.kills % B.killPushEvery === 0) {
+      /* Sanfona: a onda de som afasta quem não é chefe */
+      for (const o of w.enemies) {
+        if (o === e || o.hp <= 0 || o.hidden || isBoss(o)) continue;
+        const dx = o.x - p.x, dy = o.y - p.y, d = Math.hypot(dx, dy) || 1;
+        if (d < 420) { o.kx = (dx / d) * 520; o.ky = (dy / d) * 520; o.tele = null; if (o.state === 'windup' || o.state === 'aim' || o.state === 'fuse') setState(o, 'stagger'); }
+      }
+      emit(w, { type: 'onda', x: p.x, y: p.y, ang: 0, value: 420 });
+    }
     if (e.burnT > 0 && (s.passives.burnExplode || s.uniques.olhoDoBoitata)) {
       w.zones.push({ id: w.nextId++, kind: 'pop', x: e.x, y: e.y, r: 110, t: 0, dur: 0.12, tick: 0, power: e.maxHp * 0.15 + s.weaponDamage * s.damageMult });
       for (const o of w.enemies) if (o !== e && o.hp > 0 && Math.hypot(o.x - e.x, o.y - e.y) < 130) applyElement(w, o, 'fogo');

@@ -202,6 +202,13 @@ export function startRoomLoot(w: World, room: RoomDef, index: number, revive: bo
     const x = ARENA.x0 + 220 + lootRand(w) * (ARENA.x1 - ARENA.x0 - 340), y = ARENA.y0 + 40 + lootRand(w) * (ARENA.y1 - ARENA.y0 - 80);
     w.pots.push({ id: w.nextId++, x, y });
   }
+  if (room.trial) {
+    /* Provação do Sonho: a sala inteira é o desafio */
+    w.loot.challenges++;
+    w.challenge = { kind: room.trial.kind, limit: room.trial.limit, hits0: w.hitsTaken, t0: w.time, state: 'ativo', x: (ARENA.x0 + ARENA.x1) / 2, y: ARENA.y0 + 34 };
+    emit(w, { type: 'challenge', x: w.challenge.x, y: w.challenge.y, kind: 'start', text: w.challenge.kind, value: w.challenge.limit });
+    return;
+  }
   if (room.type === 'combat' && index > 0 && w.loot.challenges < CHALLENGE.perStage && room.waves.some((wv) => wv.length) && lootRand(w) < CHALLENGE.chance) {
     w.loot.challenges++;
     const enemies = room.waves.reduce((a, wv) => a + wv.length, 0), fast = lootRand(w) < 0.5;

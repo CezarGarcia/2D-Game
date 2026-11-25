@@ -1,5 +1,7 @@
 /** Etapa 4, fases 0 e 1 (docs/gdd/10): perfil v2, contadores, conquistas, filtro de saque, builds e troca de missão. */
 import { afterEach, describe, expect, it } from 'vitest';
+import { AMULET_ORDER } from '../src/data/amulets';
+import { CAUSO_ORDER } from '../src/data/causos';
 import { ACHIEVEMENTS } from '../src/data/achievements';
 import { TICK } from '../src/data/balance';
 import { BLESSING_ORDER, COMPANION_ORDER } from '../src/data/content';
@@ -170,6 +172,9 @@ describe('conquistas', () => {
     for (const w of ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado']) L.winsBy[w] = 1;
     for (const b of BLESSING_ORDER) L.blessings[b] = 1;
     p.tower.best = 100;
+    /* o Sonho e a Aldeia */
+    Object.assign(p.dream, { nights: 99, wins: 99, bestTrecho: 3, total: 99_999, trials: 99, awakened: 99, compadrios: 9, synergy7: 9, weaponsWon: ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'], amuletsSeen: AMULET_ORDER.slice(), causosSeen: CAUSO_ORDER.slice() });
+    p.village = { rancho: 3, mural: 3, casaDeFarinha: 3 };
     p.equipped.arma!.rarity = 5; p.equipped.arma!.plus = 15; p.gems['fogo:6'] = 1; p.spellLevels.dardo = 10;
     const got = checkAchievements(p, DAY);
     const missing = ACHIEVEMENTS.filter((a) => !got.includes(a.id)).map((a) => `${a.id} ${achievementProgress(p, a)}/${a.target}`);

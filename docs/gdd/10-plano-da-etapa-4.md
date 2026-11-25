@@ -11,7 +11,7 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 | 0 · Preparação | **Feita** |
 | 1 · Conveniências e coleção | **Feita** |
 | 2 · Bênçãos com padrinho | **Feita** |
-| 3 · O Sonho, o núcleo | A fazer |
+| 3 · O Sonho, o núcleo | **Feita** |
 | 4 · Roda, Presságios, Cordéis e Aspectos | A fazer |
 | 5 · Aldeia, companheiros, pós-jogo e exagero | A fazer |
 
@@ -37,6 +37,28 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 - **Bênção redundante sai do sorteio:** a que só ligaria um efeito que um talento ou conjunto já liga.
 - **Calibração.** Com o jogador automático de referência, 10 partidas em cada uma das 96 fases: 787 vitórias antes e 805 depois (82% e 84%). Ficou dentro da variação entre sementes, e nenhum número de fase foi mexido.
 - **Erro antigo corrigido.** Um monstro que explode (Cogumelo-Estouro, Taturana, Fogo-Fátuo, Vazio) derrubava o jogo se o golpe voltasse e o derrubasse no mesmo instante, por exemplo com a esquiva perfeita que molha em volta. Era raro com o conjunto do Ribeirinho e ficaria comum com a Onda Mansa.
+
+### O que mudou em relação ao plano na fase 3
+
+- **Uma sala por nó, como planejado.** Combate, elite, provação, chefe e altar são fases de uma sala só, com o id `sonho-<tipo>-<capítulo>-<nível>-<trecho>-<semente>-<extra>`: o id sozinho refaz a sala, então fechar o jogo no meio dela e voltar dá na mesma sala. O que passa de uma para a outra (bênçãos, vida, poções, carga do Supremo, quedas e o azar do altar) vai em `StageConfig.carry`; a maldição vai em `StageConfig.foes`. Amuletos e vinténs ficam só no estado da noite.
+- **O trecho tem 8 passos.** Um combate de entrada, cinco passos com duas ou três faixas (o terceiro é sempre de altares, cada um de um padrinho diferente), o descanso (Fonte e Feira, ao alcance de qualquer faixa) e o chefe. A Roda do Saci entra na fase 4 e o peso dela ficou com o combate.
+- **Vintém é pago por sala**, não cai dos monstros: 16 por combate, 32 por elite, 30 por provação, 48 por chefe e 5 por baú aberto. Evita um tipo novo de saque no chão e deixa a conta previsível.
+- **Chefes.** O trecho que não é o último tem a grande elite do capítulo; o último tem o Encantado. O chefe misturado ("Eco") fica para a fase 4.
+- **Quedas.** No Sonho o herói não levanta: cair acorda. Só o Muiraquitã dá uma segunda chance por noite.
+- **Altar.** A sala de altar traz três bênçãos do padrinho do nó. O Rancho, a Feira e os causos sorteiam fora da sala, com as mesmas regras de repetição e de bênção redundante.
+- **Bênçãos fora do Sonho.** Pote de Ouro e Lição da Mata só mexem no que a fase paga, e o Sonho não paga por sala: não aparecem nele.
+- **Causos mostram o resultado antes.** O que cada escolha dá (qual bênção, qual amuleto) é sorteado ao abrir o causo e aparece na tela. A incerteza fica no caminho, não na letra miúda.
+- **Feira.** Três bênçãos, dois amuletos, uma garrafada por visita (40% da vida), troca de banca (cada troca mais cara) e tirar uma bênção inteira.
+- **Aldeia, primeira versão: três construções**, todas com três níveis e pagas com Lembranças. **Rancho do Andarilho** (novo, não estava no 09): começa a noite com 30 vinténs, depois com um amuleto comum, depois escolhendo uma bênção comum. **Mural do Almanaque**: +10/20/30% de Lembranças. **Casa de Farinha**: +10/20/30% de ouro na campanha. As outras construções do 09 dependem das fases 4 e 5.
+- **O que a noite paga.** Lembranças por sala (4, 8, 25 na provação vencida, 15 no chefe), levadas mesmo na derrota. Por trecho completo, 60% da experiência e do ouro de uma fase do nível do herói. A primeira vitória com cada arma dá um ponto de talento.
+- **Fora do Sonho por enquanto:** o bônus de Conhecimento do Bestiário e as missões do Diário não contam nas salas do Sonho.
+- **Resultado.** O resumo da noite é uma tela própria da aba Sonho (`src/ui/sonho.ts`), não um ramo de `renderResultado`: os dois mostram coisas diferentes demais.
+- **Almanaque.** Ganhou a aba Sonho, com os 20 amuletos e os 10 causos e o texto de folclore de cada um. Fica fora da conta geral do Almanaque, para quem não sonha não perder os 100%.
+- **Conquistas do Sonho: 18** (o plano pedia 15).
+- **Perfil na versão 3:** `dream` (Lembranças, recordes, o que já foi visto e a noite em andamento) e `village`.
+- **Calibração** (`npx vite-node tests/calib-sonho.ts`, 40 noites, facão, jogador automático que erra como gente): nível 22 com 2 capítulos, 45% de noites completas; nível 38 com 4 capítulos, 73%; nível 60 com 8 capítulos, 35%. Cerca de 10 salas por noite. A maior parte das quedas é no segundo trecho, sem passar de 70% em nenhum.
+- **Duração.** O jogador automático luta de 5 a 7 minutos por noite; com as escolhas no meio, uma pessoa deve levar de 15 a 20. É menos que os 25 a 35 do 09, de propósito nesta primeira versão: a Roda, os Presságios e os Cordéis da fase 4 alongam a noite. Falta medir com gente jogando.
+- **Erro corrigido no caminho.** Da faixa de cima do mapa só se chegava à Fonte, e da de baixo, só à Feira. Agora as duas ficam ao alcance de qualquer faixa.
 
 ## O que o código atual já dá
 

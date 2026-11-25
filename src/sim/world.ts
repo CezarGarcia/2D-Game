@@ -5,7 +5,7 @@
  */
 import { ARENA, ENEMY, PLAYER, WAVE_DELAY, WAVE_OVERLAP } from '../data/balance';
 import {
-  ALTAR_PITY, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, awakeningsFor, blessingCounts, compadriosFor,
+  ALTAR_PITY, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, STAGE_ONLY_BLESSINGS, awakeningsFor, blessingCounts, compadriosFor,
   type BaseBlessingId, type BlessingId, type ElementId,
 } from '../data/content';
 import { levelCombatModifiers } from '../data/progression';
@@ -58,6 +58,14 @@ export function createWorld(cfg: StageConfig): World {
     chests: [], pickups: [], buffs: [], pots: [], wisp: null, challenge: null, offer: null,
     loot: { gold: 0, chests: 0, since: 0, wisps: 0, challenges: 0, rng: (cfg.seed ^ 0x5bd1e995) | 0 },
   };
+  /* o Sonho: o herói chega como saiu da sala anterior */
+  const c = cfg.carry;
+  if (c) {
+    w.blessings = c.blessings.slice(); w.altarDry = c.altarDry; w.revives = c.revives;
+    w.player.hp = Math.max(1, Math.min(cfg.stats.maxHp, Math.round(cfg.stats.maxHp * c.hpFrac)));
+    w.player.potions = Math.max(0, Math.min(cfg.stats.potions, c.potions));
+    w.player.supremo = Math.max(0, Math.min(100, c.supremo));
+  }
   w.pet = makePet(w);
   startRoom(w, 0);
   return w;
@@ -92,7 +100,7 @@ function startRoom(w: World, index: number, revive = false): void {
     pet.x = p.x - 50; pet.y = p.y + 18; pet.tauntT = 0;
   }
   if (room.type === 'altar') {
-    w.altar = rollBlessings(w); w.phase = 'altar';
+    w.altar = rollBlessings(w, room.altar ?? {}); w.phase = 'altar';
     emit(w, { type: 'altar', x: (ARENA.x0 + ARENA.x1) / 2, y: (ARENA.y0 + ARENA.y1) / 2 });
   } else w.phase = 'fight';
   emit(w, { type: 'roomStart', x: p.x, y: p.y, value: index, kind: room.type });
@@ -102,7 +110,7 @@ function startRoom(w: World, index: number, revive = false): void {
 export const COMPADRIO_CHANCE = 0.5;
 
 /** Bênção que não mudaria nada: um talento, um conjunto ou outra bênção já liga o mesmo efeito. */
-function redundant(s: HeroStats, b: BaseBlessingId): boolean {
+export function redundantBlessing(s: HeroStats, b: BaseBlessingId): boolean {
   switch (b) {
     case 'perfurar': return s.pierce;
     case 'pegadas': return s.passives.dodgeDust;
@@ -125,8 +133,9 @@ export function blessingPool(w: World, patron: ElementId | null = null): BaseBle
     if ((have[b] ?? 0) >= BLESSINGS[b].max) return false;
     if (patron && BLESSINGS[b].patron !== patron) return false;
     if (b === 'parceria' && !s.companion) return false;
+    if (w.cfg.carry && STAGE_ONLY_BLESSINGS.includes(b)) return false;
     if (b === 'cura' && w.player.hp > s.maxHp * 0.8 && w.player.potions >= s.potions) return false;
-    return !have[b] ? !redundant(s, b) : true;
+    return !have[b] ? !redundantBlessing(s, b) : true;
   });
 }
 
@@ -141,6 +150,8 @@ function weighted<T extends BlessingId>(w: World, pool: T[]): number {
 export interface AltarOpts {
   /** Altar de um padrinho só (o Sonho): as bênçãos saem todas dele. */
   patron?: ElementId | null;
+  /** Raridade mais alta que o altar traz (a Ferradura Virada limita às comuns). */
+  maxTier?: 1 | 2 | 3;
 }
 
 /**
@@ -158,7 +169,11 @@ export function rollBlessings(w: World, opts: AltarOpts = {}): BlessingId[] {
     const comp = compadriosFor(w.blessings).filter(mine);
     if (comp.length && rand(w) < COMPADRIO_CHANCE) picks.push(comp[Math.floor(rand(w) * comp.length)]);
   }
-  const special = picks.length, pool: BlessingId[] = blessingPool(w, patron);
+  const cap = opts.maxTier ?? 3;
+  let pool: BlessingId[] = blessingPool(w, patron).filter((b) => BLESSINGS[b].tier <= cap);
+  /* padrinho sem mais nada a dar: o altar não fica vazio, traz de qualquer um */
+  if (!pool.length && !picks.length) pool = blessingPool(w).filter((b) => BLESSINGS[b].tier <= cap);
+  const special = picks.length;
   while (picks.length < s.altarChoices && pool.length) picks.push(pool.splice(weighted(w, pool), 1)[0]);
   const good = (id: BlessingId) => BLESSINGS[id].tier >= 2;
   if (w.altarDry >= ALTAR_PITY && picks.length > special && !picks.some(good)) {
@@ -176,7 +191,13 @@ export function rollBlessings(w: World, opts: AltarOpts = {}): BlessingId[] {
 export function chooseBlessing(w: World, index: number, restat: (blessings: BlessingId[]) => HeroStats): boolean {
   if (w.phase !== 'altar' || !w.altar || !w.altar[index]) return false;
   grantBlessing(w, w.altar[index], restat);
-  w.altar = null; w.phase = 'cleared'; w.roomsCleared++;
+  w.altar = null; w.roomsCleared++;
+  if (w.room >= w.cfg.rooms.length - 1) {
+    /* altar que é a fase inteira (um nó do Sonho): escolher encerra */
+    flushLoot(w);
+    w.phase = 'won';
+    emit(w, { type: 'win', x: w.player.x, y: w.player.y, value: w.time });
+  } else w.phase = 'cleared';
   return true;
 }
 
