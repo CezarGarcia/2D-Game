@@ -30,6 +30,7 @@ import { HUMAN, makeBot } from '../sim/bot';
 import { isBoss } from '../sim/core';
 import { challengeLeft } from '../sim/loot';
 import { comboOf, spellCost } from '../sim/player';
+import { quantize, Recorder } from '../sim/replay';
 import { chooseBlessing, chooseOffer, createWorld, exitZone, step, type Buff, type Enemy, type Input, type SimEvent, type Telegraph, type World } from '../sim/world';
 import { CARD, HUD_SCALE, SLOT, TIER_COLORS, VITALS, bakeHud, duoCardTexture, plateTexture } from './hudart';
 import { music, unlockAudio } from './music';
@@ -144,6 +145,8 @@ export class StageScene extends Phaser.Scene {
 
   /** Contagens para as missões do dia. */
   private tally: RunTally = newTally();
+  /** Gravação dos comandos, para o ranking refazer a partida no servidor. */
+  private rec = new Recorder();
 
   /** Caçada automática: o jogador automático guia o herói. `index` e `total` são a posição na fila. */
   private auto: { speed: number; index: number; total: number } | null = null;
@@ -204,7 +207,7 @@ export class StageScene extends Phaser.Scene {
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
     this.hugeHit = Math.max(60, this.world.stats.weaponDamage * this.world.stats.damageMult * 9);
-    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.affSaid.clear(); this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
+    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.affSaid.clear(); this.fx = []; this.paused = false; this.ended = false; this.tally = newTally(); this.rec = new Recorder();
     if (this.auto) this.tally.auto = true;
     this.views.clear(); this.shots.clear(); this.cards = [];
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
@@ -339,7 +342,9 @@ export class StageScene extends Phaser.Scene {
         let guard = 0;
         while (this.acc >= TICK && guard++ < 12) {
           this.acc -= TICK;
-          step(this.world, this.auto ? this.autoInput(TICK / speed) : this.readInput(), TICK);
+          const inp = quantize(this.auto ? this.autoInput(TICK / speed) : this.readInput());
+          this.rec.input(inp);
+          step(this.world, inp, TICK);
           this.handleEvents();
           /* acelerada, a caçada não para a cada golpe */
           if (speed > 1) this.hitstop = 0;
@@ -390,6 +395,7 @@ export class StageScene extends Phaser.Scene {
           stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests,
           omens: omenWeight(this.omens),
           left: { hpFrac: Math.max(0, w.player.hp) / w.stats.maxHp, potions: w.player.potions, supremo: w.player.supremo, revives: w.revives, altarDry: w.altarDry }, trial: w.challenge?.state ?? null,
+          replay: this.auto ? undefined : this.rec.finish(),
         }),
       });
     });
@@ -944,7 +950,8 @@ export class StageScene extends Phaser.Scene {
 
   private pickBlessing(i: number): void {
     const profile = this.heroProfile, amulets = this.amulets, boost = this.boost, restat = (b: BlessingId[]) => deriveStats(profile, b, amulets, boost);
-    if (this.world.offer ? chooseOffer(this.world, i, restat) : chooseBlessing(this.world, i, restat)) { this.latch.attack = false; this.clearCards(); this.handleEvents(); }
+    const kind = this.world.offer ? 'o' : 'a';
+    if (kind === 'o' ? chooseOffer(this.world, i, restat) : chooseBlessing(this.world, i, restat)) { this.rec.pick(kind, i); this.latch.attack = false; this.clearCards(); this.handleEvents(); }
   }
 
   /* ---------- sprites ---------- */
