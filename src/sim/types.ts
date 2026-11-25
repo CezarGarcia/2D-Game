@@ -230,6 +230,8 @@ export interface SimEvent {
   type: SimEventType;
   x: number; y: number;
   value?: number; crit?: boolean; kind?: string; id?: number; ang?: number; armored?: boolean; x2?: number; y2?: number; text?: string;
+  /** Elemento do golpe (evento `hit`). No evento `kill`, `value` diz quem caiu: 0 comum, 1 campeão, 2 elite, 3 chefe. */
+  el?: ElementId;
 }
 
 export interface StageConfig {
@@ -239,6 +241,8 @@ export interface StageConfig {
   rooms: RoomDef[];
   stats: HeroStats;
   seed: number;
+  /** Partida com ranking (Torre): o bônus de conhecer o inimigo não vale. */
+  ranked?: boolean;
 }
 
 export type Phase = 'fight' | 'cleared' | 'altar' | 'dead' | 'won' | 'lost';

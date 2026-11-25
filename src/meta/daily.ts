@@ -11,14 +11,16 @@ import {
   type ExpModId, type MissionKind,
 } from '../data/daily';
 import { ELEMENT_ORDER } from '../data/content';
-import { ITEM_TYPES, makeItem, rollRarity, sellValue, type Gem, type ItemType } from '../data/items';
+import { ITEM_TYPES, makeItem, rollRarity, type Gem, type ItemType } from '../data/items';
 import { xpMultiplier } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
 import { CHAPTERS, STAGES, stagesOf, type StageDef } from '../data/stages';
 import { findStage, isTowerId } from '../data/tower';
-import { addGem, addItem, addXp, allItems, knownSpells, profileRng, refillPotions, type MissionState, type Profile } from './profile';
-import { applyOutcome, isForgeUnlocked, isTowerUnlocked, isUnlocked, recordOf, type StageOutcome, type StageRewards } from './rewards';
+import { addGem, addXp, allItems, knownSpells, profileRng, refillPotions, type MissionState, type Profile } from './profile';
+import { applyOutcome, isForgeUnlocked, isTowerUnlocked, isUnlocked, recordOf, stashDrops, type StageOutcome, type StageRewards } from './rewards';
 import { deriveStats } from './stats';
+import { checkAchievements } from './achievements';
+import { recordRun } from './life';
 
 /* ---------- relógio ---------- */
 
@@ -80,7 +82,7 @@ export function touchDay(p: Profile, now: Date = clockNow()): boolean {
 
 function rollDay(p: Profile, day: string): void {
   const d = p.daily;
-  d.day = day; d.chest = false; d.expRuns = 0; d.expFirst = [];
+  d.day = day; d.chest = false; d.expRuns = 0; d.expFirst = []; d.rerolls = 0;
   d.missions = pickMissions(p, day);
   d.expeditions = expeditionsUnlocked(p) ? makeExpeditions(p, day) : [];
 }
@@ -151,6 +153,37 @@ export function pickMissions(p: Profile, day: string): MissionState[] {
     out.push({ kind: at.kind, ...(param != null ? { param } : {}), target: def.targets[tier], progress: 0, claimed: false, reward: missionReward(p.level, tier, def) });
   }
   return out;
+}
+
+/** Trocas de missão grátis por dia. */
+export const REROLLS_PER_DAY = 1;
+
+export function rerollsLeft(p: Profile): number { return Math.max(0, REROLLS_PER_DAY - (p.daily.rerolls ?? 0)); }
+
+/** Dá para trocar esta missão? Só as que ainda não foram cumpridas, enquanto houver troca no dia. */
+export function canReroll(p: Profile, index: number): boolean {
+  const m = p.daily.missions[index];
+  return !!m && !m.claimed && !missionDone(m) && rerollsLeft(p) > 0;
+}
+
+/**
+ * Troca uma missão do dia por outra, de um grupo que não esteja em uso (nem o da que saiu).
+ * O progresso da missão trocada se perde. Devolve a missão nova, ou nulo se não havia troca ou opção.
+ */
+export function rerollMission(p: Profile, index: number): MissionState | null {
+  if (!canReroll(p, index)) return null;
+  const d = p.daily, old = d.missions[index];
+  const taken = new Set(d.missions.map((m) => MISSIONS[m.kind as MissionKind]?.group));
+  const left = missionOptions(p).filter((o) => !taken.has(MISSIONS[o.kind].group));
+  if (!left.length) return null;
+  const rng = dayRng(p, d.day, `troca-${index}-${d.rerolls}-${old.kind}`);
+  let roll = rng() * left.reduce((s, o) => s + MISSIONS[o.kind].weight, 0), at = left[0];
+  for (const o of left) { roll -= MISSIONS[o.kind].weight; if (roll <= 0) { at = o; break; } }
+  const def = MISSIONS[at.kind], tier = Math.floor(rng() * def.targets.length), param = at.params[Math.floor(rng() * at.params.length)];
+  const fresh: MissionState = { kind: at.kind, ...(param != null ? { param } : {}), target: def.targets[tier], progress: 0, claimed: false, reward: missionReward(p.level, tier, def) };
+  d.missions[index] = fresh;
+  d.rerolls = (d.rerolls ?? 0) + 1;
+  return fresh;
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
@@ -255,6 +288,7 @@ function bump(p: Profile, kind: MissionKind, n: number, test?: (m: MissionState)
 export function recordForge(p: Profile, now: Date = clockNow()): void {
   touchDay(p, now);
   bump(p, 'forja', 1);
+  p.life.forges++;
 }
 
 /* ---------- contagem da partida ---------- */
@@ -266,18 +300,35 @@ export interface RunTally {
   castsBy: Partial<Record<ElementId, number>>;
   supremos: number;
   reactions: number;
+  /** Monstros derrotados por tipo, e quantos eram campeões, elites e chefes. */
+  killsBy: Record<string, number>;
+  champions: number; elites: number; bosses: number;
+  parries: number;
+  pots: number; wisps: number;
+  /** Maior golpe dado na partida. */
+  maxHit: number;
+  /** A partida foi jogada pela Caçada automática. */
+  auto?: boolean;
 }
 
-export function newTally(): RunTally { return { potions: 0, casts: 0, castsBy: {}, supremos: 0, reactions: 0 }; }
+export function newTally(): RunTally { return { potions: 0, casts: 0, castsBy: {}, supremos: 0, reactions: 0, killsBy: {}, champions: 0, elites: 0, bosses: 0, parries: 0, pots: 0, wisps: 0, maxHit: 0 }; }
 
 /** Soma um evento da simulação à contagem. */
-export function countEvent(t: RunTally, e: { type: string; kind?: string }): void {
-  if (e.type === 'potion') t.potions++;
+export function countEvent(t: RunTally, e: { type: string; kind?: string; value?: number }): void {
+  if (e.type === 'hit') { if ((e.value ?? 0) > t.maxHit) t.maxHit = e.value!; }
+  else if (e.type === 'potion') t.potions++;
   else if (e.type === 'cast' && e.kind && e.kind in SPELLS) {
     const el = SPELLS[e.kind as SpellId].element;
     t.casts++; t.castsBy[el] = (t.castsBy[el] ?? 0) + 1;
   } else if (e.type === 'supremo' && e.kind && e.kind in ELEMENTS) t.supremos++;
   else if (e.type === 'reaction') t.reactions++;
+  else if (e.type === 'parry') t.parries++;
+  else if (e.type === 'pot') t.pots++;
+  else if (e.type === 'wisp' && e.kind === 'caught') t.wisps++;
+  else if (e.type === 'kill' && e.kind && e.value != null) { /* quem explode sozinho não conta como abate */
+    t.killsBy[e.kind] = (t.killsBy[e.kind] ?? 0) + 1;
+    if (e.value === 3) t.bosses++; else if (e.value === 2) t.elites++; else if (e.value === 1) t.champions++;
+  }
 }
 
 interface RunContext { stage: StageDef | undefined; wasCleared: boolean; weapon: ItemType }
@@ -394,8 +445,7 @@ export function applyExpeditionOutcome(p: Profile, o: StageOutcome): { rewards: 
   if (first) {
     d.expFirst.push(k.slot);
     const it = makeItem(p.nextItemId++, rng, k.level, Math.max(k.slot, rollRarity(rng, k.chapter, stats.luck)), undefined, k.chapter);
-    if (addItem(p, it)) r.items.push(it);
-    else { const g = sellValue(it); gold += g; r.soldOverflow.push({ item: it, gold: g }); }
+    gold += stashDrops(p, [it], r);
   }
   r.gold = gold;
   p.gold += gold;
@@ -416,7 +466,7 @@ export interface DailyNews {
   expedition?: ExpeditionResult;
 }
 
-export type SettledRewards = StageRewards & { daily?: DailyNews };
+export type SettledRewards = StageRewards & { daily?: DailyNews; /** Conquistas alcançadas nesta partida. */ achievements?: string[] };
 
 /** Aplica o resultado de qualquer partida (fase, Torre ou expedição) e o que ele muda no diário. */
 export function settleStage(p: Profile, o: StageOutcome, now: Date = clockNow()): SettledRewards {
@@ -428,7 +478,9 @@ export function settleStage(p: Profile, o: StageOutcome, now: Date = clockNow())
   else r = applyOutcome(p, o);
   const rest = spendRest(p, r);
   const missions = trackStage(p, o, r, { stage, wasCleared, weapon });
-  return Object.assign(r, { daily: { rest, restLeft: Math.round(p.daily.rest), missions, expedition } });
+  recordRun(p, o, r, { weapon, expedition: !!expedition });
+  const achievements = checkAchievements(p, now);
+  return Object.assign(r, { daily: { rest, restLeft: Math.round(p.daily.rest), missions, expedition }, achievements });
 }
 
 export { EXP_SLOTS };

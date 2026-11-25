@@ -43,6 +43,8 @@ export const UI_ICON_KEYS = [
   'torre', 'gema', 'conjunto', 'reacao', 'lua', 'credito', 'borduna', 'peixeiras', 'zagaia', 'cajado',
   // retorno diário
   'diario', 'expedicao', 'descanso',
+  // etapa 4: almanaque, conquistas, treino, caçada automática, filtro de saque, builds, troca de missão
+  'almanaque', 'conquista', 'treino', 'auto', 'filtro', 'build', 'trocar',
 ] as const;
 export type UiIconKey = typeof UI_ICON_KEYS[number];
 
@@ -1098,6 +1100,58 @@ var I = {
     c.font = '900 11px sans-serif'; c.textAlign = 'center'; c.lineWidth = 2.6 * Q; c.strokeStyle = OUT; c.fillStyle = '#cdb8ff';
     [[22, 14, 9], [29, 8.6, 11]].forEach(function (q) { c.font = '900 ' + q[2] + 'px sans-serif'; c.strokeText('z', q[0], q[1]); c.fillText('z', q[0], q[1]); });
   },
+
+  /* ===== etapa 4 ===== */
+  /* livro verde de capa dura, com um medalhão de folha e fita marcadora */
+  almanaque: function (c) {
+    P(c, function (c) { rr(c, 9.6, 7, 24.6, 30, 2); }, '#f3e8c8', { k: 1, lw: 2.1, inn: function (c) { [31.4, 33.4, 35.2].forEach(function (y) { ln(c, [12, y, 33.4, y], 'rgba(120,90,50,.5)', .9); }); } });
+    P(c, function (c) { rr(c, 5.6, 3.4, 25.4, 30.4, 2.4); }, '#2f8a55', {
+      k: 2, lw: 2.3, sh: 'rgba(0,30,20,.42)', hi: 'rgba(200,255,220,.25)', inn: function (c) {
+        c.fillStyle = '#1f6a3e'; c.fillRect(5, 3, 5.6, 31.4); ln(c, [10.6, 3.6, 10.6, 33.6], 'rgba(0,20,10,.5)', 1);
+        c.fillStyle = GOLD; c.beginPath(); c.moveTo(31.4, 3); c.lineTo(31.4, 9.6); c.lineTo(24.6, 3); c.closePath(); c.fill(); c.beginPath(); c.moveTo(31.4, 34.2); c.lineTo(31.4, 27.6); c.lineTo(24.6, 34.2); c.closePath(); c.fill();
+      },
+    });
+    P(c, function (c) { el(c, 20.6, 18, 6.9, 6.9); }, GOLD, { k: 1.1, lw: 1.9, sh: GSH, hi: 'rgba(255,255,220,.5)' });
+    leaf(c, 16.6, 20.6, -.72, .92, '#3fae5a');
+    P(c, function (c) { poly(c, [24, 33.4, 24, 39.4, 26.6, 37.2, 29.2, 39.4, 29.2, 33.4]); }, RED, { k: .6, lw: 1.7, sh: 'rgba(90,0,0,.35)' });
+  },
+  /* taça dourada com estrela */
+  conquista: function (c) {
+    rope(c, function (c) { c.moveTo(11, 8.6); c.quadraticCurveTo(2.6, 8.6, 5, 15.6); c.quadraticCurveTo(6.8, 20.6, 13, 20.6); }, GOLD2, 2.7);
+    rope(c, function (c) { c.moveTo(29, 8.6); c.quadraticCurveTo(37.4, 8.6, 35, 15.6); c.quadraticCurveTo(33.2, 20.6, 27, 20.6); }, GOLD2, 2.7);
+    P(c, function (c) { rr(c, 10.6, 31.6, 18.8, 5.6, 1.8); }, LE2, { k: 1, lw: 2.1, inn: function (c) { ln(c, [12.6, 33.2, 27.4, 33.2], 'rgba(255,220,170,.35)', 1); } });
+    P(c, function (c) { poly(c, [17.4, 23.6, 22.6, 23.6, 24, 32, 16, 32]); }, GOLD2, { k: .8, lw: 2, sh: GSH });
+    P(c, function (c) { c.moveTo(9.4, 4.6); c.lineTo(30.6, 4.6); c.quadraticCurveTo(30.6, 25.4, 20, 26); c.quadraticCurveTo(9.4, 25.4, 9.4, 4.6); c.closePath(); }, GOLD, { k: 2, lw: 2.3, sh: GSH, hi: 'rgba(255,255,220,.5)', inn: function (c) { ln(c, [12.4, 7.6, 12.8, 16], 'rgba(255,255,235,.7)', 1.6); } });
+    P(c, function (c) { burstP(c, 20, 13.6, 6, 2.7, 5); }, '#fff3c4', { k: 0, lw: 1.5 });
+  },
+  /* alvo de palha num cavalete, com uma flecha cravada */
+  treino: function (c) {
+    bar(c, [11.4, 37.4, 16.6, 27], '#9a6a3a', 2.7); bar(c, [28.6, 37.4, 23.4, 27], '#9a6a3a', 2.7);
+    P(c, function (c) { el(c, 19.6, 18.4, 14.8, 14.8); }, '#f3e2b0', { k: 1.8, lw: 2.3, sh: 'rgba(120,80,30,.36)' });
+    P(c, function (c) { el(c, 19.6, 18.4, 10.2, 10.2); }, RED, { k: 0, lw: 1.6 });
+    P(c, function (c) { el(c, 19.6, 18.4, 5.8, 5.8); }, '#f3e2b0', { k: 0, lw: 1.5 });
+    odot(c, 19.6, 18.4, 2.1, RED);
+    arrow(c, 37, 2.6, 21.6, 16.6, 1, UP);
+  },
+  /* duas setas em laço em volta de um "tocar" */
+  auto: function (c) {
+    arcArrow(c, 20, 20, 13.6, 3.5, 5.86, UP, 3.3, 4.8); arcArrow(c, 20, 20, 13.6, .36, 2.72, UP, 3.3, 4.8);
+    P(c, function (c) { poly(c, [15.4, 12.6, 27.6, 20, 15.4, 27.4]); }, GOLD, { k: 1.2, lw: 2.1, sh: GSH, hi: 'rgba(255,255,220,.5)' });
+  },
+  /* funil de couro com itens de raridades diferentes caindo */
+  filtro: function (c) {
+    odot(c, 11.6, 5.4, 2.3, '#d0cbc0'); odot(c, 20, 3.6, 2.5, '#6aa5ff'); odot(c, 28.4, 5.4, 2.3, '#bc8cff');
+    P(c, function (c) { poly(c, [4.4, 11, 35.6, 11, 24.2, 23.4, 24.2, 34.4, 15.8, 37.6, 15.8, 23.4]); }, '#c9a26b', { k: 1.8, lw: 2.3, sh: ESH, hi: 'rgba(255,240,200,.35)', inn: function (c) { ln(c, [7.4, 14, 32.6, 14], 'rgba(60,30,10,.5)', 1.3); ln(c, [17.6, 24, 17.6, 34], 'rgba(60,30,10,.3)', 1); } });
+  },
+  /* prancheta com três linhas marcadas */
+  build: function (c) {
+    P(c, function (c) { rr(c, 6.4, 5.4, 27.2, 31, 3); }, '#b97a44', { k: 1.8, lw: 2.3, sh: ESH });
+    P(c, function (c) { rr(c, 10.2, 10, 19.6, 22.6, 1.6); }, '#f6ead0', { k: 1, lw: 1.8, sh: 'rgba(120,80,30,.3)', inn: function (c) { [16.4, 21.6, 26.8].forEach(function (y) { ln(c, [17.4, y, 26.6, y], 'rgba(120,90,50,.65)', 1.5); }); } });
+    [16.4, 21.6, 26.8].forEach(function (y, i) { odot(c, 13.8, y, 1.5, [FOR, AGI, INT][i]); });
+    P(c, function (c) { rr(c, 14.2, 2.4, 11.6, 6.2, 1.8); }, '#a9a6a0', { k: .6, lw: 1.9, sh: COLD, hi: 'rgba(255,255,255,.4)' });
+  },
+  /* duas setas trocando de lugar */
+  trocar: function (c) { arcArrow(c, 20, 20, 12.8, 3.5, 5.86, '#ffb52e', 3.7, 5.2); arcArrow(c, 20, 20, 12.8, .36, 2.72, '#ffb52e', 3.7, 5.2); },
 };
 
 function unknown(c) { P(c, function (c) { poly(c, [20, 6, 34, 20, 20, 34, 6, 20]); }, CRM, { k: 2 }); dot(c, 20, 20, 3, DK); }

@@ -45,8 +45,62 @@ export const MATERIAL_USE: Record<keyof Materials, string> = {
   tomo: 'Sobe o nível dos feitiços. Vem de elites e chefões.',
 };
 
+/** Contadores de longo prazo: alimentam as conquistas, o Almanaque e o bônus de conhecer o inimigo. */
+export interface LifeStats {
+  /** Monstros derrotados, por tipo. */
+  kills: Record<string, number>;
+  elites: number; champions: number; bosses: number;
+  /** Partidas (fase, Torre ou expedição), vitórias, vitórias sem cair e quedas. */
+  runs: number; wins: number; flawless: number; deaths: number;
+  /** Vitórias por tipo de arma. */
+  winsBy: Record<string, number>;
+  perfects: number; parries: number;
+  casts: number; castsBy: Record<string, number>; reactions: number; supremos: number; potions: number;
+  /** Baús abertos, potes quebrados e Mães-do-Ouro alcançadas. */
+  chests: number; pots: number; wisps: number;
+  /** Vezes que cada bênção foi escolhida. */
+  blessings: Record<string, number>;
+  towerFloors: number; expeditions: number; forges: number;
+  /** Fases vencidas pela Caçada automática. */
+  autoWins: number;
+  /** Maior golpe já dado e segundos de combate. */
+  maxHit: number; seconds: number;
+  /** Ouro ganho em toda a jornada. */
+  gold: number;
+}
+
+export function newLife(): LifeStats {
+  return {
+    kills: {}, elites: 0, champions: 0, bosses: 0, runs: 0, wins: 0, flawless: 0, deaths: 0, winsBy: {},
+    perfects: 0, parries: 0, casts: 0, castsBy: {}, reactions: 0, supremos: 0, potions: 0, chests: 0, pots: 0, wisps: 0, blessings: {},
+    towerFloors: 0, expeditions: 0, forges: 0, autoWins: 0, maxHit: 0, seconds: 0, gold: 0,
+  };
+}
+
+/** Filtro de saque: o que é desmontado sozinho ao sair de uma fase. */
+export interface LootFilter {
+  /** Raridade mais alta desmontada na hora (−1 = desligado; 0 = Comum; 1 = Incomum; 2 = Raro). */
+  dismantle: number;
+}
+
+/** Uma build salva: o que o herói veste e como distribuiu os pontos. */
+export interface Build {
+  name: string;
+  /** Identificador do item em cada espaço. */
+  equipped: Partial<Record<Slot, number>>;
+  attrs: Record<AttrKey, number>;
+  talents: TalentRanks;
+  loadout: (SpellId | null)[];
+  supremo: ElementId | null;
+  companion: CompanionId | null;
+}
+export const BUILD_SLOTS = 3;
+
+/** Versão atual do perfil salvo. Cada mudança de formato ganha um passo em `STEPS`. */
+export const PROFILE_VERSION = 2;
+
 export interface Profile {
-  version: 1;
+  version: number;
   level: number; xp: number; gold: number;
   /** Pontos distribuídos em cada atributo (sem contar a base). */
   attrs: Record<AttrKey, number>;
@@ -79,6 +133,14 @@ export interface Profile {
   daily: DailyRecord;
   nextItemId: number;
   seed: number;
+  /** Contadores de longo prazo (src/meta/life.ts). */
+  life: LifeStats;
+  /** Conquistas alcançadas: o dia em que veio e se o prêmio já foi pego (src/meta/achievements.ts). */
+  achievements: Record<string, { day: string; claimed: boolean }>;
+  /** Itens com nome já encontrados, para o Almanaque (continuam lá depois de vendidos). */
+  uniquesFound: string[];
+  lootFilter: LootFilter;
+  builds: (Build | null)[];
 }
 
 export interface MissionState {
@@ -109,6 +171,8 @@ export interface DailyRecord {
   rest: number;
   /** Dias fora na última volta (só para avisar). */
   restDays: number;
+  /** Trocas de missão já usadas hoje. */
+  rerolls: number;
 }
 
 export interface TowerRecord {
@@ -124,7 +188,7 @@ const SAVE_KEY = 'encantados.save.v1';
 
 export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
   const p: Profile = {
-    version: 1, level: 1, xp: 0, gold: 40,
+    version: PROFILE_VERSION, level: 1, xp: 0, gold: 40,
     attrs: { forca: 0, agilidade: 0, inteligencia: 0, vitalidade: 0, espirito: 0, sorte: 0 }, attrPoints: 0,
     talents: {}, talentPoints: 0,
     inventory: [], equipped: {},
@@ -134,8 +198,9 @@ export function newProfile(seed = (Date.now() & 0x7fffffff) | 1): Profile {
     companions: {}, companion: null, potions: MAX_POTIONS,
     stages: {}, starChests: 0, curupiraFreed: false,
     gems: {}, tower: { best: 0, checkpoint: 1, week: '', weekBest: 0, weekTime: 0 }, credits: false,
-    daily: { day: '', seed: Math.imul(seed, 2654435761) >>> 0 || 1, missions: [], chest: false, expeditions: [], expRuns: 0, expFirst: [], lastSeen: '', rest: 0, restDays: 0 },
+    daily: { day: '', seed: Math.imul(seed, 2654435761) >>> 0 || 1, missions: [], chest: false, expeditions: [], expRuns: 0, expFirst: [], lastSeen: '', rest: 0, restDays: 0, rerolls: 0 },
     nextItemId: 1, seed,
+    life: newLife(), achievements: {}, uniquesFound: [], lootFilter: { dismantle: -1 }, builds: [null, null, null],
   };
   const start: [ItemType, string][] = [['facao', 'Facão de Mato'], ['gibao', 'Gibão de Couro'], ['chapeu', 'Chapéu de Couro']];
   for (const [type, name] of start) {
@@ -151,16 +216,41 @@ export function loadProfile(): Profile {
     const raw = localStorage.getItem(SAVE_KEY);
     if (raw) {
       const p = JSON.parse(raw) as Profile;
-      if (p && p.version === 1 && typeof p.level === 'number') return migrate(p);
+      if (p && typeof p.version === 'number' && p.version >= 1 && p.version <= PROFILE_VERSION && typeof p.level === 'number') return migrate(p);
     }
   } catch { /* sem armazenamento ou save corrompido: começa do zero */ }
   return newProfile();
 }
 
+/**
+ * Passos de migração, em ordem: `STEPS[n]` leva um save da versão n para a n + 1.
+ * Um passo só acrescenta ou converte o que mudou naquela versão; o que é só campo novo com valor
+ * padrão não precisa de passo, porque `migrate` completa o save com os padrões de `newProfile`.
+ */
+const STEPS: Record<number, (p: Profile) => void> = {
+  /* v1 → v2: contadores de longo prazo. O que dá para saber do save antigo entra como ponto de partida. */
+  1: (p) => {
+    const life = newLife(), stages = Object.values(p.stages ?? {});
+    life.wins = stages.reduce((n, r) => n + (r.clears || 0), 0);
+    life.runs = life.wins;
+    life.towerFloors = p.tower?.best ?? 0;
+    p.life = life;
+    p.uniquesFound = Array.from(new Set([...(p.inventory ?? []), ...Object.values(p.equipped ?? {})].map((it) => it?.unique).filter((u): u is string => !!u)));
+  },
+};
+
 /** Completa um save antigo com o que foi criado depois e corrige o que deixou de valer. */
 export function migrate(saved: Profile): Profile {
-  const base = newProfile(saved.seed);
-  const p: Profile = { ...base, ...saved, materials: { ...base.materials, ...saved.materials }, tower: { ...base.tower, ...(saved.tower ?? {}) }, gems: { ...(saved.gems ?? {}) }, daily: { ...base.daily, ...(saved.daily ?? {}) } };
+  const old = { ...saved };
+  for (let v = old.version; v < PROFILE_VERSION; v++) { STEPS[v]?.(old); old.version = v + 1; }
+  const base = newProfile(old.seed);
+  const p: Profile = {
+    ...base, ...old, version: PROFILE_VERSION,
+    materials: { ...base.materials, ...old.materials }, tower: { ...base.tower, ...(old.tower ?? {}) }, gems: { ...(old.gems ?? {}) }, daily: { ...base.daily, ...(old.daily ?? {}) },
+    life: { ...base.life, ...(old.life ?? {}) }, achievements: { ...(old.achievements ?? {}) }, uniquesFound: [...(old.uniquesFound ?? [])],
+    lootFilter: { ...base.lootFilter, ...(old.lootFilter ?? {}) },
+    builds: Array.from({ length: BUILD_SLOTS }, (_, i) => old.builds?.[i] ?? null),
+  };
   if (!talentsConnected(p.talents)) p.talents = {};
   if (p.curupiraFreed && !p.supremos.includes('natureza')) p.supremos = [...p.supremos, 'natureza'];
   if (!p.supremo && p.supremos.length) p.supremo = p.supremos[0];
@@ -581,6 +671,79 @@ export function fuseGems(p: Profile, g: Gem): { done: boolean; reason?: string }
   if (p.gold < cost) return { done: false, reason: 'Falta ouro.' };
   p.gold -= cost; addGem(p, g, -3); addGem(p, { el: g.el, lvl: g.lvl + 1 });
   return { done: true };
+}
+
+/* ---------- builds salvas ---------- */
+
+const attrSum = (a: Record<AttrKey, number>) => ATTRS.reduce((n, k) => n + (a[k.key] || 0), 0);
+
+/** Guarda o que o herói veste e como distribuiu os pontos no espaço `index`. */
+export function saveBuild(p: Profile, index: number, name?: string): Build | null {
+  if (index < 0 || index >= BUILD_SLOTS) return null;
+  const equipped: Partial<Record<Slot, number>> = {};
+  for (const slot of SLOTS) { const it = p.equipped[slot]; if (it) equipped[slot] = it.id; }
+  const b: Build = {
+    name: (name ?? p.builds[index]?.name ?? `Build ${index + 1}`).trim().slice(0, 18) || `Build ${index + 1}`,
+    equipped, attrs: { ...p.attrs }, talents: { ...p.talents }, loadout: p.loadout.slice(0, 3), supremo: p.supremo, companion: p.companion,
+  };
+  p.builds[index] = b;
+  return b;
+}
+
+export interface BuildResult {
+  /** Itens da build que não estão mais com o herói (vendidos, desmontados ou fundidos). */
+  missing: number;
+  /** Os pontos da build não cabem mais nos pontos do herói: atributos ou talentos ficaram como estavam. */
+  attrsKept: boolean; talentsKept: boolean;
+}
+
+/**
+ * Veste uma build salva. Trocar é grátis: os pontos foram pagos quando a build foi montada.
+ * O que não existir mais é pulado, e o resultado diz o que ficou de fora.
+ */
+export function applyBuild(p: Profile, index: number): BuildResult | null {
+  const b = p.builds[index];
+  if (!b) return null;
+  const res: BuildResult = { missing: 0, attrsKept: false, talentsKept: false };
+  /* equipamento: tira o que não é da build e veste o que é, na ordem dos espaços (a arma primeiro) */
+  for (const slot of SLOTS) {
+    const want = b.equipped[slot], cur = p.equipped[slot];
+    if (cur && cur.id === want) continue;
+    if (want == null) { if (cur && slot !== 'arma') { delete p.equipped[slot]; p.inventory.push(cur); } continue; }
+    const found = findItem(p, want);
+    if (!found) { res.missing++; continue; }
+    if (found.slot && found.slot !== slot) {
+      /* está em outro espaço (anéis trocados): passa pela mochila */
+      delete p.equipped[found.slot]; p.inventory.push(found.item);
+    }
+    if (!equip(p, want, slot)) res.missing++;
+  }
+  /* atributos: os pontos da build têm que caber no total do herói */
+  const total = attrSum(p.attrs) + p.attrPoints, need = attrSum(b.attrs);
+  if (need <= total) { p.attrs = { ...b.attrs }; p.attrPoints = total - need; } else res.attrsKept = true;
+  if (talentsConnected(b.talents) && talentSpent(b.talents) <= p.talentPoints) p.talents = { ...b.talents }; else res.talentsKept = true;
+  const known = knownSpells(p);
+  p.loadout = [0, 1, 2].map((i) => { const sp = b.loadout[i] ?? null; return sp && known.includes(sp) ? sp : null; });
+  if (!p.loadout.some(Boolean)) p.loadout[0] = known[0] ?? null;
+  p.supremo = b.supremo && p.supremos.includes(b.supremo) ? b.supremo : p.supremo;
+  p.companion = b.companion && p.companions[b.companion] ? b.companion : b.companion === null ? null : p.companion;
+  p.potions = maxPotions(p);
+  return res;
+}
+
+export function clearBuild(p: Profile, index: number): void {
+  if (index >= 0 && index < BUILD_SLOTS) p.builds[index] = null;
+}
+
+/** A build do espaço `index` é a que o herói está usando agora? */
+export function buildMatches(p: Profile, index: number): boolean {
+  const b = p.builds[index];
+  if (!b) return false;
+  for (const slot of SLOTS) if ((p.equipped[slot]?.id ?? null) !== (b.equipped[slot] ?? null)) return false;
+  if (ATTRS.some((k) => (p.attrs[k.key] || 0) !== (b.attrs[k.key] || 0))) return false;
+  const keys = new Set([...Object.keys(p.talents), ...Object.keys(b.talents)]);
+  for (const k of keys) if ((p.talents[k] || 0) !== (b.talents[k] || 0)) return false;
+  return [0, 1, 2].every((i) => (p.loadout[i] ?? null) === (b.loadout[i] ?? null)) && p.supremo === b.supremo && p.companion === b.companion;
 }
 
 /** Semana atual no formato ano-semana, para o ranking semanal da Torre. */

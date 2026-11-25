@@ -206,6 +206,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   if (e.guarded && e.kind !== 'caramujo') { dmg *= 1 - ENEMY.caramujo.protect; armored = true; }
   if (e.markT > 0) dmg *= s.petDouble ? 1.5 : 1.25;
   if (e.elite || isBoss(e)) dmg *= s.eliteDamage;
+  if (!w.cfg.ranked && s.knowledge[e.kind]) dmg *= 1 + s.knowledge[e.kind]!;
   if (e.kind === 'boto' && e.state === 'tired') dmg *= ENEMY.boto.mergulho.tiredMult;
   if (e.kind === 'iara' && e.state === 'exposed') dmg *= ENEMY.iara.canto.exposedMult;
   if (e.kind === 'iara' && e.state === 'downed') dmg *= ENEMY.iara.posture.downedMult;
@@ -280,7 +281,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     if (s.uniques.ferraoDeArraia && !isBoss(e) && rand(w) < 0.15) { e.rootT = Math.max(e.rootT, 1); e.tele = null; }
   }
 
-  emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id });
+  emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id, el: element ?? undefined });
   if (e.hp <= 0) {
     e.tele = null;
     w.kills++;
@@ -301,7 +302,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
       for (const o of w.enemies) { if (o === e || o.hp <= 0 || o.illusion) continue; const d = Math.hypot(o.x - e.x, o.y - e.y); if (d < bd) { bd = d; near = o; } }
       if (near) { near.curseT = Math.max(near.curseT, 6); near.wisp = true; applyElement(w, near, 'fogo'); emit(w, { type: 'reaction', x: near.x, y: near.y, kind: 'fogoFatuo' }); }
     }
-    emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id });
+    emit(w, { type: 'kill', x: e.x, y: e.y, kind: e.kind, id: e.id, value: isBoss(e) ? 3 : e.elite ? 2 : e.champion ? 1 : 0 });
     lootOnKill(w, e);
   }
   return dmg;

@@ -2,6 +2,7 @@
  * Transforma o perfil (nível, atributos, talentos, equipamento, companheiro) e as bênçãos da fase
  * nos números que o combate usa. Fórmulas de docs/gdd/02-personagem-e-talentos.md.
  */
+import { knowledgeMap } from './life';
 import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
 import { makeRng } from '../data/rng';
@@ -68,6 +69,8 @@ export interface HeroStats {
   onHitPoison: boolean; onKillExplode: boolean; firstHitShield: boolean;
   /** Quantas bênçãos Ouriço: dispara espinhos em volta a cada 4 s. */
   nova: number;
+  /** Conhecer o inimigo: dano a mais contra cada tipo de monstro já muito enfrentado (não vale com ranking). */
+  knowledge: Partial<Record<string, number>>;
   talents: {
     sedeDeBriga: boolean; execucao: boolean; contragolpe: boolean; cascaDeJabuti: boolean;
     rolamentoCortante: boolean; sangueQuente: boolean;
@@ -238,6 +241,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = []): HeroStats
     supremo: p.supremo && p.supremos.includes(p.supremo) ? p.supremo : null,
     onHitPoison: bl('peconha') > 0, onKillExplode: bl('estouro') > 0, firstHitShield: bl('amparo') > 0 || set('sentinela', 6),
     nova: bl('ourico'),
+    knowledge: p.life ? knowledgeMap(p.life) : {},
     talents: {
       sedeDeBriga: !!rank('sedeDeBriga'), execucao: !!rank('execucao'), contragolpe: !!rank('contragolpe'),
       cascaDeJabuti: !!rank('cascaDeJabuti'), rolamentoCortante: !!rank('rolamentoCortante'), sangueQuente: !!rank('sangueQuente'),

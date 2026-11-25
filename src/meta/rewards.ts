@@ -8,7 +8,8 @@ import { makeItem, makeSetItem, makeUnique, rollRarity, sellValue, setsOfChapter
 import { BOSS_STAGE_XP_BONUS, FIRST_CLEAR_XP_BONUS, goldMultiplier, stageGold, stageXp, xpMultiplier } from '../data/progression';
 import { CHAPTERS, STAGES, STAGE_BY_ID, stagesOf, type StageDef } from '../data/stages';
 import { FLOORS_PER_RUN, isTowerId, towerChapter, towerRun } from '../data/tower';
-import { addGem, addItem, addXp, profileRng, refillPotions, weekKey, type Materials, type Profile, type StageRecord } from './profile';
+import { addGem, addItem, addXp, dismantleYield, profileRng, refillPotions, weekKey, type Materials, type Profile, type StageRecord } from './profile';
+import { bestSlot } from './mochila';
 import type { RunTally } from './daily';
 import { deriveStats, powerOf, recommendedPower } from './stats';
 
@@ -43,6 +44,8 @@ export interface StageRewards {
   items: Item[];
   /** Itens que não couberam na mochila e foram vendidos na hora. */
   soldOverflow: { item: Item; gold: number }[];
+  /** Itens desmontados na hora pelo filtro de saque, e o material que renderam (já somado em `materials`). */
+  dismantled?: { count: number; mata: number; po: number };
   named: Item | null;
   namedChance: number;
   materials: Materials;
@@ -138,6 +141,33 @@ export function namedChance(p: Profile, stage: StageDef): number {
   return (stage.named.chance + recordOf(p, stage.id).pity) * (p.talents.dedoDeOuro ? 2 : 1);
 }
 
+/** O filtro de saque desmonta este item? Nunca os de conjunto, os com nome, nem o que aumenta o Poder. */
+export function filterDismantles(p: Profile, it: Item): boolean {
+  const max = p.lootFilter?.dismantle ?? -1;
+  if (max < 0 || it.rarity > max || it.set || it.unique || it.locked) return false;
+  /* confere numa cópia com o item na mochila: equipar exige que ele esteja lá */
+  const trial: Profile = { ...p, inventory: [...p.inventory, it] };
+  return bestSlot(trial, it).delta <= 0;
+}
+
+/**
+ * Guarda os itens de uma partida: o filtro de saque desmonta as sobras, o resto vai para a mochila,
+ * e o que não couber é vendido. Devolve o ouro das vendas; o material das desmontagens entra em `out.materials`.
+ */
+export function stashDrops(p: Profile, drops: Item[], out: StageRewards): number {
+  let gold = 0;
+  for (const it of drops) {
+    if (filterDismantles(p, it)) {
+      const y = dismantleYield(it);
+      out.materials.mata += y.mata; out.materials.po += y.po;
+      const d = out.dismantled ?? (out.dismantled = { count: 0, mata: 0, po: 0 });
+      d.count++; d.mata += y.mata; d.po += y.po;
+    } else if (addItem(p, it)) out.items.push(it);
+    else { const g = sellValue(it); gold += g; out.soldOverflow.push({ item: it, gold: g }); }
+  }
+  return gold;
+}
+
 /** Ouro achado na fase, com os mesmos multiplicadores do ouro da fase. */
 function foundGold(o: StageOutcome, mult: number): { gold: number; chests: number } {
   return { gold: Math.round(Math.max(0, o.foundGold ?? 0) * mult), chests: o.chests ?? 0 };
@@ -194,13 +224,10 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
       if (rng() * 100 < out.namedChance) { out.named = makeUnique(p.nextItemId++, rng, stage.named.unique, stage.level); drops.push(out.named); rec.pity = 0; }
       else rec.pity += 0.5;
     }
-    for (const it of drops) {
-      if (addItem(p, it)) out.items.push(it);
-      else { const g = sellValue(it); gold += g; out.soldOverflow.push({ item: it, gold: g }); }
-    }
+    gold += stashDrops(p, drops, out);
     const mat = t.catador ? 1.5 : 1;
-    out.materials.mata = Math.round((3 + Math.floor(stage.level / 2) + (stage.final !== 'normal' ? 3 : 0) + Math.floor(rng() * 3)) * mat);
-    out.materials.po = Math.round(((rng() < 0.35 ? 1 : 0) + (stage.final === 'elite' ? 1 : 0)) * mat);
+    out.materials.mata += Math.round((3 + Math.floor(stage.level / 2) + (stage.final !== 'normal' ? 3 : 0) + Math.floor(rng() * 3)) * mat);
+    out.materials.po += Math.round(((rng() < 0.35 ? 1 : 0) + (stage.final === 'elite' ? 1 : 0)) * mat);
     out.materials.tomo = (stage.final === 'elite' ? 1 : 0) + (stage.final === 'chefao' ? 2 : 0) + (firstClear && stage.number % 3 === 0 ? 1 : 0);
     if (stage.final === 'chefao' && firstClear) { out.materials.lagrima = 1; out.talentPoints += 1; }
 
@@ -271,13 +298,10 @@ export function applyTowerOutcome(p: Profile, o: StageOutcome): StageRewards {
     }
   }
   if (o.won) for (let i = 0; i < 2; i++) drops.push(makeItem(p.nextItemId++, rng, run.level, rollRarity(rng, towerChapter(top), stats.luck), undefined, towerChapter(top)));
-  for (const it of drops) {
-    if (addItem(p, it)) out.items.push(it);
-    else { const g = sellValue(it); gold += g; out.soldOverflow.push({ item: it, gold: g }); }
-  }
+  const sold = stashDrops(p, drops, out);
   out.xp = Math.round(xp * stats.xpMult * (1 + 0.25 * (bl.sabedoria ?? 0)));
   out.found = foundGold(o, stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
-  out.gold = Math.round(gold * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0))) + out.found.gold;
+  out.gold = Math.round(gold * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0))) + out.found.gold + sold;
   const t = p.tower, wk = weekKey(), climbed = top >= run.number ? top : 0;
   if (t.week !== wk) { t.week = wk; t.weekBest = 0; t.weekTime = 0; }
   const newBest = climbed > t.best;
