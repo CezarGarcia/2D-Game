@@ -21,6 +21,7 @@ import {
 import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
+import { AFFINITY, stageShells } from '../data/affinity';
 import { cleanOmens, omenFoes, omenWeight, type OmenPick } from '../data/omens';
 import { deriveStats, type StatBoost } from '../meta/stats';
 import { HUMAN, makeBot } from '../sim/bot';
@@ -166,6 +167,8 @@ export class StageScene extends Phaser.Scene {
   private dream: DreamContext | null = null;
   private heroProfile!: Profile;
   private amulets: AmuletId[] = [];
+  /** Quando cada monstro mostrou "Fraco!" ou "Resiste" pela última vez, para o aviso não repetir a cada golpe. */
+  private affSaid = new Map<number, number>();
   private boost: StatBoost = {};
   private omens: OmenPick = {};
 
@@ -190,10 +193,11 @@ export class StageScene extends Phaser.Scene {
     this.world = createWorld({
       stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets, this.boost), seed,
       ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : omenWeight(this.omens) > 0 ? { foes: omenFoes(this.omens) } : {}),
+      shells: D ? D.shells : this.training ? undefined : stageShells(this.stage, omenWeight(this.omens)),
     });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
-    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
+    this.acc = 0; this.hitstop = 0; this.slow = 0; this.clock = 0; this.affSaid.clear(); this.fx = []; this.paused = false; this.ended = false; this.tally = newTally();
     if (this.auto) this.tally.auto = true;
     this.views.clear(); this.shots.clear(); this.cards = [];
     this.latch = { attack: false, dodge: false, spell: [false, false, false], pet: false, potion: false, supremo: false };
@@ -404,7 +408,13 @@ export class StageScene extends Phaser.Scene {
       case 'shoot': sfx.play(e.value ? 'cast' : 'swing'); break;
       case 'hit': {
         const soft = e.kind === 'poison' || e.kind === 'reflect' || e.kind === 'blast', pet = e.kind === 'pet';
-        this.number(e.x, e.y - 70, String(e.value) + (e.crit ? '!' : ''), e.kind === 'poison' ? '#8fe36a' : e.armored ? '#c9c4bd' : e.crit ? '#ffd23f' : pet ? '#ffd9a0' : '#ffffff', soft ? 20 : pet ? 22 : e.crit ? 38 : 28);
+        /* afinidade: o número sai maior e na cor do elemento quando acerta a fraqueza, e menor e cinza quando o monstro resiste */
+        const aff = e.aff ?? 0, affColor = aff > 0 ? (e.el ? ELEMENTS[e.el as ElementId].color : '#9dffb0') : '#8f949c';
+        this.number(e.x, e.y - 70, String(e.value) + (e.crit ? '!' : ''), aff ? affColor : e.kind === 'poison' ? '#8fe36a' : e.armored ? '#c9c4bd' : e.crit ? '#ffd23f' : pet ? '#ffd9a0' : '#ffffff', (soft ? 20 : pet ? 22 : e.crit ? 38 : 28) * (aff > 0 ? 1.2 : aff < 0 ? 0.8 : 1));
+        if (aff && e.id != null) {
+          const key = e.id * 2 + (aff > 0 ? 1 : 0), last = this.affSaid.get(key) ?? -9;
+          if (this.clock - last > 1.1) { this.affSaid.set(key, this.clock); this.number(e.x, e.y - 104, aff > 0 ? 'FRACO!' : 'RESISTE', affColor, aff > 0 ? 24 : 19, 0.9); }
+        }
         if (!soft) {
           this.fx.push({ kind: 'spark', x: e.x, y: e.y - 34, t: 0, dur: 0.18, color: e.armored ? 0xc9c4bd : 0xfff3c4, n: e.crit ? 9 : 6, seed: e.id! * 7 + w.tick });
           if (e.kind === 'melee' || e.kind === 'arrow') { this.hitstop = Math.max(this.hitstop, e.crit ? 0.08 : e.kind === 'melee' ? 0.045 : 0.02); this.cameras.main.shake(70, e.crit ? 0.006 : 0.003); }
@@ -599,6 +609,16 @@ export class StageScene extends Phaser.Scene {
       case 'correnteza': this.fx.push({ kind: 'line', x: e.x, y: e.y - 30, x2: e.x + Math.cos(e.ang!) * 250, y2: e.y - 30 + Math.sin(e.ang!) * 250, t: 0, dur: 0.35, color: WATER, width: 26 }); sfx.play('dodge'); break;
       case 'pop': this.fx.push({ kind: 'ring', x: e.x, y: e.y - 10, t: 0, dur: 0.3, r0: 14, r1: e.value!, color: 0xffb070, width: 8 }); sfx.play('splat'); break;
       case 'freecast': this.number(e.x, e.y - 150, e.kind === 'eco' ? 'ECO' : 'FLUXO', '#8fe3ff', 22); break;
+      case 'shellBreak': {
+        this.number(e.x, e.y - 140, 'CASCA QUEBRADA!', '#fff3c4', 32, 1.3);
+        this.fx.push({ kind: 'ring', x: e.x, y: e.y - 30, t: 0, dur: 0.45, r0: 20, r1: 130, color: COLOR(e.el as ElementId | undefined), width: 10 });
+        this.hitstop = Math.max(this.hitstop, 0.09); this.cameras.main.shake(160, 0.008); sfx.play('crit');
+        break;
+      }
+      case 'shellBack': {
+        this.number(e.x, e.y - 120, 'A CASCA VOLTOU', '#c9c4bd', 22, 1.1);
+        break;
+      }
       case 'reaction': {
         const r = REACTIONS.find((x) => x.id === e.kind);
         if (r) this.number(e.x, e.y - 130, r.name.toUpperCase() + '!', '#ffe9a8', 30, 1.1);
@@ -1445,14 +1465,22 @@ export class StageScene extends Phaser.Scene {
       if (e.markT > 0) { g.lineStyle(4, 0xffd23f, 0.9).strokeCircle(e.x, e.y - top - 22, 9); g.lineBetween(e.x - 14, e.y - top - 22, e.x + 14, e.y - top - 22).lineBetween(e.x, e.y - top - 36, e.x, e.y - top - 8); }
       if (e.wetT > 0) for (let i = 0; i < 3; i++) { const fall = (this.clock * 1.6 + i * 0.33 + e.id * 0.1) % 1; g.fillStyle(0xbfeaff, 0.9 * (1 - fall)).fillCircle(e.x - 14 + i * 14, e.y - top * 0.8 + fall * 34, 3.5); }
       if (e.guarded) { g.lineStyle(3, 0xff7ab0, 0.7); g.beginPath(); g.arc(e.x, e.y - top * 0.45, e.radius + 14, -2.4, -0.7); g.strokePath(); }
-      if ((e.kind === 'queixada' && e.state === 'stunned') || e.stunT > 0 || e.state === 'tired' || e.state === 'downed' || (e.kind === 'iara' && e.state === 'exposed')) {
+      if ((e.kind === 'queixada' && e.state === 'stunned') || e.stunT > 0 || e.exposeT > 0 || e.state === 'tired' || e.state === 'downed' || (e.kind === 'iara' && e.state === 'exposed')) {
         for (let i = 0; i < 3; i++) { const an = this.clock * 5 + i * 2.09; g.fillStyle(0xffd23f, 1).fillCircle(e.x + Math.cos(an) * 24, e.y - top + 4 + Math.sin(an) * 7, 5); }
       }
-      if (!boss && e.hp < e.maxHp && e.state !== 'spawn') {
+      if (!boss && (e.hp < e.maxHp || e.shellMax > 0) && e.state !== 'spawn') {
         const bw = e.elite ? 80 : e.champion ? 62 : 46, x = e.x - bw / 2, y = e.y - top - 8;
         g.fillStyle(0x0a0f0a, 0.8).fillRect(x - 2, y - 2, bw + 4, 9);
         g.fillStyle(e.elite ? 0xffb238 : e.champion ? 0xff7ab0 : 0xd6402b, 1).fillRect(x, y, bw * Math.max(0, e.hp / e.maxHp), 5);
+        /* Casca elemental: uma barra da cor do elemento, por cima da vida */
+        if (e.shellMax > 0) {
+          g.fillStyle(0x0a0f0a, 0.8).fillRect(x - 2, y - 10, bw + 4, 8);
+          if (e.shell > 0) { g.fillStyle(COLOR(e.shellEl), 1).fillRect(x, y - 8, bw * (e.shell / e.shellMax), 4); g.lineStyle(1.5, 0xffffff, 0.75).strokeRect(x - 1, y - 9, bw + 2, 6); }
+          else g.fillStyle(0xffffff, 0.35 + 0.3 * Math.sin(this.clock * 10)).fillRect(x, y - 8, bw * Math.max(0, 1 - e.shellT / AFFINITY.exposed.regrow), 4);
+        }
       }
+      /* com a Casca de pé, um aro da cor dela em volta do monstro */
+      if (e.shell > 0 && e.state !== 'spawn') { g.lineStyle(3, COLOR(e.shellEl), 0.55 + 0.2 * Math.sin(this.clock * 4 + e.id)); g.strokeEllipse(e.x, e.y - top * 0.45, (e.radius + 16) * 2, (e.radius + 16) * 1.5); }
     }
   }
 
@@ -1754,6 +1782,14 @@ export class StageScene extends Phaser.Scene {
       g.fillStyle(0x1c0f0a, 1).fillRoundedRect(x - 2, y - 2, bw + 4, 18, 6);
       g.fillStyle(0x140b07, 1).fillRoundedRect(x, y, bw, 14, 4);
       bar(x, y, bw, 14, boss.hp / boss.maxHp, 0xd6402b);
+      /* Casca elemental do chefe: uma faixa da cor do elemento sobre a vida */
+      if (boss.shellMax > 0 && boss.shell > 0) {
+        /* uma faixa própria, logo acima da vida, para não se confundir com ela */
+        g.fillStyle(0x1c0f0a, 1).fillRoundedRect(x - 2, y - 11, bw + 4, 10, 4);
+        g.fillStyle(COLOR(boss.shellEl), 1).fillRoundedRect(x, y - 9, bw * (boss.shell / boss.shellMax), 6, 2);
+        g.lineStyle(1.5, 0xffffff, 0.8).strokeRoundedRect(x - 0.5, y - 9.5, bw + 1, 7, 2);
+      }
+      else if (boss.exposeT > 0) { g.fillStyle(0xffffff, 0.25 + 0.2 * Math.sin(this.clock * 12)).fillRoundedRect(x, y, bw, 14, 4); }
       for (const f of nb?.phases ?? legacy?.phases ?? []) g.fillStyle(0xf6ead0, 0.95).fillRect(x + bw * f - 1.5, y - 3, 3, 20);
       if (posture) {
         const down = boss.state === 'downed';

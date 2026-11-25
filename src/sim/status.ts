@@ -33,7 +33,9 @@ export function applyElement(w: World, e: Enemy, el: ElementId): ReactionId | nu
     if (!r) continue;
     (e[FIELD[other]] as number) = 0;
     if (other === 'sombra') e.curseBonus = 0;
+    w.reacting = [other, el];
     react(w, e, r.id);
+    w.reacting = null;
     return r.id;
   }
   setStatus(w, e, el);

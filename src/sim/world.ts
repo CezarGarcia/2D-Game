@@ -55,7 +55,7 @@ export function createWorld(cfg: StageConfig): World {
     spells: cfg.stats.loadout.slice(0, 3),
     puddles: [], current: 0, supremo: cfg.stats.supremo, flooded: false,
     allies: [], devils: [], grass: [], walls: [], moon: 0, eraseT: 0, trail: [], steals: 0, level: cfg.level,
-    chests: [], pickups: [], buffs: [], pots: [], wisp: null, challenge: null, offer: null,
+    chests: [], pickups: [], buffs: [], reacting: null, pots: [], wisp: null, challenge: null, offer: null,
     loot: { gold: 0, chests: 0, since: 0, wisps: 0, challenges: 0, rng: (cfg.seed ^ 0x5bd1e995) | 0 },
   };
   /* o Sonho: o herói chega como saiu da sala anterior */
@@ -258,6 +258,9 @@ export function step(w: World, inp: Input, dt: number): void {
     const soak = w.tick % 15 === 0;
     for (const e of w.enemies) {
       e.wetT = max0(e.wetT - dt); e.markT = max0(e.markT - dt); e.bubbleT = max0(e.bubbleT - dt);
+      e.exposeT = max0(e.exposeT - dt);
+      /* a Casca quebrada volta depois de um tempo */
+      if (e.shellMax > 0 && e.shell <= 0 && e.hp > 0) { e.shellT -= dt; if (e.shellT <= 0) { e.shell = e.shellMax; emit(w, { type: 'shellBack', x: e.x, y: e.y, id: e.id }); } }
       e.guarded = shells.some((c) => c !== e && Math.hypot(c.x - e.x, c.y - e.y) < ENEMY.caramujo.aura * (c.elite ? 1.3 : 1));
       if (soak && !e.hidden && (w.flooded || w.puddles.some((q) => Math.hypot(e.x - q.x, e.y - q.y) < q.r) || w.zones.some((z) => z.kind === 'puddle' && Math.hypot(e.x - z.x, e.y - z.y) < z.r))) wet(w, e);
       updateEnemy(w, e, dt);

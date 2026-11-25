@@ -7,7 +7,8 @@ import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, type AchievementDef, type Achievement
 import { AMULETS, AMULET_ORDER, AMULET_RARITY } from '../data/amulets';
 import type { EnemyKind } from '../data/balance';
 import { CAUSOS, CAUSO_ORDER } from '../data/causos';
-import { COMPANION_ORDER, ELEMENTS } from '../data/content';
+import { AFFINITY, affinityOf, attackElement } from '../data/affinity';
+import { COMPANION_ORDER, ELEMENTS, type ElementId } from '../data/content';
 import { ITEM_TYPES, RARITIES, UNIQUES } from '../data/items';
 import { BESTIARY, BESTIARY_KINDS, ENEMY_LORE, type BestiaryEntry } from '../data/lore';
 import { CHAPTERS, ENEMY_HINT, ENEMY_NAMES, STAGES } from '../data/stages';
@@ -150,6 +151,17 @@ function beastCard(c: Ctx, b: BestiaryEntry, color: string): HTMLElement {
   h('span', 'bar beast-bar', h('i', { style: `width:${Math.min(100, (kills / (next?.kills ?? top)) * 100)}%` })));
 }
 
+/** Fraquezas e resistências do monstro (docs/gdd/11), com o elemento dos golpes dele. */
+function affinityRow(kind: EnemyKind): HTMLElement {
+  const a = affinityOf(kind), el = attackElement(kind);
+  const chips = (list: ElementId[], cls: string, mult: string) => list.map((e) => tip(h('span', { class: `aff-chip ${cls}`, style: `--ec:${ELEMENTS[e].color}`, tabindex: 0 }, ui(e, 22), ELEMENTS[e].name),
+    { title: ELEMENTS[e].name, color: ELEMENTS[e].color, rows: [{ text: cls === 'weak' ? `Feitiços e golpes de ${ELEMENTS[e].name} causam ${mult} do dano neste monstro, e quebram a Casca dele três vezes mais rápido.` : `Feitiços e golpes de ${ELEMENTS[e].name} causam ${mult} do dano neste monstro.` }] }));
+  return h('div', 'bd-aff',
+    h('div', 'bd-aff-group', h('b', null, 'Ataca com'), el ? chips([el], 'uses', '') : h('em', null, 'Sem elemento')),
+    h('div', 'bd-aff-group', h('b', null, 'Fraco a'), a.weak.length ? chips(a.weak, 'weak', pct(AFFINITY.weak)) : h('em', null, 'Nada')),
+    h('div', 'bd-aff-group', h('b', null, 'Resiste a'), a.resist.length ? chips(a.resist, 'resist', pct(AFFINITY.resist)) : h('em', null, 'Nada')));
+}
+
 function beastDetail(c: Ctx, b: BestiaryEntry, color: string): HTMLElement {
   const p = c.p, kills = killsOf(p.life, b.kind), seen = kills > 0, bonus = knowledgeBonus(kills), next = knowledgeNext(kills);
   if (!seen) {
@@ -160,6 +172,7 @@ function beastDetail(c: Ctx, b: BestiaryEntry, color: string): HTMLElement {
   return h('div', { class: 'beast-detail', style: `--ec:${color}` },
     h('div', 'bd-head', h('span', 'bd-name', ENEMY_NAMES[b.kind]), h('span', 'bd-tag', ROLE_LABEL[b.role])),
     h('p', 'bd-lore', ENEMY_LORE[b.kind] ?? ''),
+    affinityRow(b.kind),
     h('div', 'bd-rows',
       h('div', 'bd-row', ui('dano', 26), h('span', null, h('b', null, 'Como luta'), ENEMY_HINT[b.kind])),
       h('div', 'bd-row', ui('caveira', 26), h('span', null, h('b', null, 'Derrotados'), num(kills))),

@@ -63,7 +63,9 @@ export const MAX_RARITY = RARITIES.length - 1;
 
 export type AffixKey = 'forca' | 'agilidade' | 'inteligencia' | 'vitalidade' | 'espirito' | 'sorte' | 'vida' | 'mana' | 'dano'
   | 'critico' | 'danoCritico' | 'velAtaque' | 'defesa' | 'resNatureza' | 'danoNatureza' | 'recarga' | 'ouro' | 'rouboVida'
-  | 'danoFeitico' | 'resTudo' | 'movimento';
+  | 'danoFeitico' | 'resTudo' | 'movimento'
+  /* afinidades (docs/gdd/11) */
+  | 'faro' | 'teimosia' | 'pacto';
 
 interface AffixDef { text: (v: number) => string; min: (l: number) => number; max: (l: number) => number }
 const pct = (label: string) => (v: number) => `+${v}% de ${label}`;
@@ -90,10 +92,21 @@ export const AFFIXES: Record<AffixKey, AffixDef> = {
   danoFeitico: { text: pct('dano de feitiço'), min: () => 4, max: () => 10 },
   resTudo: { text: pct('resistência a todos os elementos'), min: () => 3, max: () => 8 },
   movimento: { text: pct('velocidade de movimento'), min: () => 2, max: () => 6 },
+  faro: { text: (v) => `Faro: +${v}% no bônus contra fraquezas`, min: () => 8, max: () => 18 },
+  teimosia: { text: (v) => `Teimosia: −${v}% no castigo de quem resiste`, min: () => 10, max: () => 22 },
+  /* item com preço: dano de um elemento, em troca de resistência ao elemento que o vence */
+  pacto: { text: pct('dano de um elemento'), min: () => 12, max: () => 22 },
 };
+/** Afixos que valem para um elemento só (o elemento vai em `Affix.el`; sem ele, é Natureza, como nos itens antigos). */
+export const ELEMENT_AFFIXES: AffixKey[] = ['resNatureza', 'danoNatureza', 'pacto'];
+/** Item com preço: quanto de resistência o afixo cobra, por ponto de dano que dá. */
+export const PACT_COST = 0.6;
+const EL_ORDER: ElementId[] = ['natureza', 'agua', 'tempestade', 'fogo', 'terra', 'sombra', 'encanto'];
+/** O elemento que vence `el` na Roda (para o preço do item). */
+export const BEATEN_BY: Record<ElementId, ElementId> = { fogo: 'agua', natureza: 'fogo', terra: 'natureza', tempestade: 'terra', agua: 'tempestade', sombra: 'encanto', encanto: 'sombra' };
 export const AFFIX_KEYS = Object.keys(AFFIXES) as AffixKey[];
 
-export interface Affix { k: AffixKey; v: number }
+export interface Affix { k: AffixKey; v: number; /** Elemento, nos afixos de `ELEMENT_AFFIXES`. */ el?: ElementId }
 
 export interface Item {
   id: number;
@@ -211,13 +224,26 @@ export function baseLabel(item: Item): string {
 }
 
 export function affixText(a: Affix): string {
+  const el = a.el ?? 'natureza';
+  if (a.k === 'resNatureza') return `+${a.v}% de resistência a ${ELEMENT_LABEL[el]}`;
+  if (a.k === 'danoNatureza') return `+${a.v}% de dano de ${ELEMENT_LABEL[el]}`;
+  if (a.k === 'pacto') return `+${a.v}% de dano de ${ELEMENT_LABEL[el]}, −${Math.round(a.v * PACT_COST)}% de resistência a ${ELEMENT_LABEL[BEATEN_BY[el]]}`;
   return AFFIXES[a.k].text(a.v);
 }
 
-export function rollAffix(rng: Rng, ilvl: number, exclude: AffixKey[] = []): Affix {
+/**
+ * Sorteia um afixo. Nos de elemento, a resistência puxa para o elemento do capítulo seguinte (é de onde o jogador
+ * tira a defesa para o que vem), e o dano sai entre os elementos que ele já pode ter naquele capítulo.
+ */
+export function rollAffix(rng: Rng, ilvl: number, exclude: AffixKey[] = [], chapter = Math.max(1, Math.min(8, Math.ceil(ilvl / 8)))): Affix {
   const pool = AFFIX_KEYS.filter((k) => !exclude.includes(k));
   const k = pick(rng, pool), d = AFFIXES[k], lo = d.min(ilvl), hi = Math.max(lo, d.max(ilvl));
-  return { k, v: lo + Math.floor(rng() * (hi - lo + 1)) };
+  const out: Affix = { k, v: lo + Math.floor(rng() * (hi - lo + 1)) };
+  if (ELEMENT_AFFIXES.includes(k)) {
+    const next = EL_ORDER[Math.min(6, chapter)], known = EL_ORDER.slice(0, Math.max(1, Math.min(7, chapter)));
+    out.el = k === 'resNatureza' ? (rng() < 0.55 ? next : pick(rng, EL_ORDER)) : pick(rng, known);
+  }
+  return out;
 }
 
 /** Chance de cada raridade nos baús, por capítulo (dificuldade normal). */
@@ -253,7 +279,7 @@ export function makeItem(id: number, rng: Rng, ilvl: number, rarity: number, typ
   const t = type ?? pick(rng, pool), def = ITEM_TYPES[t];
   const affixes: Affix[] = [];
   const n = RARITIES[rarity].affixes + (def.base === 'nenhum' && t !== 'aljava' ? 1 : 0);
-  for (let i = 0; i < n; i++) affixes.push(rollAffix(rng, ilvl, affixes.map((a) => a.k)));
+  for (let i = 0; i < n; i++) affixes.push(rollAffix(rng, ilvl, affixes.map((a) => a.k), Math.max(1, Math.min(8, chapter))));
   return { id, type: t, name: pick(rng, def.names), ilvl, rarity, plus: 0, affixes };
 }
 

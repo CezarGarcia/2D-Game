@@ -1,7 +1,8 @@
 /** Funções compartilhadas da simulação: sorteio, geometria, dano e criação de inimigos. */
 import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyBase, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, isBossKind, isMonster, type EliteMod, type EnemyKind, type SpawnDef } from '../data/balance';
 import { BOSSES as BOSS_DEFS, MONSTERS } from '../data/bestiary';
-import { BROTAR, SUPREMO_NUM, WET_DURATION, type ElementId } from '../data/content';
+import { AFFINITY, affinityMult, affinitySign, kindElement, wheelAffinity } from '../data/affinity';
+import { BROTAR, COMPANIONS, ELEMENT_ORDER, SUPREMO_NUM, WET_DURATION, type ElementId } from '../data/content';
 import { absorbGuard, buffOf, buffPower, lootOnKill } from './loot';
 import { onPerfect } from './spells';
 import { applyElement, wakeAndCharge } from './status';
@@ -136,6 +137,7 @@ export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quie
     id: w.nextId++, kind: def.kind, elite: !!def.elite, champion, mods,
     x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : champion ? CHAMPION.scale : 1),
     dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1) * (foes?.damage ?? 1),
+    shell: 0, shellMax: 0, shellEl: null, exposeT: 0, shellT: 0, weakEl: null,
     speedMult: (boss ? 1 : enemySpeedMult(level)) * (mods.includes('veloz') ? MOD.veloz.speed : 1),
     windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1) * (foes?.windup ?? 1),
     state: 'spawn', stateT: 0, facing: -1, dirX: -1, dirY: 0, tele: null,
@@ -146,6 +148,13 @@ export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quie
     aggroPet: 0, hidden: false, fake: !!opts.fake,
     phase: 0, posture: 0, pattern: '', step: 0, calls: 0, ax: def.x, ay: def.y,
   };
+  /* Casca elemental: em toda elite e chefe, ou só no inimigo do fim da fase */
+  if (!opts.fake && (elite || boss) && def.kind !== 'boneco' && (w.cfg.shells === 'all' || (w.cfg.shells === 'boss' && w.room >= w.cfg.rooms.length - 1))) {
+    let el = kindElement(def.kind);
+    /* quem não tem elemento ganha uma Casca de um elemento sorteado, e a fraqueza que a Roda dá a ele */
+    if (!el) { el = ELEMENT_ORDER[Math.floor(rand(w) * ELEMENT_ORDER.length)]; e.weakEl = wheelAffinity(el).weak[0] ?? null; }
+    e.shellEl = el; e.shellMax = Math.round(hp * (boss ? AFFINITY.shell.boss : AFFINITY.shell.elite)); e.shell = e.shellMax;
+  }
   const armored = def.kind === 'tronco' || def.kind === 'caramujo' || (isMonster(def.kind) && MONSTERS[def.kind].armored);
   if (armored && !mods.includes('blindado')) e.mods = [...mods, 'blindado'];
   w.enemies.push(e);
@@ -227,6 +236,13 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
   const open = isOpen(e);
   const weapon = source === 'melee' || source === 'arrow' || source === 'roll';
   if (element) dmg *= 1 + s.elemDamage[element];
+  /* afinidade: o elemento do golpe contra as fraquezas e resistências do monstro. Veneno é Natureza, faísca é Tempestade,
+     o companheiro bate com o elemento dele, e a reação vale pelo melhor dos dois elementos que a causaram. */
+  const affEl: ElementId | null = element ?? (source === 'poison' ? 'natureza' : source === 'spark' ? 'tempestade' : source === 'pet' && s.companion ? COMPANIONS[s.companion].element : null);
+  let sign: -1 | 0 | 1 = affEl ? affinitySign(e.kind, affEl, e.weakEl) : 0;
+  if (source === 'reaction' && w.reacting) sign = Math.max(affinitySign(e.kind, w.reacting[0], e.weakEl), affinitySign(e.kind, w.reacting[1], e.weakEl)) as -1 | 0 | 1;
+  if (sign) dmg *= affinityMult(sign, s.faro, s.teimosia);
+  if (e.exposeT > 0) dmg *= 1 + AFFINITY.exposed.bonus;
   if (w.buffs.length) dmg *= 1 + buffPower(w, 'furia');
   if (e.mods.includes('blindado')) {
     if (!open && !(weapon && s.ignoreArmor)) { dmg *= e.kind === 'caramujo' ? ENEMY.caramujo.armor : ENEMY.tronco.armor; armored = true; }
@@ -270,8 +286,21 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     if (crit) dmg *= s.spellCritMult;
   } else if (crit) dmg *= s.critMult;
 
+  /* Casca elemental: segura parte do dano e se gasta mais rápido com o elemento certo. Quebrada, o monstro fica Exposto. */
+  let broke = false;
+  if (e.shell > 0) {
+    const eat = dmg * (sign > 0 ? AFFINITY.shell.weak : sign < 0 ? AFFINITY.shell.resist : 1);
+    dmg *= 1 - AFFINITY.shell.guard; armored = true;
+    e.shell = Math.max(0, e.shell - eat);
+    if (e.shell <= 0) {
+      broke = true; e.exposeT = AFFINITY.exposed.seconds; e.shellT = AFFINITY.exposed.regrow;
+      if (!isBoss(e)) { e.stunT = Math.max(e.stunT, AFFINITY.exposed.seconds * 0.6); e.tele = null; }
+      emit(w, { type: 'shellBreak', x: e.x, y: e.y, id: e.id, el: e.shellEl ?? undefined });
+    }
+  }
   dmg = Math.max(dmg > 0 ? 1 : 0, Math.round(dmg));
   e.hp -= dmg;
+  void broke;
   /* o boneco de treino nunca cai: perto do fim, a palha se refaz */
   if (e.kind === 'boneco' && e.hp < e.maxHp * 0.1) e.hp = e.maxHp;
   e.flash = 0.1; e.sinceHit = 0; e.hits++;
@@ -335,7 +364,7 @@ export function damageEnemy(w: World, e: Enemy, amount: number, source: DamageSo
     }
   }
 
-  emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id, el: element ?? undefined });
+  emit(w, { type: 'hit', x: e.x, y: e.y, value: dmg, crit, kind: source, armored, id: e.id, el: element ?? undefined, aff: sign });
   if (e.hp <= 0) {
     e.tele = null;
     w.kills++;

@@ -1,8 +1,8 @@
 /** Peças para mostrar itens: o quadradinho com moldura de raridade e o tooltip com comparação. */
-import { ELEMENTS } from '../data/content';
+import { ELEMENTS, type ElementId } from '../data/content';
 import {
-  AFFIXES, GEM_LEVEL_NAMES, ITEM_TYPES, RARITIES, SETS, SLOT_LABEL, UNIQUES, affixText, baseLabel, baseValue, canHoldGem, gemName, gemText, sellValue,
-  type AffixKey, type Gem, type Item, type Slot,
+  GEM_LEVEL_NAMES, ITEM_TYPES, RARITIES, SETS, SLOT_LABEL, UNIQUES, affixText, baseLabel, baseValue, canHoldGem, gemName, gemText, sellValue,
+  type Affix, type AffixKey, type Gem, type Item, type Slot,
 } from '../data/items';
 import { bestSlot } from '../meta/mochila';
 import { slotsFor, type Profile } from '../meta/profile';
@@ -16,6 +16,7 @@ export const AFFIX_ICON: Record<AffixKey, string> = {
   vida: 'vida', mana: 'mana', dano: 'dano', critico: 'critico', danoCritico: 'danoCritico', velAtaque: 'velAtaque', defesa: 'defesa',
   resNatureza: 'resistencia', danoNatureza: 'natureza', recarga: 'recarga', ouro: 'ouro', rouboVida: 'roubo',
   danoFeitico: 'magia', resTudo: 'resistencia', movimento: 'movimento',
+  faro: 'critico', teimosia: 'perfurar', pacto: 'furia',
 };
 
 /** Faixas de bônus dos conjuntos: peças equipadas para cada uma. */
@@ -60,9 +61,13 @@ export function powerDelta(p: Profile, item: Item): number {
   return bestSlot(p, item).delta;
 }
 
+/** Chave de um afixo para somar e comparar: o tipo e, nos de elemento, o elemento. */
+const affixId = (a: Affix): string => (a.el ? `${a.k}|${a.el}` : a.k);
+const splitId = (id: string): [AffixKey, ElementId | undefined] => { const [k, el] = id.split('|'); return [k as AffixKey, el as ElementId | undefined]; };
+
 /** Valor e nome de um bônus separados, para tabelas ("+8", "Espírito"). */
-export function affixParts(k: AffixKey, v: number): { value: string; label: string } {
-  const text = AFFIXES[k].text(v), m = /^([+−-]?[\d.,]+%?)\s+(?:de |na |no )?(.*)$/.exec(text);
+export function affixParts(k: AffixKey, v: number, el?: ElementId): { value: string; label: string } {
+  const text = affixText({ k, v, el }), m = /^([+−-]?[\d.,]+%?)\s+(?:de |na |no )?(.*)$/.exec(text);
   return m ? { value: br(m[1]), label: m[2].charAt(0).toUpperCase() + m[2].slice(1) } : { value: '', label: text };
 }
 
@@ -77,12 +82,13 @@ export function compareTable(item: Item, other: Item | null | undefined): Compar
     const mine = tA.base === b ? baseValue(item) : 0, theirs = other && tB?.base === b ? baseValue(other) : 0;
     rows.push({ icon: b === 'dano' ? 'dano' : 'defesa', label: b === 'dano' ? 'Dano' : 'Defesa', mine: mine ? br(num(mine, 1)) : null, theirs: theirs ? br(num(theirs, 1)) : null, tone: mine > theirs ? 'ok' : mine < theirs ? 'bad' : 'dim' });
   }
-  const a = new Map<AffixKey, number>(), o = new Map<AffixKey, number>();
-  for (const x of item.affixes) a.set(x.k, (a.get(x.k) ?? 0) + x.v);
-  for (const x of other?.affixes ?? []) o.set(x.k, (o.get(x.k) ?? 0) + x.v);
-  for (const k of new Set([...a.keys(), ...o.keys()])) {
-    const va = a.get(k) ?? 0, vo = o.get(k) ?? 0, label = affixParts(k, va || vo).label;
-    rows.push({ icon: AFFIX_ICON[k], label, mine: va ? affixParts(k, va).value : null, theirs: vo ? affixParts(k, vo).value : null, tone: va > vo ? 'ok' : va < vo ? 'bad' : 'dim' });
+  /* um afixo de elemento só se compara com o mesmo afixo do mesmo elemento */
+  const a = new Map<string, number>(), o = new Map<string, number>();
+  for (const x of item.affixes) a.set(affixId(x), (a.get(affixId(x)) ?? 0) + x.v);
+  for (const x of other?.affixes ?? []) o.set(affixId(x), (o.get(affixId(x)) ?? 0) + x.v);
+  for (const id of new Set([...a.keys(), ...o.keys()])) {
+    const [k, el] = splitId(id), va = a.get(id) ?? 0, vo = o.get(id) ?? 0, label = affixParts(k, va || vo, el).label;
+    rows.push({ icon: el && k !== 'pacto' ? el : AFFIX_ICON[k], label, mine: va ? affixParts(k, va, el).value : null, theirs: vo ? affixParts(k, vo, el).value : null, tone: va > vo ? 'ok' : va < vo ? 'bad' : 'dim' });
   }
   return rows;
 }
@@ -156,12 +162,12 @@ function compareRows(item: Item, other: Item): TipRow[] {
     const d = Math.round((baseValue(item) - baseValue(other)) * 10) / 10;
     if (d !== 0) rows.push({ icon: tA.base === 'dano' ? 'dano' : 'defesa', text: `${d > 0 ? '▲' : '▼'} ${signed(d, 1)} de ${tA.base === 'dano' ? 'dano' : 'defesa'}`, tone: d > 0 ? 'ok' : 'bad' });
   }
-  const sum = new Map<AffixKey, number>();
-  for (const a of item.affixes) sum.set(a.k, (sum.get(a.k) ?? 0) + a.v);
-  for (const a of other.affixes) sum.set(a.k, (sum.get(a.k) ?? 0) - a.v);
-  for (const [k, d] of sum) {
+  const sum = new Map<string, number>();
+  for (const a of item.affixes) sum.set(affixId(a), (sum.get(affixId(a)) ?? 0) + a.v);
+  for (const a of other.affixes) sum.set(affixId(a), (sum.get(affixId(a)) ?? 0) - a.v);
+  for (const [id, d] of sum) {
     if (!d) continue;
-    const text = AFFIXES[k].text(Math.abs(d));
+    const [k, el] = splitId(id), text = affixText({ k, v: Math.abs(d), el });
     rows.push({ icon: AFFIX_ICON[k], text: `${d > 0 ? '▲' : '▼'} ${d > 0 ? text : flip(text)}`, tone: d > 0 ? 'ok' : 'bad' });
   }
   return rows;

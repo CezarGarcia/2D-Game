@@ -250,7 +250,7 @@ function castSpell(w: World, slot: number, id: SpellId, aim: number, inp: Input)
       if (!hittable(e)) continue;
       const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
       if (d > r + e.radius || (Math.abs(wrapAngle(Math.atan2(dy, dx) - aim)) > N.arc && d > e.radius + 30)) continue;
-      damageEnemy(w, e, N.damage * power, 'spell', Math.atan2(dy, dx));
+      damageEnemy(w, e, N.damage * power, 'spell', Math.atan2(dy, dx), false, 'agua');
       if (e.hp > 0) {
         wet(w, e);
         const heavy = isBoss(e) || e.elite || e.kind === 'tronco' || e.kind === 'cuspidor' || e.kind === 'jacare' || e.kind === 'caramujo';
@@ -288,7 +288,7 @@ function castSupremo(w: World): void {
     const boss = isBoss(e);
     if (el === 'natureza') {
       const N = SUPREMO_NUM.natureza;
-      damageEnemy(w, e, N.damage * scale, 'spell', 0);
+      damageEnemy(w, e, N.damage * scale, 'spell', 0, false, 'natureza');
       if (e.hp > 0) { if (boss) e.slowT = N.root; else { e.rootT = N.root; e.tele = null; } }
     } else {
       const N = SUPREMO_NUM.agua;
@@ -297,7 +297,7 @@ function castSupremo(w: World): void {
         e.x = cx + (dx / d) * to; e.y = cy + (dy / d) * to; e.kx = e.ky = 0; e.tele = null;
         if (e.state === 'windup' || e.state === 'aim' || e.state === 'fuse' || e.state === 'charge' || e.state === 'leap') { e.state = 'stagger'; e.stateT = 0; }
       }
-      damageEnemy(w, e, N.damage * scale, 'spell', 0);
+      damageEnemy(w, e, N.damage * scale, 'spell', 0, false, 'agua');
       if (e.hp > 0) { wet(w, e); e.slowT = N.slow; if (!boss) e.stunT = Math.max(e.stunT, 1.2); }
     }
   }
@@ -588,7 +588,7 @@ export function updateProjectiles(w: World, dt: number): void {
       }
       if (pr.kind === 'bubble') {
         const N = SPELL_NUM.bolha;
-        damageEnemy(w, e, pr.damage, 'spell', ang);
+        damageEnemy(w, e, pr.damage, 'spell', ang, false, 'agua');
         if (e.hp > 0) {
           wet(w, e);
           if (isBoss(e) || e.elite) e.slowT = N.bossSlow * s.durationMult;

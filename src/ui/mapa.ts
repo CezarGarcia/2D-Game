@@ -1,12 +1,13 @@
 /** Mapa: o capítulo ilustrado em tela inteira, uma medalha por fase. Tudo o mais aparece no tooltip. */
 import { paintChapterMap } from '../art/backdrops';
-import { COMPANIONS, ELEMENTS } from '../data/content';
+import { COMPANIONS, ELEMENTS, SPELLS, type ElementId } from '../data/content';
 import { ITEM_TYPES, RARITIES, UNIQUES } from '../data/items';
 import { stageGold, stageXp } from '../data/progression';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGES, stagesOf, type ChapterDef, type StageDef } from '../data/stages';
 import { OMEN, cleanOmens, omenWeight } from '../data/omens';
 import { isDreamUnlocked } from '../meta/dream';
-import type { Profile } from '../meta/profile';
+import { SEAL_COLOR, SEAL_LABEL, prepFor, readStage, type Seal } from '../meta/afinidade';
+import { applyBuild, buildMatches, type Profile } from '../meta/profile';
 import { STAR_CHESTS, isChapterOpen, stageInfo, totalStars, type StageInfo, type StageTag } from '../meta/rewards';
 import { MAIN_H, MAIN_W, markSeen, unseen, type Ctx } from './ctx';
 import { backdrop, clock, h, num, pct, star, trimBackdrops, ui } from './dom';
@@ -90,6 +91,7 @@ function stageTip(p: Profile, info: StageInfo): TipSpec {
     { icon: 'dano', text: common.join(', ') },
     foe && st.final === 'elite' && { icon: 'elite', text: `Elite: ${foe.name}${foe.mods ? ` (${foe.mods})` : ''}`, tone: 'warn' },
     foe && st.final === 'chefao' && { icon: 'caveira', text: `Chefão: ${foe.name}`, tone: 'bad' },
+    ...affinityRows(p, st),
     { head: 'Recompensas' },
     { icon: 'xp', text: `${num(Math.round(stageXp(st.level) * info.xpMult))} de experiência`, value: xm.value, tone: xm.tone },
     { icon: 'ouro', text: `${num(Math.round(stageGold(st.level) * info.goldMult))} de ouro`, value: gm.value, tone: gm.tone },
@@ -108,6 +110,26 @@ function stageTip(p: Profile, info: StageInfo): TipSpec {
     rows,
     foot: info.unlocked ? ['Clique: escolher', 'Duplo clique: jogar'] : ['Vença a fase anterior'],
   };
+}
+
+/** Linhas de afinidade do tooltip da fase: o que os monstros usam, a que são fracos, a que resistem, e o Preparo do herói. */
+function affinityRows(p: Profile, st: StageDef): TipRow[] {
+  const r = readStage(p, st), prep = prepFor(p, st, p.loadout);
+  if (!r.threat.length && !r.weak.length && !r.resist.length && !r.unknown) return [];
+  const names = (list: ElementId[]) => list.map((e) => ELEMENTS[e].name).join(', ');
+  return [
+    { head: 'Afinidades' },
+    r.threat.length ? { icon: r.threat[0], text: `Atacam com ${names(r.threat)}`, color: ELEMENTS[r.threat[0]].color } : null,
+    r.weak.length ? { icon: r.weak[0], text: `Fracos a ${names(r.weak)}`, tone: 'ok' } : null,
+    r.resist.length ? { icon: r.resist[0], text: `Resistem a ${names(r.resist)}`, tone: 'bad' } : null,
+    r.unknown ? { icon: 'cadeado', text: r.unknown === r.total ? 'Fraquezas: ? (você ainda não enfrentou estes monstros)' : `${r.unknown} ${r.unknown === 1 ? 'monstro ainda desconhecido' : 'monstros ainda desconhecidos'}`, tone: 'dim' } : null,
+    { node: sealDot(prep.seal, 18), text: `Preparo: ${prep.reason}`, color: SEAL_COLOR[prep.seal] },
+  ];
+}
+
+/** A bolinha do selo de Preparo. */
+function sealDot(seal: Seal, size: number): HTMLElement {
+  return h('i', { class: `seal ${seal}`, style: `--sc:${SEAL_COLOR[seal]};width:${size}px;height:${size}px` });
 }
 
 let lastClick = { id: '', at: 0 };
@@ -190,11 +212,36 @@ export function renderMapa(c: Ctx): HTMLElement {
       st3 && dreamOpen && tip(h('button', { type: 'button', class: `chip hunt-chip omen-chip${peso ? ' on' : ''}`, 'data-fk': 'pressagios', 'aria-label': `Presságios: Peso ${peso}`, onclick: () => { c.st.omenOpen = true; c.redraw('omen-fechar'); } }, ui('olho', 20), peso ? `Peso ${peso}` : 'Presságios'),
         () => ({ title: 'Presságios', icon: ui('olho', 36), color: '#c8a8ff', sub: peso ? `+${pct(OMEN.rarityPerPoint * peso)} de chance de raridade maior, +${pct(OMEN.goldPerPoint * peso)} de ouro` : 'Deixe a fase mais difícil e melhore o saque', subColor: peso ? '#86e07a' : undefined,
           rows: [{ text: 'Valem só ao jogar na mão, nas fases que já têm as 3 estrelas.' }, sel.record.omen ? { icon: 'coroa', text: 'Maior Peso já vencido aqui', value: String(sel.record.omen) } : null] }))) : null;
-    const tall = huntRow ? 100 : 52, left = Math.max(st3 && dreamOpen ? 200 : 126, Math.min(MAIN_W - (st3 && dreamOpen ? 200 : 126), pt.x));
+    const tall = (huntRow ? 100 : 52) + 44, left = Math.max(210, Math.min(MAIN_W - 210, pt.x));
     const under = pt.y + r + 26 + tall <= MAIN_H - 6;
     void below;
+    /* Preparo: o selo do herói atual contra a fase, e as builds salvas com o selo de cada uma, para trocar ali mesmo */
+    const prep = prepFor(p, sel.stage, p.loadout), reading = readStage(p, sel.stage);
+    const names = (list: ElementId[]) => list.map((e) => ELEMENTS[e].name).join(', ');
+    const builds = p.builds.map((b, i) => {
+      if (!b) return null;
+      const bp = prepFor(p, sel.stage, b.loadout), on = buildMatches(p, i);
+      return tip(h('button', { type: 'button', class: `prep-build${on ? ' on' : ''}`, 'data-fk': `prep-build-${i}`, 'aria-pressed': String(on), 'aria-label': `Build ${b.name}`, onclick: () => { if (on) return; const res = applyBuild(c.p, i); if (res) { c.toast(res.missing ? `${b.name}: faltaram ${res.missing} ${res.missing === 1 ? 'item' : 'itens'}` : `Build ${b.name} vestida`, res.missing ? 'bad' : 'ok'); c.commit(`prep-build-${i}`); } } },
+        sealDot(bp.seal, 14), h('span', null, b.name), h('span', 'prep-els', b.loadout.filter(Boolean).map((sp) => ui(SPELLS[sp!].element, 16)))),
+      { title: `Build: ${b.name}`, color: SEAL_COLOR[bp.seal], sub: on ? 'Em uso' : SEAL_LABEL[bp.seal], subColor: SEAL_COLOR[bp.seal], rows: [{ text: bp.reason }, { text: b.loadout.filter(Boolean).map((sp) => SPELLS[sp!].name).join(', '), tone: 'dim' }], foot: [on ? null : 'Clique: vestir (é grátis)'] });
+    }).filter(Boolean);
+    const prepRow = sel.stage.kinds.length ? h('div', 'prep',
+      tip(h('span', { class: `prep-seal ${prep.seal}`, style: `--sc:${SEAL_COLOR[prep.seal]}`, tabindex: 0 }, sealDot(prep.seal, 16), SEAL_LABEL[prep.seal]),
+        () => ({ title: 'Preparo', color: SEAL_COLOR[prep.seal], sub: SEAL_LABEL[prep.seal], subColor: SEAL_COLOR[prep.seal], rows: [
+          { text: prep.reason },
+          'sep',
+          reading.threat.length ? { icon: reading.threat[0], text: `Atacam com ${names(reading.threat)}` } : null,
+          reading.weak.length ? { icon: reading.weak[0], text: `Fracos a ${names(reading.weak)}`, tone: 'ok' } : null,
+          reading.resist.length ? { icon: reading.resist[0], text: `Resistem a ${names(reading.resist)}`, tone: 'bad' } : null,
+          reading.unknown ? { icon: 'cadeado', text: 'As fraquezas de um monstro aparecem depois que você o derrota uma vez.', tone: 'dim' } : null,
+          { text: 'Fraqueza: +50% de dano do elemento. Resistência: −35%.', tone: 'dim' },
+        ] })),
+      reading.weak.slice(0, 3).map((e) => h('span', { class: 'prep-el weak', style: `--ec:${ELEMENTS[e].color}`, title: '' }, ui(e, 18))),
+      reading.resist.slice(0, 3).map((e) => h('span', { class: 'prep-el resist', style: `--ec:${ELEMENTS[e].color}` }, ui(e, 18))),
+      builds) : null;
     playPop = h('div', { class: `play-pop${under ? '' : ' above'}`, style: `left:${left}px;top:${under ? pt.y + r + 26 : pt.y - r - 10 - tall}px` },
       h('button', { type: 'button', class: 'btn primary big play', 'data-fk': 'jogar', onclick: () => play(sel.stage.id) }, ui('dano', 30), 'Jogar'),
+      prepRow,
       huntRow);
   }
 

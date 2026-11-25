@@ -9,6 +9,7 @@ Em andamento, a **etapa 4** (`docs/gdd/09` e `10`): um modo rejogável de sessã
 - Almanaque do Folclore com conquistas e bestiário, Terreiro de treino com medidor de dano, Caçada automática nas fases com 3 estrelas, filtro de saque, builds salvas e troca de missão do dia.
 - Bênçãos com padrinho: 64 bênçãos de altar (8 de cada Encantado e 8 neutras), sinergia com 3, 5 e 7 bênçãos do mesmo padrinho, Despertar das bênçãos que chegam ao máximo e Compadrios entre dois padrinhos. Na fase, Esc pausa e mostra as sinergias acesas.
 - **O Sonho** (abre ao libertar a Iara, fase 2-12): uma noite de três trechos, cada um com um mapa de caminhos para escolher. Combates, elites, provações, altares de um padrinho, Feira, Fonte, causos do folclore e um chefe no fim. O herói do Sonho tem o seu nível e um equipamento igual para todos; o que muda é a arma, os feitiços e o que você junta na noite: bênçãos, 20 amuletos e vinténs. Ao acordar, vencendo ou não, você traz Lembranças, que melhoram a Aldeia. Dá para fechar o jogo no meio da noite e continuar depois.
+- **Afinidades elementais** (`docs/gdd/11`): cada monstro é fraco a alguns elementos e resiste a outros (Água apaga Fogo, Fogo queima Natureza, Natureza racha Terra, Terra aterra Tempestade, Tempestade eletrocuta Água; Sombra e Encanto se desfazem). Elites e chefes têm uma Casca que o elemento certo quebra três vezes mais rápido. O painel de cada fase mostra o que ela pede e deixa trocar de build ali mesmo, e os itens ganharam resistência e dano para os sete elementos.
 - **Roda do Saci, Presságios, Cordéis e Aspectos.** A Roda é um nó do Sonho: uma grade 3x3 em que três iguais numa linha pagam bênção ou vinténs, com as chances à mostra. Os Presságios deixam a noite mais difícil em troca de mais Lembranças, e também valem nas fases da campanha com 3 estrelas, onde melhoram o saque. Os Cordéis são 20 folhetos que se equipam antes de dormir, dentro de um limite de Fôlego. Os Aspectos são 12 variações das seis armas, que mudam o golpe próprio de cada uma e valem também na campanha.
 
 ## Rodar
@@ -59,6 +60,7 @@ Toda marca vermelha no chão avisa um golpe. Esquivar no último instante é uma
 | `npm run dev` | Servidor de desenvolvimento |
 | `npm test` | Testes das regras de combate e das fórmulas de progressão |
 | `npx vite-node tests/calib.ts 24 35` | Calibração: um jogador automático que erra como gente joga as fases indicadas |
+| `npx vite-node tests/calib-afinidade.ts 10` | Mede as 96 fases com o herói que nunca troca de feitiço e com o que troca conforme a fase |
 | `npx vite-node tests/calib-sonho.ts 40 38 4 facao peso=8 cordeis=1` | Calibração do Sonho: 40 noites com um herói de nível 38 e 4 capítulos vencidos; `peso=` liga Presságios e `cordeis=1`, um kit de folhetos |
 | `npm run build` | Confere os tipos e gera a versão final em `dist/` |
 

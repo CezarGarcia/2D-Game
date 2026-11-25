@@ -21,7 +21,7 @@ export function playNode(p: Profile, opts: BotOpts, maxSeconds = 420): StageOutc
   const run = p.dream.run!, id = currentStageId(run)!, stage = findStage(id)!, ctx = dreamContext(run);
   const restat = (b: BlessingId[]) => deriveStats(ctx.profile, b, ctx.amulets, ctx.boost);
   const seed = Number(id.split('-')[5]) | 1;
-  const w: World = createWorld({ stageId: id, level: stage.level, rooms: stage.rooms, stats: restat(ctx.carry.blessings), seed, ranked: true, carry: ctx.carry, foes: ctx.foes });
+  const w: World = createWorld({ stageId: id, level: stage.level, rooms: stage.rooms, stats: restat(ctx.carry.blessings), seed, ranked: true, carry: ctx.carry, foes: ctx.foes, shells: ctx.shells });
   const bot = makeBot(ctx.profile, { ...opts, seed: opts.seed + seed }, restat);
   for (let i = 0; i < 60 * maxSeconds && w.phase !== 'won' && w.phase !== 'lost'; i++) { step(w, bot(w), TICK); w.events.length = 0; }
   return {

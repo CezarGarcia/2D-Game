@@ -1,6 +1,50 @@
-# 11 · Afinidades elementais (proposta em discussão)
+# 11 · Afinidades elementais
 
-**Estado:** proposta. Nada daqui está no jogo ainda. Serve para decidir o que entra, com que peso e quando.
+**Estado:** os passos 1 e 2 estão no jogo. O que entrou, o que ficou diferente da proposta e o que falta está em "O que foi feito", logo abaixo. O resto do documento é a proposta como foi aprovada.
+
+## O que foi feito
+
+Decisões tomadas: peso leve na campanha e cheio no conteúdo opcional; as fraquezas de um monstro aparecem depois do primeiro encontro; dano físico por tipo fica para depois; as afinidades entram antes da fase 5 da etapa 4.
+
+**No jogo:**
+
+- **A Roda e as exceções** (`src/data/affinity.ts`). Cada monstro e chefe tem fraquezas e resistências. Os dos capítulos 1 e 2 só têm fraqueza, para ensinar sem castigar; os da Terra Sem Nome não têm nenhuma.
+- **A conta** (`damageEnemy`, em `src/sim/core.ts`). Fraco 1,5 e resistente 0,65, com Faro e Teimosia. Veneno conta como Natureza, a faísca como Tempestade, o companheiro bate com o elemento dele e a reação vale pelo melhor dos dois elementos. Na tela, o número sai maior e na cor do elemento com "FRACO!", ou menor e cinza com "RESISTE".
+- **Casca elemental.** Vale 22% da vida numa elite e 14% num chefe. Enquanto existe, segura 30% do dano. O elemento certo a gasta três vezes mais rápido; o que o monstro resiste, pela metade. Quebrada, o monstro fica Exposto por 4,5 s (+50% de dano; elite também fica atordoada) e a Casca volta em 16 s.
+- **Onde a Casca aparece** (`stageShells`):
+
+  | Conteúdo | Quem tem Casca |
+  |---|---|
+  | Campanha, capítulos 1 e 2 | Ninguém |
+  | Campanha, capítulos 3 a 8 | O chefe das fases 11 e 12 |
+  | Campanha com Presságios ligados | Toda elite e todo chefe |
+  | Torre | O chefe do andar a partir do 21; toda elite a partir do 51 |
+  | Sonho | No primeiro trecho, só o chefe; do segundo em diante, toda elite e chefe |
+
+- **A fase avisa.** O painel de jogar ganhou o selo de Preparo (verde, amarelo, vermelho, ou cinza para monstros ainda desconhecidos), as fraquezas e resistências da fase e as builds salvas, cada uma com o seu selo, para trocar com um clique. O tooltip da fase e a ficha do Bestiário mostram o mesmo por monstro.
+- **Itens.** Os afixos de resistência e de dano valem para os sete elementos; a resistência puxa para o elemento do capítulo seguinte e o dano sai entre os elementos que o jogador já tem. Afixos novos: Faro, Teimosia e o item com preço (dano de um elemento em troca de resistência ao que o vence). A resistência do herói vai de −50% a 75%.
+
+**Diferente da proposta:**
+
+- **"Peso cheio" virou os Presságios.** A proposta falava em terceira estrela e Caçada automática; o jogo não sabe quando alguém está atrás da terceira estrela, e castigar quem repete fase seria estranho. Quem quer a campanha com toda elite de Casca liga um Presságio.
+- **Os números já entraram cheios** (1,5 e 0,65), sem a etapa mais leve, porque a medição mostrou que a campanha aguenta.
+
+**Medição** (as 96 fases, 10 partidas cada, jogador automático que erra como gente):
+
+| | Vitórias |
+|---|---|
+| Antes das afinidades | 805 de 960 (84%) |
+| Agora, sem nunca trocar de feitiço | 786 de 960 (82%) |
+| Agora, trocando para o elemento que a fase teme | 824 de 960 (86%) |
+
+A diferença se concentra onde a fraqueza está à mão: no capítulo 7, 74% sem trocar contra 100% trocando. No capítulo 4 é pequena (87% contra 89%), porque o herói de referência causa a maior parte do dano com a arma, que não tem elemento. `npx vite-node tests/calib-afinidade.ts` refaz a conta.
+
+**Ainda não foi feito:**
+
+- Garrafadas (o consumível por fase).
+- O ramo de talentos de preparo, e os conjuntos novos por elemento.
+- O passo 3 inteiro: Presságios, Aspectos e amuletos de elemento no Sonho, e andares de elemento na Torre.
+- Dano físico por tipo (corte, impacto, perfuração), se os elementos funcionarem bem com quem joga.
 
 **A ideia, em uma frase:** cada monstro tem elementos a que é fraco e elementos a que resiste; cada fase avisa o que vem; e o jogador ganha (ou sofre) por montar o herói pensando nisso.
 

@@ -99,6 +99,10 @@ export interface Enemy {
   hp: number; maxHp: number; radius: number;
   /** Multiplicadores de dano, velocidade e tempo de aviso deste inimigo. */
   dmg: number; speedMult: number; windupMult: number;
+  /** Casca elemental (docs/gdd/11): quanto resta, o tamanho cheio, o elemento dela, segundos Exposto depois de quebrar e segundos até ela voltar. */
+  shell: number; shellMax: number; shellEl: ElementId | null; exposeT: number; shellT: number;
+  /** Fraqueza sorteada de quem não tem elemento (elites e chefes da Terra Sem Nome). */
+  weakEl: ElementId | null;
   state: EnemyState; stateT: number;
   facing: 1 | -1; dirX: number; dirY: number;
   tele: Telegraph | null;
@@ -228,12 +232,15 @@ export type SimEventType =
   | 'phase' | 'vanish' | 'appear' | 'footprints' | 'whistle' | 'cloneBurst' | 'downed' | 'call' | 'jabuti' | 'shrink' | 'enrage' | 'stack'
   | 'supremo' | 'brotar' | 'nova' | 'shield' | 'mark' | 'bubble' | 'splash' | 'dive' | 'sing' | 'wave' | 'onda' | 'correnteza' | 'pop' | 'freecast'
   | 'reaction' | 'spark' | 'status' | 'zap' | 'blink' | 'erase' | 'restore' | 'steal' | 'dream' | 'help' | 'grab' | 'ignite' | 'moon' | 'transform' | 'petAct' | 'heavy' | 'thrust' | 'devil' | 'roar' | 'miss'
-  | 'chest' | 'chestOpen' | 'offer' | 'pickup' | 'buff' | 'buffEnd' | 'guard' | 'pot' | 'wisp' | 'challenge';
+  | 'chest' | 'chestOpen' | 'offer' | 'pickup' | 'buff' | 'buffEnd' | 'guard' | 'pot' | 'wisp' | 'challenge'
+  | 'shellBreak' | 'shellBack';
 
 export interface SimEvent {
   type: SimEventType;
   x: number; y: number;
   value?: number; crit?: boolean; kind?: string; id?: number; ang?: number; armored?: boolean; x2?: number; y2?: number; text?: string;
+  /** No golpe: +1 se acertou uma fraqueza, −1 se o monstro resiste ao elemento. */
+  aff?: number;
   /** Elemento do golpe (evento `hit`). No evento `kill`, `value` diz quem caiu: 0 comum, 1 campeão, 2 elite, 3 chefe. */
   el?: ElementId;
 }
@@ -252,6 +259,8 @@ export interface StageConfig {
   /** Multiplicadores de vida e de dano dos monstros (maldições de Causo e, depois, os Presságios). */
   /** Monstros mais fortes (maldição e Presságios): vida, dano, tempo de preparo do golpe, modificadores a mais nas elites e vida dos chefes. */
   foes?: { hp: number; damage: number; windup?: number; eliteMods?: number; bossHp?: number };
+  /** Quem tem Casca elemental nesta fase: ninguém, só o último inimigo (elite ou chefe do fim), ou toda elite e todo chefe. */
+  shells?: 'boss' | 'all';
 }
 
 /** O que passa de uma sala do Sonho para a seguinte. As bênçãos já têm que estar contadas em `stats`. */
@@ -324,6 +333,8 @@ export interface World {
   chests: Chest[];
   pickups: Pickup[];
   buffs: Buff[];
+  /** Os dois elementos da reação que está sendo resolvida agora (o dano dela vale pelo melhor dos dois). */
+  reacting: [ElementId, ElementId] | null;
   pots: Pot[];
   wisp: Wisp | null;
   challenge: Challenge | null;

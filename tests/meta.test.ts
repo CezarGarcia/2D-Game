@@ -259,7 +259,12 @@ describe('atalhos da mochila', () => {
     const p = newProfile(5), rng = makeRng(9);
     p.level = 20;
     const types = ['facao', 'arco', 'escudo', 'chapeu', 'gibao', 'luvas', 'alpercatas', 'anel', 'anel', 'amuleto'] as const;
-    for (const t of types) addItem(p, makeItem(p.nextItemId++, rng, 18, 2, t));
+    for (const t of types) {
+      const it = makeItem(p.nextItemId++, rng, 18, 2, t);
+      /* todo anel tem algo que conta no Poder, para o teste não depender de quais bônus o sorteio deu */
+      if (t === 'anel' && !it.affixes.some((a) => a.k === 'vida')) it.affixes[0] = { k: 'vida', v: 60 };
+      addItem(p, it);
+    }
     for (let i = 0; i < 6; i++) addItem(p, makeItem(p.nextItemId++, rng, 1, 0, 'luvas'));
     return p;
   }

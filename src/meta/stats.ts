@@ -6,7 +6,7 @@ import type { AmuletId } from '../data/amulets';
 import { ASPECTS, type AspectId } from '../data/aspects';
 import { knowledgeMap } from './life';
 import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, patronCounts, patronTier, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
-import { GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
+import { BEATEN_BY, PACT_COST, GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
 import { makeRng } from '../data/rng';
 import { ATTRS, ATTR_BASE, addTalent, newProfile, spellLevel, type AttrKey, type Profile } from './profile';
 
@@ -36,6 +36,8 @@ export interface HeroStats {
   freeCast: number; echo: number;
   reactionMult: number;
   res: Record<ElementId, number>;
+  /** Afinidades (docs/gdd/11): Faro aumenta o bônus contra quem é fraco ao elemento; Teimosia diminui o castigo contra quem resiste. */
+  faro: number; teimosia: number;
   /** Dano extra por elemento (feitiços e golpes com aquele elemento). */
   elemDamage: Record<ElementId, number>;
   /** Gema da arma: aplica o efeito do elemento com esta chance a cada golpe. */
@@ -278,8 +280,13 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
   const resAll = 0.04 * rank('peleGrossa') + pct('resTudo') + (set('lembranca', 4) ? 0.15 : 0);
   const res = {} as Record<ElementId, number>, elemDamage = {} as Record<ElementId, number>;
   for (const el of ELEMENT_ORDER) { res[el] = resAll; elemDamage[el] = 0; }
-  res.natureza += pct('resNatureza');
-  elemDamage.natureza += pct('danoNatureza');
+  /* afixos de elemento: resistência, dano, e o item com preço (dano de um elemento em troca de resistência ao que o vence) */
+  for (const it of items) for (const af of it.affixes) {
+    const el = af.el ?? 'natureza';
+    if (af.k === 'resNatureza') res[el] += af.v / 100;
+    else if (af.k === 'danoNatureza') elemDamage[el] += af.v / 100;
+    else if (af.k === 'pacto') { elemDamage[el] += af.v / 100; res[BEATEN_BY[el]] -= Math.round(af.v * PACT_COST) / 100; }
+  }
   if (uniq('olhoDoBoitata')) elemDamage.fogo += 0.3;
   if (syn('fogo', 1)) elemDamage.fogo += 0.2;
   let weaponGem: HeroStats['weaponGem'] = null;
@@ -288,7 +295,8 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
     if (ITEM_TYPES[it.type].group === 'arma') { elemDamage[it.gem.el] += GEM_WEAPON_DAMAGE[it.gem.lvl] / 100; weaponGem = { el: it.gem.el, chance: GEM_STATUS_CHANCE[it.gem.lvl] / 100 }; }
     else res[it.gem.el] += GEM_RESIST[it.gem.lvl] / 100;
   }
-  for (const el of ELEMENT_ORDER) res[el] = Math.min(0.75, res[el]);
+  /* de −50% (quem usa itens com preço) a 75% */
+  for (const el of ELEMENT_ORDER) res[el] = Math.max(-0.5, Math.min(0.75, res[el]));
   const levelBonus = uniq('ecoDosSete') ? 1 : 0;
 
   const aspectId = p.aspects?.equipped?.[weapon as WeaponKind], aspect = aspectId && p.aspects.owned.includes(aspectId) && ASPECTS[aspectId]?.weapon === weapon ? aspectId : null;
@@ -325,6 +333,7 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
     echo: Math.min(0.7, Math.max(rank('eco') ? 0.2 : 0, uniq('fioDoEsquecimento') ? 0.3 : 0) + 0.2 * bl('gorro') + 0.25 * bl('ecoDaCuca') + (syn('encanto', 3) ? 0.25 : 0)),
     reactionMult: (rank('catalisador') ? 1.4 : 1) * (has('receita') ? 1.4 : 1) * (syn('encanto', 2) ? 1.4 : 1) * (am('chocalho') ? 1.3 : 1),
     res, elemDamage, weaponGem, sets,
+    faro: pct('faro'), teimosia: pct('teimosia'),
     statusDuration: (set('benzedeira', 4) ? 2 : 1) * (1 + 0.25 * bl('unha') + 0.6 * bl('brasaDormida')),
     supremoRate: set('lembranca', 6) ? 2 : 1,
     passives: {
