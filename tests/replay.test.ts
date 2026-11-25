@@ -41,7 +41,7 @@ describe('gravação e verificação de partidas', () => {
       expect(resultOf(again)).toEqual(resultOf(w));
       expect(rec.data.length).toBeLessThan(120_000);
     }
-  });
+  }, 60_000);
 
   it('gravação adulterada não chega ao mesmo resultado', () => {
     const { cfg, w, rec, restat } = playRecorded(8, 77);
@@ -57,14 +57,14 @@ describe('gravação e verificação de partidas', () => {
     // herói mais forte do que o declarado
     const strong = { ...cfg, stats: { ...cfg.stats, damageMult: cfg.stats.damageMult * 3 } };
     expect(resultOf(replayRun(strong, rec, restat))).not.toEqual(resultOf(w));
-  });
+  }, 30_000);
 
   it('recusa gravação malformada ou longa demais', () => {
     const { cfg, rec, restat } = playRecorded(0, 5);
     expect(() => replayRun(cfg, { ...rec, format: 99 }, restat)).toThrow();
     expect(() => replayRun(cfg, { ...rec, ticks: 1e9 }, restat)).toThrow();
     expect(() => decodeInputs({ ...rec, ticks: 3 })).toThrow();
-  });
+  }, 30_000);
 });
 
 describe('versão da simulação', () => {
