@@ -79,9 +79,10 @@ O som só começa depois do primeiro clique ou tecla (regra dos navegadores). Ef
 | 1 · Sensação (**feita, em avaliação**) | Uma sala com três ondas: herói com movimento, sequência de três golpes, esquiva com esquiva perfeita e Dardo de Espinho; Saúva-Cinza, Queixada Sombria, Cuspidor e o elite Tronco-Oco | Controlar o herói é gostoso |
 | 2 · Fatia vertical (**feita, em avaliação**) | Capítulo 1 completo: 12 fases, Caipora e Curupira, facão com escudo e arco, 5 feitiços de Natureza, capivara e onça, loot, inventário, ferreiro (aprimorar e fundir), atributos e a teia de talentos | Alguém de fora joga 1 hora sem pedir ajuda |
 | 3 · Campanha (**feita, em avaliação**) | Capítulos 2 a 8, todas as armas, elementos, talentos, conjuntos, únicos, Torre | Créditos alcançáveis, curva de dificuldade ajustada |
-| 4 · Online | Contas, save na nuvem, servidor decidindo drops, rankings | Rankings confiáveis |
-| 5 · Mercado | Compra e venda com ouro | Economia estável |
-| 6 · Loja e temporadas | Loja direta, passe, primeira temporada | — |
+| 4 · Sonho (**feita em parte**, [10](10-plano-da-etapa-4.md)) | Modo roguelite, bênçãos com padrinho, Aldeia, Almanaque, conveniências, afinidades elementais | Noite completa divertida e calibrada |
+| 5 · Online ([12](12-online.md)) | Contas, save na nuvem, rankings verificados refazendo a partida, fantasmas, cruzes e recados | Rankings confiáveis |
+| 6 · Mercado | Mundo Online (servidor dono do personagem) e compra e venda com ouro | Economia estável |
+| 7 · Loja e temporadas | Loja direta, passe, primeira temporada | — |
 
 ## Referência de arte
 

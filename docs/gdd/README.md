@@ -48,6 +48,7 @@ Mapa do capítulo → escolhe a fase (vê nível, drops, estrelas, XP%)
 | [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilidade.md) | Etapa 4: modo roguelite, padrinhos, Despertar, Roda do Saci, Presságios, Aldeia, Almanaque, conveniências |
 | [10 · Plano da etapa 4](10-plano-da-etapa-4.md) | Como construir a etapa 4: fases, arquivos, testes, calibração, conteúdo |
 | [11 · Afinidades elementais](11-afinidades-elementais.md) | Monstros com fraqueza e resistência, Casca elemental, o que a fase avisa, os itens de elemento e as Garrafadas |
+| [12 · Online](12-online.md) | Etapa 5: contas, save na nuvem, rankings verificados refazendo a partida, fantasmas, cruzes e recados, onde hospedar |
 
 ## Glossário
 

@@ -1,6 +1,6 @@
 # 07 · Online e economia
 
-Tudo neste documento vem **depois** de a campanha estar divertida sozinha. A ordem está em [08](08-arte-e-tecnica.md).
+Tudo neste documento vem **depois** de a campanha estar divertida sozinha. A ordem está em [08](08-arte-e-tecnica.md), e o plano da parte online (etapa 5) em [12](12-online.md).
 
 ## Servidor
 
