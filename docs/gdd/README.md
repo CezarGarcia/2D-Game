@@ -45,6 +45,8 @@ Mapa do capítulo → escolhe a fase (vê nível, drops, estrelas, XP%)
 | [06 · Companheiros](06-companheiros.md) | Como se obtém, formas, habilidades |
 | [07 · Online e economia](07-online-e-economia.md) | Rankings, mercado, loja, temporadas |
 | [08 · Arte e técnica](08-arte-e-tecnica.md) | Direção de arte, tecnologia, ordem de construção |
+| [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilidade.md) | Etapa 4: modo roguelite, padrinhos, Despertar, Roda do Saci, Presságios, Aldeia, Almanaque, conveniências |
+| [10 · Plano da etapa 4](10-plano-da-etapa-4.md) | Como construir a etapa 4: fases, arquivos, testes, calibração, conteúdo |
 
 ## Glossário
 
