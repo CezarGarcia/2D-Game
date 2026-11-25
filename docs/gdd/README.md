@@ -47,6 +47,7 @@ Mapa do capítulo → escolhe a fase (vê nível, drops, estrelas, XP%)
 | [08 · Arte e técnica](08-arte-e-tecnica.md) | Direção de arte, tecnologia, ordem de construção |
 | [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilidade.md) | Etapa 4: modo roguelite, padrinhos, Despertar, Roda do Saci, Presságios, Aldeia, Almanaque, conveniências |
 | [10 · Plano da etapa 4](10-plano-da-etapa-4.md) | Como construir a etapa 4: fases, arquivos, testes, calibração, conteúdo |
+| [11 · Afinidades elementais](11-afinidades-elementais.md) | **Proposta em discussão:** monstros com fraqueza e resistência, Casca elemental, o que a fase avisa e o arsenal que isso abre |
 
 ## Glossário
 
