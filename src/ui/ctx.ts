@@ -5,6 +5,7 @@
 import type { AchievementGroup } from '../data/achievements';
 import type { EnemyKind } from '../data/balance';
 import type { ElementId, SpellId } from '../data/content';
+import type { OmenPick } from '../data/omens';
 import type { NightChoice, NightEnd } from '../meta/dream';
 import type { Profile } from '../meta/profile';
 import type { CampTab, UiHost } from './host';
@@ -82,7 +83,15 @@ export interface UiState {
   /** Janelinha das builds salvas (tela do herói). */
   builds: boolean;
   /** O Sonho: a escolha de quem vai sonhar, o resumo de quem acabou de acordar e o modo de tirar bênção na Feira. */
-  dream: { choice: NightChoice | null; end: NightEnd | null; removing: boolean };
+  dream: {
+    choice: NightChoice | null; end: NightEnd | null; removing: boolean;
+    /** Aba aberta antes da noite e os Presságios marcados para a próxima. */
+    tab: 'heroi' | 'cordeis' | 'pressagios'; omens: OmenPick;
+    /** Roda do Saci: o que animar no próximo desenho (tudo, ou só uma coluna) e se o próximo clique numa casa é um Assobio. */
+    rolled: 'all' | number | null; whistle: boolean;
+  };
+  /** Presságios marcados para a próxima fase da campanha, e se a janelinha deles está aberta. */
+  omens: OmenPick; omenOpen: boolean;
   options: boolean;
   confirm: ConfirmSpec | null;
   toast: { text: string; tone: 'ok' | 'bad'; at: number } | null;
@@ -93,7 +102,7 @@ export function newState(): UiState {
     tab: 'mapa', chapter: 1, mapSel: null, invSort: 'poder', invFilter: 'tudo', heroSel: null, heroPane: 'stats', menu: null,
     forgeMode: 'aprimorar', forgeSel: null, forgeFodder: [], forgeAffix: null, forgeFx: null,
     web: null, spellSel: null, spellEl: null, compFilter: null,
-    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false },
+    alm: { tab: 'conquistas', group: null, chapter: 1, kind: null }, huntRuns: 3, huntSpeed: 2, builds: false, dream: { choice: null, end: null, removing: false, tab: 'heroi', omens: {}, rolled: null, whistle: false }, omens: {}, omenOpen: false,
     options: false, confirm: null, toast: null,
   };
 }

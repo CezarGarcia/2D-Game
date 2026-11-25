@@ -14,7 +14,10 @@ import { makeRng, pick, type Rng } from './rng';
 import { CHAPTERS, TERRAIN, wave, type RoomDef, type StageDef } from './stages';
 import { isMonster } from './balance';
 
-export type NodeKind = 'combate' | 'elite' | 'altar' | 'feira' | 'causo' | 'fonte' | 'provacao' | 'chefe';
+export type NodeKind = 'combate' | 'elite' | 'altar' | 'feira' | 'causo' | 'fonte' | 'provacao' | 'chefe' | 'roda';
+
+/** Nós que são uma tela entre as salas, e não uma sala. */
+export function isPanelNode(kind: NodeKind): boolean { return kind === 'feira' || kind === 'fonte' || kind === 'causo' || kind === 'roda'; }
 export type TrialKind = 'ligeiro' | 'intocado' | 'tres';
 
 export const NODE_INFO: Record<NodeKind, { name: string; icon: string; desc: string }> = {
@@ -26,6 +29,7 @@ export const NODE_INFO: Record<NodeKind, { name: string; icon: string; desc: str
   fonte: { name: 'Fonte', icon: 'cura', desc: 'Cura parte da vida e devolve as poções, ou fortalece uma bênção.' },
   provacao: { name: 'Provação', icon: 'caveira', desc: 'Uma sala com regra própria. Vencer paga muitas Lembranças; perder custa metade da vida.' },
   chefe: { name: 'Chefe', icon: 'coroa', desc: 'O fim do trecho.' },
+  roda: { name: 'Roda do Saci', icon: 'roda', desc: 'O Saci deve uma. Gire a roda: três iguais numa linha pagam.' },
 };
 
 export const TRIAL_INFO: Record<TrialKind, { name: string; desc: string }> = {
@@ -44,7 +48,7 @@ export const DREAM = {
   /** Passo em que todos os nós são altares: todo caminho passa por um. */
   altarStep: 2,
   /** Peso de cada tipo de nó nos passos livres do meio. */
-  weights: { combate: 46, elite: 12, altar: 18, causo: 14, provacao: 5, feira: 5 } as Record<string, number>,
+  weights: { combate: 46, elite: 12, altar: 18, causo: 14, provacao: 5, feira: 5, roda: 10 } as Record<string, number>,
   /** Nível dos monstros: o do herói menos `levelBelow`, mais `levelPerTrecho` a cada trecho. */
   levelBelow: 1, levelPerTrecho: 2.5,
   /** Tamanho das ondas em relação a uma expedição do mesmo nível, e quanto cresce por trecho. */
@@ -62,6 +66,20 @@ export const DREAM = {
   /** Preços da Feira, por raridade da bênção (1 a 3), e dos serviços. */
   price: { blessing: [0, 32, 52, 80], heal: 26, reroll: 12, remove: 20 },
   feiraHeal: 0.4,
+  /** Roda do Saci. */
+  roda: {
+    /** Custo de cada giro pago, em ordem, e quantos giros de graça toda Roda tem. */
+    costs: [20, 40, 80], free: 1,
+    /** Padrinhos na grade, Pulos de toda Roda, e o peso de cada símbolo. */
+    patrons: 3, pulos: 1,
+    weights: { patron: 8, gorro: 5, vintem: 9, olho: 6 },
+    /** Cada bênção de um padrinho aumenta o peso do símbolo dele. */
+    buildPull: 0.15,
+    /** Linha de vinténs paga isto; linha de Olhos amaldiçoa assim até o fim do trecho (e dobra as Lembranças dele). */
+    vintemPay: 80, curse: { hp: 0.2, damage: 0.1 },
+    /** Giros seguidos sem linha até o próximo ser garantido, e linhas de um mesmo padrinho para a sorte grande. */
+    pityAfter: 3, jackpotLines: 4,
+  },
 };
 
 export interface DreamNode {
@@ -88,6 +106,10 @@ export interface NightSetup {
   level: number;
   /** Primeira noite: um trecho só. */
   short?: boolean;
+  /** O Saci já foi libertado: a Roda dele pode aparecer no mapa. */
+  roda?: boolean;
+  /** Presságio Sem Padrinho: o passo de altares vira combate. */
+  noAltarStep?: boolean;
 }
 
 /** Grande elite (fase 11) e Encantado (fase 12) de cada capítulo. */
@@ -122,7 +144,7 @@ function makeTrecho(rng: Rng, index: number, chapter: number, level: number, set
   const nodes: DreamNode[] = [], steps: DreamNode[][] = [];
   const add = (step: number, row: number, kind: NodeKind): DreamNode => { const n: DreamNode = { id: nodes.length, step, row, kind, next: [] }; nodes.push(n); (steps[step] ??= []).push(n); return n; };
   const patrons = setup.patrons.length ? setup.patrons : (['natureza'] as ElementId[]);
-  let trial = false;
+  let trial = false, wheel = false;
   add(0, 1, 'combate');
   const mid = DREAM.steps - 3, rest = DREAM.steps - 2, end = DREAM.steps - 1;
   for (let step = 1; step <= mid; step++) {
@@ -131,16 +153,18 @@ function makeTrecho(rng: Rng, index: number, chapter: number, level: number, set
     const used: ElementId[] = [];
     for (const row of rows) {
       let kind: NodeKind;
-      if (step === DREAM.altarStep) kind = 'altar';
+      if (step === DREAM.altarStep) kind = setup.noAltarStep ? 'combate' : 'altar';
       else {
         kind = weightedKind(rng, (k) => {
           if (k === 'provacao') return !trial && step >= 2;
           if (k === 'causo') return step % 2 === 1;
+          if (k === 'roda') return !!setup.roda && !wheel && step >= 3;
           if (k === 'elite') return !(index === 0 && step === 1);
           return true;
         });
       }
       if (kind === 'provacao') trial = true;
+      if (kind === 'roda') wheel = true;
       const n = add(step, row, kind);
       if (kind === 'altar') { const free = patrons.filter((p) => !used.includes(p)); n.patron = pick(rng, free.length ? free : patrons); used.push(n.patron); }
       if (kind === 'provacao') n.trial = pick(rng, ['ligeiro', 'intocado', 'tres'] as TrialKind[]);
@@ -232,8 +256,9 @@ export function dreamStage(id: string): StageDef | null {
   if (k.kind === 'altar') {
     room.type = 'altar';
     /* o padrinho vem no fim do identificador; um F depois dele limita o altar às bênçãos comuns (Ferradura Virada) */
-    const common = k.extra.endsWith('F'), patron = (common ? k.extra.slice(0, -1) : k.extra) as ElementId;
-    room.altar = { patron, ...(common ? { maxTier: 1 as const } : {}) };
+    /* um R no lugar do F pede rara ou melhor (o cordel do Pavão Misterioso) */
+    const common = k.extra.endsWith('F'), fine = k.extra.endsWith('R'), patron = (common || fine ? k.extra.slice(0, -1) : k.extra) as ElementId;
+    room.altar = { patron, ...(common ? { maxTier: 1 as const } : {}), ...(fine ? { minTier: 2 as const } : {}) };
     return done(where, 'normal', NODE_INFO.altar.desc);
   }
   if (k.kind === 'chefe') {

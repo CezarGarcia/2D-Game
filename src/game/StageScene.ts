@@ -21,7 +21,8 @@ import {
 import { BUFFS, CHESTS, type BuffId, type ChestTier } from '../data/loot';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGE_BY_ID, type StageDef } from '../data/stages';
 import { countEvent, newTally, type RunTally } from '../meta/daily';
-import { deriveStats } from '../meta/stats';
+import { cleanOmens, omenFoes, omenWeight, type OmenPick } from '../data/omens';
+import { deriveStats, type StatBoost } from '../meta/stats';
 import { HUMAN, makeBot } from '../sim/bot';
 import { isBoss } from '../sim/core';
 import { challengeLeft } from '../sim/loot';
@@ -165,14 +166,19 @@ export class StageScene extends Phaser.Scene {
   private dream: DreamContext | null = null;
   private heroProfile!: Profile;
   private amulets: AmuletId[] = [];
+  private boost: StatBoost = {};
+  private omens: OmenPick = {};
 
   constructor() { super('stage'); }
 
-  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext }): void {
+  init(data: { stageId?: string; auto?: { speed: number; index: number; total: number }; dream?: DreamContext; omens?: OmenPick }): void {
     this.stage = findStage(data.stageId ?? '1-1') ?? STAGE_BY_ID.get('1-1')!;
     this.training = isTrainingId(this.stage.id);
     this.dream = isDreamId(this.stage.id) ? data.dream ?? null : null;
     this.auto = data.auto && !this.training && !this.dream ? { ...data.auto } : null;
+    /* Presságios da campanha: só os de combate, e só em fase comum */
+    this.omens = !this.training && !this.dream && !this.auto && this.stage.index >= 0 ? cleanOmens(data.omens, true) : {};
+    this.boost = this.dream?.boost ?? {};
   }
 
   create(): void {
@@ -182,8 +188,8 @@ export class StageScene extends Phaser.Scene {
     /* a caçada automática muda de semente a cada partida, para não repetir a mesma luta dez vezes */
     const seed = D ? (parseDreamId(this.stage.id)?.seed ?? 1) | 1 : 7919 + this.stage.index * 131 + (this.auto ? (profile.life.runs + 1) * 977 : 0);
     this.world = createWorld({
-      stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets), seed,
-      ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : {}),
+      stageId: this.stage.id, level: this.stage.level, rooms: this.stage.rooms, stats: deriveStats(profile, D?.carry.blessings ?? [], this.amulets, this.boost), seed,
+      ranked: isTowerId(this.stage.id) || !!D, ...(D ? { carry: D.carry, foes: D.foes } : omenWeight(this.omens) > 0 ? { foes: omenFoes(this.omens) } : {}),
     });
     this.bot = this.auto ? makeBot(profile, { ...HUMAN, seed: seed & 0xffff }) : null;
     this.autoPickT = 0; this.autoChip = null; this.autoHint = null; this.meter = newMeter(); this.meterTxt = []; this.meterLegend = []; this.hpLag = 1; this.slotCd = []; this.synTiers = { ...this.world.stats.patronTiers };
@@ -371,6 +377,7 @@ export class StageScene extends Phaser.Scene {
         targets: this.fade, alpha: 1, duration: 300,
         onComplete: () => session.onStageEnd({
           stageId: this.stage.id, won, time: w.time, deaths: w.deaths, roomsCleared: w.roomsCleared, kills: w.kills, perfects: w.perfects, hitsTaken: w.hitsTaken, blessings: w.blessings.slice(), tally: this.tally, foundGold: w.loot.gold, chests: w.loot.chests,
+          omens: omenWeight(this.omens),
           left: { hpFrac: Math.max(0, w.player.hp) / w.stats.maxHp, potions: w.player.potions, supremo: w.player.supremo, revives: w.revives, altarDry: w.altarDry }, trial: w.challenge?.state ?? null,
         }),
       });
@@ -904,7 +911,7 @@ export class StageScene extends Phaser.Scene {
   }
 
   private pickBlessing(i: number): void {
-    const profile = this.heroProfile, amulets = this.amulets, restat = (b: BlessingId[]) => deriveStats(profile, b, amulets);
+    const profile = this.heroProfile, amulets = this.amulets, boost = this.boost, restat = (b: BlessingId[]) => deriveStats(profile, b, amulets, boost);
     if (this.world.offer ? chooseOffer(this.world, i, restat) : chooseBlessing(this.world, i, restat)) { this.latch.attack = false; this.clearCards(); this.handleEvents(); }
   }
 

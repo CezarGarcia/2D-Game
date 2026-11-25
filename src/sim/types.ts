@@ -70,6 +70,8 @@ export interface Player {
   stoneT: number; wolfT: number; orbT: number; orbHit: Record<number, number>; orbPower: number;
   /** Último elemento usado num feitiço (o cajado dispara com ele). */
   lastElement: ElementId;
+  /** Contador do Aspecto da arma (o cajado da Cuca alterna o elemento a cada orbe). */
+  aspectN: number;
   /** Efeitos de estado no herói, vindos dos monstros. */
   burnT: number; burnTick: number; poisonT: number; poisonTick: number; curseT: number; crackT: number; confuseT: number; wetT: number; sleepT: number;
   /** Feitiços apagados (segundos; Infinity até o fim da sala) e o roubado pelo Saci. */
@@ -248,7 +250,8 @@ export interface StageConfig {
   /** O Sonho: o que o herói traz do nó anterior, no lugar de começar inteiro. */
   carry?: Carry;
   /** Multiplicadores de vida e de dano dos monstros (maldições de Causo e, depois, os Presságios). */
-  foes?: { hp: number; damage: number };
+  /** Monstros mais fortes (maldição e Presságios): vida, dano, tempo de preparo do golpe, modificadores a mais nas elites e vida dos chefes. */
+  foes?: { hp: number; damage: number; windup?: number; eliteMods?: number; bossHp?: number };
 }
 
 /** O que passa de uma sala do Sonho para a seguinte. As bênçãos já têm que estar contadas em `stats`. */

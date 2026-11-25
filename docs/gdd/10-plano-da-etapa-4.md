@@ -12,7 +12,7 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 | 1 · Conveniências e coleção | **Feita** |
 | 2 · Bênçãos com padrinho | **Feita** |
 | 3 · O Sonho, o núcleo | **Feita** |
-| 4 · Roda, Presságios, Cordéis e Aspectos | A fazer |
+| 4 · Roda, Presságios, Cordéis e Aspectos | **Feita** |
 | 5 · Aldeia, companheiros, pós-jogo e exagero | A fazer |
 
 ### O que mudou em relação ao plano nas fases 0 e 1
@@ -59,6 +59,33 @@ Como construir o que o [09 · O Sonho e a rejogabilidade](09-sonho-e-rejogabilid
 - **Calibração** (`npx vite-node tests/calib-sonho.ts`, 40 noites, facão, jogador automático que erra como gente): nível 22 com 2 capítulos, 45% de noites completas; nível 38 com 4 capítulos, 73%; nível 60 com 8 capítulos, 35%. Cerca de 10 salas por noite. A maior parte das quedas é no segundo trecho, sem passar de 70% em nenhum.
 - **Duração.** O jogador automático luta de 5 a 7 minutos por noite; com as escolhas no meio, uma pessoa deve levar de 15 a 20. É menos que os 25 a 35 do 09, de propósito nesta primeira versão: a Roda, os Presságios e os Cordéis da fase 4 alongam a noite. Falta medir com gente jogando.
 - **Erro corrigido no caminho.** Da faixa de cima do mapa só se chegava à Fonte, e da de baixo, só à Feira. Agora as duas ficam ao alcance de qualquer faixa.
+
+### O que mudou em relação ao plano na fase 4
+
+- **Roda do Saci.** Um nó novo do mapa (no máximo um por trecho, do quarto passo em diante), que só aparece depois de libertar o Saci. A conta fica em `src/meta/roda.ts`, as regras em `src/meta/dream.ts` e a tela em `src/ui/roda.ts`.
+  - **A grade tem três padrinhos**, sorteados entre os libertados e puxados pelos que o herói já segue, mais Gorro, Vintém e Olho. Com os sete padrinhos na grade quase nunca fecharia linha.
+  - **Chances, com a build vazia:** 57% de alguma linha, 41% de bênção e 0,5% de sorte grande por giro. O painel mostra a conta exata, somando todas as grades possíveis (uns 10 milhões); ela é feita em fatias para a tela não travar, e um teste confere contra 100 mil giros.
+  - **Sorte grande são 4 linhas do mesmo padrinho num giro**, e não a grade inteira igual, que sairia uma vez em 20 mil giros. Ela desperta na hora uma bênção à escolha.
+  - **Receber é um passo à parte do giro:** depois de girar dá para usar o Pulo (gira de novo uma coluna) e o Assobio (troca uma casa por Gorro) antes de receber.
+  - **Giros:** um grátis por Roda, depois 20, 40 e 80 vinténs. Três giros seguidos sem linha garantem uma no próximo.
+- **Presságios.** Os doze do 09, em `src/data/omens.ts`, com estas diferenças:
+  - **Os de combate ficaram mais leves** que na tabela do 09: +12% de vida, +10% de dano e +7% de velocidade de ataque por grau, e chefes com +30% de vida. Com os números do 09 (+20%, +15%, +10%), Peso 8 derrubava o jogador automático de 70% para 3% de noites vencidas.
+  - **Chefe Teimoso** dá vida ao chefe em vez de uma fase a mais. **Poucas Velas** corta a cura da Fonte (metade, depois nada), porque o trecho só tem uma. **Pressa** não encerra a noite: passou do tempo de luta do trecho (5, 4 ou 3 minutos), os monstros batem 50% mais forte até o chefe.
+  - **A primeira noite de todas não aceita Presságios.**
+  - **Na campanha**, um botão no painel da fase abre os cinco Presságios de combate, até Peso 10, nas fases que já têm 3 estrelas, depois que o Sonho abre. Valem só ao jogar na mão. Cada ponto dá +4% de chance de raridade maior por item e +3% de ouro, e o maior Peso vencido fica anotado na fase.
+- **Cordéis.** Vinte folhetos, com três níveis, em `src/data/cordeis.ts`. O Fôlego começa em 5 e a **Casa de Cordel**, uma construção nova da Aldeia com cinco níveis, leva até 20. Os Cordéis estão liberados desde que o Sonho abre; a Casa só aumenta o Fôlego. Equipar um folheto de cada custo, de 1 a 5, é o Cordel Completo (+10% de Lembranças). Vários efeitos são diferentes da tabela de exemplo do 09, para caberem nas regras que já existem; o Fiado do Saci, por exemplo, dá giros grátis na Roda em vez de compra a prazo na Feira.
+- **Aspectos de arma.** Doze, dois por arma, comprados com Lembranças na aba Sonho (120 e 180) e válidos também na campanha. Cada um é lido num ponto só da simulação: aparar (facão), tiro carregado (arco), golpe carregado (borduna), estocada (zagaia), último corte e esquiva perfeita (peixeiras) e orbe (cajado).
+- **Conteúdo.** Mais 20 amuletos (são 40) e mais 10 causos (são 20), além de 10 conquistas da fase.
+- **Perfil na versão 4:** `cordeis`, `aspects`, os recordes da Roda e do Peso, e o maior Peso vencido em cada fase. Uma noite que ficou pela metade na versão 3 continua de onde parou.
+- **Calibração** (40 noites, nível 38 com 4 capítulos, facão, jogador automático que erra como gente):
+
+  | | Peso 0 | Peso 8 | Peso 16 |
+  |---|---|---|---|
+  | Sem Cordéis | 70% | 20% | 10% |
+  | Com um kit de meio de jogo (Fôlego 14) | 95% | 70% | 30% |
+
+  O Peso 16 ficou na meta (10% a 25%) sem Cordéis. Com Cordéis o Peso 0 fica fácil, de propósito: é o que empurra o jogador para os Presságios.
+- **Ficou para a fase 5:** o chefe misturado ("Eco"), a Noite Funda, os folhetos rasgados que liberam itens no sorteio e as falas dos Encantados ao acordar.
 
 ## O que o código atual já dá
 

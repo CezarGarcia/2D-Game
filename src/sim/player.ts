@@ -93,6 +93,10 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
     hits++;
   }
   if (last && hits > 0) finisherGround(w, p.x + Math.cos(p.aim) * range * 0.7, p.y + Math.sin(p.aim) * range * 0.7);
+  if (last && s.aspect === 'peixeirasLampiao') {
+    for (const off of [-0.13, 0.13]) { const pr = shot(w, 'arrow', p.x + Math.cos(p.aim + off) * 20, p.y + Math.sin(p.aim + off) * 20, p.aim + off, PLAYER.bow.speed, 420, weaponDamage(w, 0.6)); pr.pierce = true; }
+    emit(w, { type: 'shoot', x: p.x, y: p.y, ang: p.aim, value: 0 });
+  }
   if (hits > 0) {
     p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * s.manaPerHitMult * hits);
     p.perfectT = 0; p.contraT = 0;
@@ -106,6 +110,10 @@ function meleeHit(w: World, a: Swing, last: boolean): void {
 /** Disparo do cajado: um orbe com o último elemento usado num feitiço. */
 function fireStaff(w: World, aim: number): void {
   const p = w.player, s = w.stats, C = PLAYER.weapons.cajado, n = 1 + s.projectiles;
+  if (s.aspect === 'cajadoCuca') {
+    const els = s.loadout.filter((id): id is SpellId => !!id).map((id) => SPELLS[id].element);
+    if (els.length) p.lastElement = els[p.aspectN++ % els.length];
+  }
   for (let i = 0; i < n; i++) {
     const a = aim + (i - (n - 1) / 2) * 0.12;
     const pr = shot(w, 'staff', p.x + Math.cos(a) * 26, p.y - 4 + Math.sin(a) * 26, a, C.speed, C.range, weaponDamage(w, C.mult));
@@ -123,15 +131,30 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
   if (s.weapon === 'borduna') {
     const H = PLAYER.weapons.borduna.heavy, k = 0.4 + 0.6 * charge, cx = p.x + Math.cos(aim) * H.offset, cy = p.y + Math.sin(aim) * H.offset, r = H.radius * s.reachMult;
     const dmg = weaponDamage(w, H.mult * k * s.thirdHitMult);
+    let struck = 0;
     for (const e of w.enemies) {
       if (!hittable(e) || Math.hypot(e.x - cx, e.y - cy) > r + e.radius * 0.5) continue;
       damageEnemy(w, e, dmg, 'melee', aim);
+      struck++;
       finisher(w, e);
       if (e.hp <= 0) continue;
       if (charge >= 0.6) { e.crackT = Math.max(e.crackT, H.crack); if (isBoss(e)) e.posture = Math.min(100, e.posture + H.posture); }
       if (s.uniques.garraDoMapinguari) { e.crackT = Math.max(e.crackT, 8); if (!isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; } }
     }
     lootHit(w, (x, y, rr) => Math.hypot(x - cx, y - cy) <= r + rr * 0.5);
+    if (s.aspect === 'bordunaPaje' && struck > 0) healPlayer(w, s.maxHp * Math.min(0.12, 0.03 * struck));
+    if (s.aspect === 'bordunaMapinguari') {
+      /* a fenda segue em linha a partir de onde a borduna bateu */
+      const L = 300, ex = cx + Math.cos(aim) * L, ey = cy + Math.sin(aim) * L;
+      for (const e of w.enemies) {
+        if (!hittable(e)) continue;
+        const k = Math.max(0, Math.min(1, ((e.x - cx) * (ex - cx) + (e.y - cy) * (ey - cy)) / (L * L)));
+        if (Math.hypot(e.x - (cx + (ex - cx) * k), e.y - (cy + (ey - cy) * k)) > 34 + e.radius) continue;
+        damageEnemy(w, e, dmg * 0.6, 'melee', aim, false, 'terra');
+        if (e.hp > 0 && !isBoss(e)) { e.stunT = Math.max(e.stunT, 1); e.tele = null; }
+      }
+      emit(w, { type: 'thrust', x: ex, y: ey, x2: cx, y2: cy, ang: aim });
+    }
     finisherGround(w, cx, cy);
     emit(w, { type: 'heavy', x: cx, y: cy, value: r });
   } else {
@@ -140,7 +163,16 @@ function releaseHeavy(w: World, aim: number, charge: number): void {
     for (const e of w.enemies) {
       if (!hittable(e)) continue;
       const L2 = len * len, k = Math.max(0, Math.min(1, ((e.x - p.x) * (ex - p.x) + (e.y - p.y) * (ey - p.y)) / L2));
-      if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) { damageEnemy(w, e, dmg, 'melee', aim); finisher(w, e); }
+      if (Math.hypot(e.x - (p.x + (ex - p.x) * k), e.y - (p.y + (ey - p.y) * k)) < Z.width / 2 + e.radius) {
+        damageEnemy(w, e, dmg, 'melee', aim); finisher(w, e);
+        if (s.aspect === 'zagaiaPescador' && e.hp > 0) {
+          applyElement(w, e, 'agua');
+          if (!isBoss(e)) { const d = Math.hypot(e.x - p.x, e.y - p.y) || 1, to = Math.max(60, d - 90); e.x = p.x + ((e.x - p.x) / d) * to; e.y = p.y + ((e.y - p.y) / d) * to; e.kx = 0; e.ky = 0; }
+        }
+      }
+    }
+    if (s.aspect === 'zagaiaBoitata') {
+      for (const k of [0.3, 0.6, 0.9]) w.zones.push({ id: w.nextId++, kind: 'fire', x: p.x + (ex - p.x) * k, y: p.y + (ey - p.y) * k, r: 44, t: 0, dur: 2.6, tick: 0.5, power: s.weaponDamage * s.damageMult * 0.3 });
     }
     finisherGround(w, (p.x + ex) / 2, (p.y + ey) / 2);
     lootHit(w, (x, y, rr) => {
@@ -517,6 +549,10 @@ export function updateProjectiles(w: World, dt: number): void {
       }
       if (pr.kind === 'staff') {
         damageEnemy(w, e, pr.damage, 'arrow', ang, false, pr.element ?? null);
+        if (s.aspect === 'cajadoBenzedeira') {
+          for (const o of w.enemies.slice()) if (o !== e && hittable(o) && Math.hypot(o.x - e.x, o.y - e.y) <= 70 + o.radius) damageEnemy(w, o, pr.damage * 0.4, 'arrow', Math.atan2(o.y - e.y, o.x - e.x), false, pr.element ?? null);
+          emit(w, { type: 'heavy', x: e.x, y: e.y, value: 70 });
+        }
         p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 0.6 * s.manaPerHitMult);
         if (!pr.pierce) return false;
         pr.hit.push(e.id);
@@ -562,7 +598,11 @@ export function updateProjectiles(w: World, dt: number): void {
         return false;
       }
       damageEnemy(w, e, pr.damage, 'arrow', ang);
-      if (pr.charged && pr.kind === 'arrow') { finisher(w, e); finisherGround(w, e.x, e.y); }
+      if (pr.charged && pr.kind === 'arrow') {
+        finisher(w, e); finisherGround(w, e.x, e.y);
+        if (s.aspect === 'arcoCarcara' && e.hp > 0) e.markT = Math.max(e.markT, 5);
+        if (s.aspect === 'arcoIara') { for (const o of w.enemies.slice()) if (hittable(o) && Math.hypot(o.x - e.x, o.y - e.y) <= 95 + o.radius) applyElement(w, o, 'agua'); emit(w, { type: 'heavy', x: e.x, y: e.y, value: 95 }); }
+      }
       p.mana = Math.min(s.maxMana, p.mana + PLAYER.manaPerHit * 0.6 * s.manaPerHitMult);
       if (!pr.pierce) return false;
       pr.hit.push(e.id);

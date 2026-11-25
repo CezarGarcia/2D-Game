@@ -20,9 +20,14 @@ import { BUILDINGS, BUILDING_ORDER } from '../data/village';
 import {
   abandonNight, build, buildCost, buyAmulet, buyBlessing, buyHeal, causoAffordable, chooseAmulet, chooseBlessingOffer, chooseCauso, currentNode, currentStageId, currentTrecho, defaultChoice,
   dreamChapters, enterNode, feiraPrice, fountainHeal, isDreamUnlocked, leaveNode, memoryBonus, nightOptions, reachable, removeBlessing, rerollFeira, runStats, startNight, upgradable, useFountain, validChoice,
+  breath, equippedCordeis, forgottenSlot, isLate,
   type DreamRun, type NightChoice, type NightEnd, type Resolved,
 } from '../meta/dream';
+import { OMENS, OMEN_ORDER, HURRY_SECONDS, omenGrade, omenMemories, omenWeight } from '../data/omens';
+import { CORDEIS, cordelCost, type CordelId } from '../data/cordeis';
 import { MAIN_H, MAIN_W, type Ctx } from './ctx';
+import { rodaPanel } from './roda';
+import { aspectPicks, cordeisView, omensView } from './sonhoprep';
 import { backdrop, clock, h, hdCanvas, itemIcon, num, pct, s, signed, stat, ui, type Child } from './dom';
 import { drawFigure } from './retratos';
 import { tip, type TipRow, type TipSpec } from './tip';
@@ -47,7 +52,7 @@ function amuletTip(id: AmuletId): TipSpec {
 }
 
 /** Medalha pequena de uma bênção que o herói já tem. */
-function blessChip(id: BlessingId, n: number, onClick?: () => void): HTMLElement {
+export function blessChip(id: BlessingId, n: number, onClick?: () => void): HTMLElement {
   const b = BLESSINGS[id];
   return tip(h(onClick ? 'button' : 'span', { type: onClick ? 'button' : null, class: `bchip t${b.tier}`, style: `--tc:${BLESSING_TIER_COLOR[b.tier]}`, tabindex: onClick ? null : 0, onclick: onClick ?? null },
     ui(b.icon, 26), n > 1 && h('b', null, n)), () => blessTip(id, n));
@@ -96,6 +101,10 @@ function lockedScreen(): HTMLElement {
 
 /* ---------- preparar a noite ---------- */
 
+const PREP_TABS: { id: 'heroi' | 'cordeis' | 'pressagios'; label: string; icon: string }[] = [
+  { id: 'heroi', label: 'Quem vai sonhar', icon: 'sonho' }, { id: 'cordeis', label: 'Cordéis', icon: 'cordel' }, { id: 'pressagios', label: 'Presságios', icon: 'olho' },
+];
+
 function prepScreen(c: Ctx): HTMLElement {
   const p = c.p, o = nightOptions(p), st = c.st.dream;
   let ch: NightChoice = st.choice ?? defaultChoice(p);
@@ -105,6 +114,7 @@ function prepScreen(c: Ctx): HTMLElement {
   const set = (patch: Partial<NightChoice>, fk?: string) => { st.choice = { ...ch, ...patch }; c.redraw(fk); };
   const ok = validChoice(p, ch), short = p.dream.nights === 0;
   const chapters = dreamChapters(p);
+  const worn = equippedCordeis(p), wornCost = cordelCost(worn), weight = short ? 0 : omenWeight(st.omens), bonus = short ? 0 : omenMemories(st.omens);
 
   const weapons = (['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'] as WeaponKind[]).map((w) => {
     const has = o.weapons.includes(w), on = ch.weapon === w, won = p.dream.weaponsWon.includes(w);
@@ -136,7 +146,7 @@ function prepScreen(c: Ctx): HTMLElement {
   });
 
   const start = () => {
-    if (!startNight(c.p, ch)) { c.toast('Escolha a arma e pelo menos um feitiço', 'bad'); return; }
+    if (!startNight(c.p, { ...ch, omens: st.omens })) { c.toast('Escolha a arma e pelo menos um feitiço', 'bad'); return; }
     c.commit();
   };
   const buildings = BUILDING_ORDER.map((id) => {
@@ -153,13 +163,17 @@ function prepScreen(c: Ctx): HTMLElement {
   });
 
   return h('div', 'sonho', sky(),
-    h('section', { class: 'panel sonho-prep', 'aria-label': 'Quem vai sonhar' },
-      h('div', 'sp-title', ui('sonho', 40), h('span', null, 'Quem vai sonhar')),
-      h('div', 'sp-row', h('span', 'sp-label', 'Arma'), h('div', 'sp-picks', weapons)),
-      h('div', 'sp-row tall', h('span', 'sp-label', 'Feitiços', h('em', null, `${chosen.length}/3`)), h('div', 'sp-picks wrap', spells)),
-      h('div', 'sp-row', h('span', 'sp-label', 'Companheiro'), h('div', 'sp-picks wrap', comps)),
-      sups.length > 0 && h('div', 'sp-row', h('span', 'sp-label', 'Supremo'), h('div', 'sp-picks', sups)),
-      h('div', 'sp-note', ui('heroi', 22), `O herói do Sonho tem o seu nível (${p.level}) e o equipamento desse nível. Seus itens da campanha não entram.`)),
+    h('section', { class: 'panel sonho-prep', 'aria-label': 'Antes de dormir' },
+      h('div', { class: 'sp-tabs', role: 'tablist' }, PREP_TABS.map((t) => h('button', { type: 'button', class: `sp-tab${st.tab === t.id ? ' on' : ''}`, role: 'tab', 'aria-selected': String(st.tab === t.id), 'data-fk': `prep-${t.id}`, onclick: () => { st.tab = t.id; c.redraw(`prep-${t.id}`); } },
+        ui(t.icon, 26), t.label, t.id === 'cordeis' && h('b', null, `${wornCost}/${breath(p)}`), t.id === 'pressagios' && weight > 0 && h('b', null, weight)))),
+      st.tab === 'cordeis' ? cordeisView(c) : st.tab === 'pressagios' ? omensView(c) : [
+        h('div', 'sp-row', h('span', 'sp-label', 'Arma'), h('div', 'sp-picks', weapons)),
+        h('div', 'sp-row', h('span', 'sp-label', 'Aspecto'), h('div', 'sp-picks', aspectPicks(c, ch.weapon))),
+        h('div', 'sp-row tall', h('span', 'sp-label', 'Feitiços', h('em', null, `${chosen.length}/3`)), h('div', 'sp-picks wrap', spells)),
+        h('div', 'sp-row', h('span', 'sp-label', 'Companheiro'), h('div', 'sp-picks wrap', comps)),
+        sups.length > 0 && h('div', 'sp-row', h('span', 'sp-label', 'Supremo'), h('div', 'sp-picks', sups)),
+        h('div', 'sp-note', ui('heroi', 22), `O herói do Sonho tem o seu nível (${p.level}) e o equipamento desse nível. Seus itens da campanha não entram.`),
+      ]),
     h('section', { class: 'panel sonho-side', 'aria-label': 'A noite' },
       h('div', 'ss-head',
         h('div', 'ss-name', 'O Sonho'),
@@ -167,6 +181,10 @@ function prepScreen(c: Ctx): HTMLElement {
       h('div', 'ss-facts',
         tip(h('span', 'ss-fact', ui('sonho', 24), h('b', null, `${num(p.dream.wins)}/${num(p.dream.nights)}`)), { title: 'Noites vencidas', rows: [{ icon: 'sonho', text: 'Noites dormidas', value: num(p.dream.nights) }, { icon: 'coroa', text: 'Trecho mais fundo', value: `${p.dream.bestTrecho} de ${DREAM.trechos}` }] }),
         tip(h('span', 'ss-fact', ui('mapa', 24), h('b', null, short ? '1 trecho' : `${DREAM.trechos} trechos`)), { title: short ? 'Primeira noite' : 'Uma noite', rows: [{ text: short ? 'A primeira noite é curta: um trecho só, para conhecer o caminho.' : 'Três trechos, cada um num capítulo que você já venceu, com um chefe no fim.' }, { icon: 'mapa', text: chapters.map((n) => CHAPTERS[n - 1].name).join(', '), tone: 'dim' }] }),
+        tip(h('button', { type: 'button', class: `ss-fact btnlike${weight ? ' hot' : ''}`, 'data-fk': 'fato-peso', onclick: () => { st.tab = 'pressagios'; c.redraw('prep-pressagios'); } }, ui('olho', 24), h('b', null, `Peso ${weight}`)),
+          { title: 'Presságios', icon: ui('olho', 36), sub: weight ? `+${pct(bonus)} de Lembranças` : 'Nenhum ligado', subColor: weight ? '#86e07a' : undefined, rows: weight ? OMEN_ORDER.filter((id) => omenGrade(st.omens, id) > 0).map((id) => ({ icon: OMENS[id].icon, text: OMENS[id].desc(omenGrade(st.omens, id)), tone: 'bad' as const })) : [{ text: short ? 'Abrem depois da primeira noite.' : 'Deixe a noite mais difícil e traga mais Lembranças.', tone: 'dim' as const }] }),
+        tip(h('button', { type: 'button', class: 'ss-fact btnlike', 'data-fk': 'fato-cordeis', onclick: () => { st.tab = 'cordeis'; c.redraw('prep-cordeis'); } }, ui('cordel', 24), h('b', null, `${worn.length} ${worn.length === 1 ? 'cordel' : 'cordéis'}`)),
+          { title: 'Cordéis equipados', icon: ui('cordel', 36), tag: `${wornCost}/${breath(p)}`, rows: worn.length ? worn.map((id: CordelId) => ({ icon: CORDEIS[id].icon, text: `${CORDEIS[id].name}: ${CORDEIS[id].desc(CORDEIS[id].values[(p.cordeis.levels[id] ?? 1) - 1])}` })) : [{ text: 'Nenhum folheto equipado.', tone: 'dim' as const }] }),
         h('span', 'ss-patrons', p.supremos.map((el) => tip(h('i', { style: `--ec:${ELEMENTS[el].color}`, tabindex: 0 }, ui(el, 22)), { title: `Padrinho: ${PATRONS[el].name}`, color: ELEMENTS[el].color, sub: PATRONS[el].style, rows: [{ text: 'Os altares do Sonho só trazem bênçãos dos Encantados que você já libertou.', tone: 'dim' }] })))),
       h('button', { type: 'button', class: 'btn primary big sonho-go', disabled: !ok, 'data-fk': 'dormir', onclick: start }, ui('sonho', 34), 'Dormir'),
       h('div', 'ss-vila-title', ui('descanso', 24), 'Aldeia'),
@@ -234,6 +252,7 @@ function nightMap(c: Ctx, run: DreamRun): HTMLElement {
 function heroBar(c: Ctx, run: DreamRun): HTMLElement {
   const stats = runStats(run), t = currentTrecho(run), chapter = CHAPTERS[t.chapter - 1], hp = Math.round(stats.maxHp * run.hpFrac);
   const cursed = run.curse.hp > 0 || run.curse.damage > 0;
+  const peso = omenWeight(run.omens), hurry = omenGrade(run.omens, 'pressa'), late = isLate(run), lost = forgottenSlot(run);
   return h('header', 'dbar',
     tip(h('div', 'dbar-where', ui(chapter.element ?? 'credito', 30), h('span', null, h('b', null, `Trecho ${run.trecho + 1} de ${run.map.trechos.length}`), h('em', null, chapter.name))),
       { title: chapter.name, color: chapter.element ? ELEMENTS[chapter.element].color : undefined, sub: `Monstros de nível ${t.level}`, rows: [{ icon: 'mapa', text: chapter.terrain }] }),
@@ -243,6 +262,12 @@ function heroBar(c: Ctx, run: DreamRun): HTMLElement {
     tip(stat('vintem', num(run.vintem), { size: 28, cls: 'gold' }), { title: 'Vinténs', color: '#f2c14e', icon: ui('vintem', 36), rows: [{ text: 'A moeda da noite. Paga a Feira e alguns causos, e some ao acordar.' }] }),
     tip(stat('lembranca', num(run.earned), { size: 28 }), { title: 'Lembranças desta noite', color: '#cdb8ff', icon: ui('lembranca', 36), rows: [{ text: 'Você leva todas ao acordar, mesmo se cair.' }, memoryBonus(c.p, run) > 1 ? { icon: 'lembranca', text: 'Bônus ao acordar', value: `+${pct(memoryBonus(c.p, run) - 1)}`, tone: 'ok' } : null] }),
     cursed && tip(h('span', 'dbar-curse', ui('st_amaldicoado', 26), 'Maldição'), { title: 'Maldição', color: '#c8a8ff', sub: 'Até o fim deste trecho', rows: [run.curse.hp > 0 ? { icon: 'vida', text: 'Vida dos monstros', value: `+${pct(run.curse.hp)}`, tone: 'bad' } : null, run.curse.damage > 0 ? { icon: 'dano', text: 'Dano dos monstros', value: `+${pct(run.curse.damage)}`, tone: 'bad' } : null] }),
+    peso > 0 && tip(h('span', `dbar-omen${late ? ' late' : ''}`, ui('olho', 24), h('b', null, peso), hurry > 0 && h('em', null, clock(Math.max(0, HURRY_SECONDS[hurry] - (run.clock ?? 0))))),
+      { title: `Presságios · Peso ${peso}`, color: '#c8a8ff', icon: ui('olho', 36), sub: `+${pct(omenMemories(run.omens))} de Lembranças`, subColor: '#86e07a', rows: [
+        ...OMEN_ORDER.filter((id) => omenGrade(run.omens, id) > 0).map((id) => ({ icon: OMENS[id].icon, text: OMENS[id].desc(omenGrade(run.omens, id)), tone: 'bad' as const })),
+        lost >= 0 && run.spells[lost] ? { icon: run.spells[lost]!, text: `Esquecido neste trecho: ${SPELLS[run.spells[lost]!].name}`, tone: 'warn' as const } : null,
+        hurry > 0 ? { icon: 'relogio', text: late ? 'O tempo do trecho acabou: os monstros batem 50% mais forte' : 'Tempo de luta que resta neste trecho', value: late ? undefined : clock(HURRY_SECONDS[hurry] - (run.clock ?? 0)), tone: late ? 'bad' as const : undefined } : null,
+      ] }),
     h('span', 'dbar-gap'),
     h('button', { type: 'button', class: 'btn small', 'data-fk': 'acordar', onclick: () => c.confirm({ title: 'Acordar agora?', text: `A noite acaba aqui. Você leva as ${num(Math.round(run.earned * memoryBonus(c.p, run)))} Lembranças que juntou.`, icon: 'sonho', ok: 'Acordar', danger: true, run: () => { const end = abandonNight(c.p); if (end) { c.st.dream.end = end; c.host.save(); } } }) }, ui('seta', 20), 'Acordar'));
 }
@@ -374,7 +399,7 @@ function causoPanel(c: Ctx, run: DreamRun, pend: Extract<NonNullable<DreamRun['p
 function nightScreen(c: Ctx, run: DreamRun): HTMLElement {
   const pend = run.pending, here = currentNode(run);
   const panel = pend?.kind === 'amuleto' ? amuletPick(c, pend.options) : pend?.kind === 'bencao' ? blessPick(c, run, pend.options)
-    : pend?.kind === 'feira' ? feiraPanel(c, run, pend) : pend?.kind === 'fonte' ? fontePanel(c, run) : pend?.kind === 'causo' ? causoPanel(c, run, pend) : null;
+    : pend?.kind === 'feira' ? feiraPanel(c, run, pend) : pend?.kind === 'fonte' ? fontePanel(c, run) : pend?.kind === 'causo' ? causoPanel(c, run, pend) : pend?.kind === 'roda' ? rodaPanel(c, run, pend) : null;
   const hint = pend ? null : run.at == null ? 'A noite começa. Escolha por onde entrar.' : !run.done && here ? 'Você saiu no meio desta sala. Clique nela para entrar de novo.' : 'Escolha o próximo passo.';
   return h('div', 'sonho night', sky(), h('div', 'sonho-dim'),
     h('div', { class: 'night-in', inert: !!panel }, heroBar(c, run), nightMap(c, run), hint && h('div', 'dhint', hint), carried(run)),

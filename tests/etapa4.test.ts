@@ -2,6 +2,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { AMULET_ORDER } from '../src/data/amulets';
 import { CAUSO_ORDER } from '../src/data/causos';
+import { ASPECT_ORDER } from '../src/data/aspects';
+import { CORDEL_ORDER } from '../src/data/cordeis';
 import { ACHIEVEMENTS } from '../src/data/achievements';
 import { TICK } from '../src/data/balance';
 import { BLESSING_ORDER, COMPANION_ORDER } from '../src/data/content';
@@ -175,6 +177,10 @@ describe('conquistas', () => {
     /* o Sonho e a Aldeia */
     Object.assign(p.dream, { nights: 99, wins: 99, bestTrecho: 3, total: 99_999, trials: 99, awakened: 99, compadrios: 9, synergy7: 9, weaponsWon: ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'], amuletsSeen: AMULET_ORDER.slice(), causosSeen: CAUSO_ORDER.slice() });
     p.village = { rancho: 3, mural: 3, casaDeFarinha: 3 };
+    Object.assign(p.dream, { spins: 99, jackpots: 9, bestWeight: 36 });
+    p.cordeis.levels = Object.fromEntries(CORDEL_ORDER.map((id) => [id, 1]));
+    p.aspects.owned = ASPECT_ORDER.slice();
+    p.stages['1-1'].omen = 10;
     p.equipped.arma!.rarity = 5; p.equipped.arma!.plus = 15; p.gems['fogo:6'] = 1; p.spellLevels.dardo = 10;
     const got = checkAchievements(p, DAY);
     const missing = ACHIEVEMENTS.filter((a) => !got.includes(a.id)).map((a) => `${a.id} ${achievementProgress(p, a)}/${a.target}`);

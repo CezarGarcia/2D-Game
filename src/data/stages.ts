@@ -37,7 +37,7 @@ export interface RoomDef {
   /** Provação do Sonho: a sala inteira é um desafio, com a regra dada (tempo em segundos ou golpes tomados). */
   trial?: { kind: 'ligeiro' | 'intocado'; limit: number };
   /** Sala de altar: de que padrinho são as bênçãos e até que raridade elas vão (o Sonho). */
-  altar?: { patron?: ElementId | null; maxTier?: 1 | 2 | 3 };
+  altar?: { patron?: ElementId | null; maxTier?: 1 | 2 | 3; minTier?: 1 | 2 | 3 };
   /** Torre: nível dos monstros desta sala (senão vale o da fase), andar e capítulo de onde vêm a arte e o terreno. */
   level?: number;
   floor?: number;

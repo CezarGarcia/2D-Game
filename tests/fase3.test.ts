@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { UI_ICON_KEYS } from '../src/art/uiicons';
 import { ACHIEVEMENTS } from '../src/data/achievements';
 import { AMULETS, AMULET_ORDER, AMULET_RARITY, type AmuletId } from '../src/data/amulets';
+import { ASPECT_ORDER } from '../src/data/aspects';
 import { CAUSOS, CAUSO_ORDER, type DreamEffect } from '../src/data/causos';
+import { CORDEL_ORDER } from '../src/data/cordeis';
 import { BLESSINGS, ELEMENT_ORDER, STAGE_ONLY_BLESSINGS, type BlessingId } from '../src/data/content';
 import { DREAM, dreamNight, dreamStage, isDreamId, nodeStageId, parseDreamId, type DreamNode, type NodeKind, type Trecho } from '../src/data/dream';
 import { STAGES } from '../src/data/stages';
@@ -308,7 +310,7 @@ describe('de uma sala para a outra', () => {
   it('a maldição deixa os monstros da sala mais fortes', () => {
     const p = dreamer(), run = night(p);
     enterNode(p, 0);
-    expect(dreamContext(run).foes).toEqual({ hp: 1, damage: 1 });
+    expect(dreamContext(run).foes).toMatchObject({ hp: 1, damage: 1 });
     run.curse = { hp: 0.2, damage: 0.15 };
     expect(dreamContext(run).foes.hp).toBeCloseTo(1.2);
     expect(dreamContext(run).foes.damage).toBeCloseTo(1.15);
@@ -519,8 +521,8 @@ describe('acordar', () => {
 });
 
 describe('amuletos, causos e conquistas', () => {
-  it('20 amuletos e 10 causos, todos com ícone, texto e história', () => {
-    expect(AMULET_ORDER).toHaveLength(20);
+  it('40 amuletos e 20 causos, todos com ícone, texto e história', () => {
+    expect(AMULET_ORDER).toHaveLength(40);
     for (const id of AMULET_ORDER) {
       const a = AMULETS[id];
       expect(UI_ICON_KEYS).toContain(a.icon);
@@ -528,7 +530,7 @@ describe('amuletos, causos e conquistas', () => {
       expect(a.lore.length).toBeGreaterThan(20);
       expect(AMULET_RARITY[a.rarity].price).toBeGreaterThan(0);
     }
-    expect(CAUSO_ORDER).toHaveLength(10);
+    expect(CAUSO_ORDER).toHaveLength(20);
     for (const id of CAUSO_ORDER) {
       const c = CAUSOS[id];
       expect(c.choices.length).toBeGreaterThanOrEqual(2);
@@ -563,6 +565,11 @@ describe('amuletos, causos e conquistas', () => {
     const p = dreamer(60, 8);
     Object.assign(p.dream, { nights: 99, wins: 99, bestTrecho: 3, total: 99_999, trials: 99, awakened: 99, compadrios: 9, synergy7: 9, weaponsWon: ['facao', 'arco', 'borduna', 'peixeiras', 'zagaia', 'cajado'], amuletsSeen: AMULET_ORDER.slice(), causosSeen: CAUSO_ORDER.slice() });
     p.village = { rancho: 3, mural: 3, casaDeFarinha: 3 };
+    /* as da fase 4: Roda, Presságios, Cordéis e Aspectos */
+    Object.assign(p.dream, { spins: 99, jackpots: 9, bestWeight: 36 });
+    p.cordeis.levels = Object.fromEntries(CORDEL_ORDER.map((id) => [id, 1]));
+    p.aspects.owned = ASPECT_ORDER.slice();
+    p.stages['1-1'].omen = 10;
     const got = checkAchievements(p, DAY), dream = ACHIEVEMENTS.filter((a) => a.group === 'sonho');
     expect(dream.length).toBeGreaterThanOrEqual(18);
     expect(dream.filter((a) => !got.includes(a.id)).map((a) => `${a.id} ${achievementProgress(p, a)}/${a.target}`)).toEqual([]);

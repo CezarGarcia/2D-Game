@@ -3,7 +3,7 @@
  * Nesta etapa entram as que já têm o que melhorar. A cena da Aldeia e as outras construções vêm depois.
  */
 
-export type BuildingId = 'rancho' | 'mural' | 'casaDeFarinha';
+export type BuildingId = 'rancho' | 'mural' | 'casaDeFarinha' | 'casaDeCordel';
 
 export interface BuildingDef {
   id: BuildingId;
@@ -38,6 +38,16 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
       { cost: 50, desc: '+10% de ouro nas fases da campanha' },
       { cost: 140, desc: '+20% de ouro nas fases da campanha' },
       { cost: 300, desc: '+30% de ouro nas fases da campanha' },
+    ],
+  },
+  casaDeCordel: {
+    id: 'casaDeCordel', name: 'Casa de Cordel', icon: 'cordel', about: 'Um varal de folhetos. Quanto mais corda, mais história cabe.',
+    levels: [
+      { cost: 70, desc: 'Fôlego 8 para equipar Cordéis' },
+      { cost: 130, desc: 'Fôlego 11 para equipar Cordéis' },
+      { cost: 210, desc: 'Fôlego 14 para equipar Cordéis' },
+      { cost: 320, desc: 'Fôlego 17 para equipar Cordéis' },
+      { cost: 460, desc: 'Fôlego 20 para equipar Cordéis' },
     ],
   },
 };

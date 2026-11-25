@@ -47,6 +47,8 @@ export const UI_ICON_KEYS = [
   'almanaque', 'conquista', 'treino', 'auto', 'filtro', 'build', 'trocar',
   // o Sonho
   'sonho', 'lembranca', 'vintem', 'amuleto',
+  // fase 4 do Sonho: Roda do Saci, Presságios e Cordéis
+  'roda', 'gorro', 'olho', 'cordel',
 ] as const;
 export type UiIconKey = typeof UI_ICON_KEYS[number];
 
@@ -1177,6 +1179,38 @@ var I = {
     P(c, function (c) { el(c, 20, 20, 10.4, 10.4); }, '#e9a565', { k: .8, lw: 1.5, sh: 'rgba(110,40,0,.3)' });
     P(c, function (c) { rr(c, 16.6, 16.6, 6.8, 6.8, 1.2); }, '#3a2014', { k: 0, lw: 1.5 });
     shine(c, 13, 12.6, 3, 1.4, -.6, .6);
+  },
+  /* Roda do Saci: um cata-vento de quatro pás */
+  roda: function (c) {
+    bar(c, [20, 22, 20, 37], LE, 3);
+    var cols = [TEM, RED, '#4aa8ea', '#5fbf5a'];
+    for (var i = 0; i < 4; i++) {
+      (function (i) {
+        var a = i * Math.PI / 2 - .3;
+        P(c, function (c) { c.moveTo(20, 18); c.lineTo(20 + Math.cos(a) * 15, 18 + Math.sin(a) * 15); c.quadraticCurveTo(20 + Math.cos(a + .9) * 14, 18 + Math.sin(a + .9) * 14, 20 + Math.cos(a + 1.35) * 7, 18 + Math.sin(a + 1.35) * 7); c.closePath(); }, cols[i], { k: 1.2, lw: 2, hi: 'rgba(255,255,255,.4)' });
+      })(i);
+    }
+    odot(c, 20, 18, 2.6, GOLD);
+  },
+  /* gorro do Saci: carapuça vermelha com a ponta caída */
+  gorro: function (c) {
+    P(c, function (c) { c.moveTo(7, 30); c.quadraticCurveTo(8, 12, 21, 9); c.quadraticCurveTo(30, 8, 33.6, 15.6); c.quadraticCurveTo(35, 20, 31, 22); c.quadraticCurveTo(29.6, 17, 26, 17); c.quadraticCurveTo(31, 24, 31, 30); c.closePath(); }, RED, { k: 2, lw: 2.3, sh: 'rgba(110,0,0,.42)', hi: 'rgba(255,200,180,.45)' });
+    P(c, function (c) { rr(c, 5, 28, 28, 6, 3); }, '#f1ead8', { k: .8, lw: 2 });
+    odot(c, 32.4, 23.4, 2.8, '#f1ead8');
+  },
+  /* Olho do Esquecimento: um olho sem cor, aberto */
+  olho: function (c) {
+    P(c, function (c) { c.moveTo(4, 20); c.quadraticCurveTo(20, 4, 36, 20); c.quadraticCurveTo(20, 36, 4, 20); c.closePath(); }, '#d8d2e6', { k: 1.6, lw: 2.3, sh: SSH, hi: 'rgba(255,255,255,.5)' });
+    P(c, function (c) { el(c, 20, 20, 7.6, 7.6); }, SOM, { k: 1.2, lw: 1.8, sh: SSH });
+    dot(c, 20, 20, 3.6, '#1c0f2a'); shine(c, 17.4, 17.4, 1.7, 1.2, -.6, .85);
+  },
+  /* cordel: folheto pendurado num barbante por um pregador */
+  cordel: function (c) {
+    rope(c, function (c) { c.moveTo(3, 8); c.quadraticCurveTo(20, 12, 37, 8); }, '#c9a26b', 1.8);
+    P(c, function (c) { c.moveTo(10, 12); c.lineTo(30, 12); c.lineTo(31.4, 35); c.lineTo(8.6, 35); c.closePath(); }, CRM, { k: 1.4, lw: 2.2, sh: 'rgba(120,80,20,.35)', hi: 'rgba(255,255,255,.45)' });
+    P(c, function (c) { rr(c, 13, 16.4, 14, 9.6, 1); }, '#3a2014', { k: 0, lw: 1.3 });
+    ln(c, [13, 29.4, 27, 29.4], 'rgba(58,32,20,.75)', 1.6); ln(c, [13, 32.2, 23, 32.2], 'rgba(58,32,20,.75)', 1.6);
+    P(c, function (c) { rr(c, 17.6, 7, 4.8, 8, 1.2); }, LE, { k: .6, lw: 1.8 });
   },
   /* amuleto: medalha num cordão */
   amuleto: function (c) {

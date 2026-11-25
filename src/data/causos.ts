@@ -33,7 +33,9 @@ export interface CausoChoice {
   effects: DreamEffect[];
 }
 
-export type CausoId = 'matinta' | 'fulozinha' | 'boto' | 'pisadeira' | 'saci' | 'maeDoOuro' | 'mula' | 'iara' | 'lobisomem' | 'cuca';
+export type CausoId = 'matinta' | 'fulozinha' | 'boto' | 'pisadeira' | 'saci' | 'maeDoOuro' | 'mula' | 'iara' | 'lobisomem' | 'cuca'
+  /* fase 4 */
+  | 'pegadas' | 'boitata' | 'mapinguari' | 'corpoSeco' | 'capelobo' | 'teiniagua' | 'almaPenada' | 'boiBarroso' | 'cobraGrande' | 'espantalho';
 
 export interface CausoDef {
   id: CausoId;
@@ -142,6 +144,103 @@ export const CAUSOS: Record<CausoId, CausoDef> = {
       { label: 'Agradecer e recusar', note: 'Ela ri e joga umas moedas, pela educação.', effects: [{ t: 'vintem', n: 15 }] },
     ],
     lore: 'A Cuca das cantigas de ninar pega criança que não quer dormir. Tem cara de jacaré, cabelo desgrenhado e voz de assustar. Dorme uma noite a cada sete anos.',
+  },
+  /* ---- fase 4 ---- */
+  pegadas: {
+    id: 'pegadas', title: 'Pegadas ao contrário', figure: 'curupira', color: '#7bd45a', needs: 'natureza',
+    text: 'O rastro no barro vai para um lado, mas o riso vem do outro. O Curupira, que você libertou, ainda gosta de ver gente andando em círculo.',
+    choices: [
+      { label: 'Seguir as pegadas', note: 'Você roda a mata inteira. Ele acha graça e paga a brincadeira.', effects: [{ t: 'vida', frac: -0.15 }, { t: 'bencao', patron: 'natureza', tier: 2 }] },
+      { label: 'Ir pelo lado contrário', effects: [{ t: 'vintem', n: 20 }] },
+      { label: 'Deixar fumo num toco', effects: [{ t: 'pocao', n: -1 }, { t: 'amuleto', rarity: 'comum' }] },
+    ],
+    lore: 'O Curupira tem os pés virados para trás. Quem segue o rastro dele anda para longe de onde ele está, e se perde. Fumo e cachaça num toco compram a passagem.',
+  },
+  boitata: {
+    id: 'boitata', title: 'O fogo que corre', figure: 'boitata_free', color: '#ff7a2a', needs: 'fogo',
+    text: 'Uma cobra de fogo atravessa o campo queimado sem queimar mais nada. Ela para e olha para você com olhos demais.',
+    choices: [
+      { label: 'Olhar de volta', note: 'Dizem que cega. Só arde, e fica alguma coisa acesa em você.', effects: [{ t: 'vida', frac: -0.2 }, { t: 'bencao', patron: 'fogo', tier: 2 }] },
+      { label: 'Fechar os olhos e ficar parado', effects: [{ t: 'lembrancas', n: 6 }] },
+    ],
+    lore: 'O Boitatá é a cobra de fogo que guarda os campos de quem põe fogo à toa. Comeu os olhos dos bichos mortos na grande enchente, e por isso brilha.',
+  },
+  mapinguari: {
+    id: 'mapinguari', title: 'Um grito na mata fechada', figure: 'mapinguari_free', color: '#c99a5a', needs: 'terra',
+    text: 'Um grito parecido com o de gente vem do fundo da mata, e o cheiro chega antes. O Mapinguari, de volta ao que era, cobra respeito de quem passa.',
+    choices: [
+      { label: 'Responder ao grito', note: 'Ele vem ver quem é. Os bichos da mata vêm atrás.', effects: [{ t: 'amuleto', rarity: 'raro' }, { t: 'maldicao', damage: 0.15 }] },
+      { label: 'Deixar uma oferenda', effects: [{ t: 'pocao', n: -1 }, { t: 'subir' }] },
+      { label: 'Tapar o nariz e seguir', effects: [{ t: 'lembrancas', n: 4 }] },
+    ],
+    lore: 'Na Amazônia, o Mapinguari é um bicho peludo, de um olho só e a boca na barriga. Quem responde ao grito dele na mata não volta para contar.',
+  },
+  corpoSeco: {
+    id: 'corpoSeco', title: 'O que a terra não quis', figure: 'corposeco', color: '#c99a5a',
+    text: 'Encostado numa cerca, um homem seco como couro curtido segura um embrulho contra o peito. A terra o devolveu duas vezes.',
+    choices: [
+      { label: 'Pegar o embrulho', note: 'Tem moeda dentro. Ele vem atrás, devagar, o trecho inteiro.', effects: [{ t: 'vintem', n: 55 }, { t: 'maldicao', hp: 0.2 }] },
+      { label: 'Cavar uma cova para ele', note: 'Dá trabalho, e desta vez a terra aceita.', effects: [{ t: 'vida', frac: -0.1 }, { t: 'lembrancas', n: 12 }] },
+      { label: 'Passar longe', effects: [] },
+    ],
+    lore: 'O Corpo-Seco foi tão ruim em vida, com a mãe principalmente, que nem a terra o aceita. Fica vagando, seco, agarrado nas árvores da beira da estrada.',
+  },
+  capelobo: {
+    id: 'capelobo', title: 'Focinho de tamanduá', figure: 'capelobo', color: '#9a6aff', needs: 'terra',
+    text: 'Perto do seu fogo, um bicho alto, de focinho comprido, fareja o ar. Ele gosta de miolo de cachorro novo e de quem dorme pesado.',
+    choices: [
+      { label: 'Mirar no umbigo', note: 'É o único lugar em que ele sente. Ele larga o que carregava e some.', effects: [{ t: 'vida', frac: -0.15 }, { t: 'amuleto' }] },
+      { label: 'Apagar o fogo e esperar', effects: [{ t: 'vintem', n: -15 }, { t: 'vida', frac: 0.2 }] },
+      { label: 'Subir numa árvore', effects: [{ t: 'lembrancas', n: 5 }] },
+    ],
+    lore: 'O Capelobo do Maranhão e do Pará tem corpo de homem, focinho de tamanduá e pé redondo como fundo de garrafa. Só morre com um golpe no umbigo.',
+  },
+  teiniagua: {
+    id: 'teiniagua', title: 'A lagartixa de rubi', figure: 'teiniagua', color: '#ff7ad9', needs: 'sombra',
+    text: 'Uma lagartixa com uma pedra vermelha acesa na cabeça bebe água na lagoa. Dizem que é uma princesa moura, e que a pedra vale um reino.',
+    choices: [
+      { label: 'Pegar a pedra', note: 'Ela deixa. O preço vem depois, e você nem lembra qual foi.', effects: [{ t: 'amuleto', rarity: 'raro' }, { t: 'esquecer' }] },
+      { label: 'Guardar a lagartixa numa guampa', note: 'De noite ela conversa, e ensina.', effects: [{ t: 'vintem', n: -25 }, { t: 'bencao', tier: 2 }] },
+      { label: 'Deixar ela beber', effects: [{ t: 'lembrancas', n: 5 }] },
+    ],
+    lore: 'A Teiniaguá da Salamanca do Jarau, no Rio Grande do Sul, é uma princesa moura virada em lagartixa, com um carbúnculo na cabeça. Quem se encanta por ela fica preso na furna.',
+  },
+  almaPenada: {
+    id: 'almaPenada', title: 'Alma na porteira', figure: 'almapenada', color: '#9fe0fa', needs: 'sombra',
+    text: 'A porteira abre e fecha sozinha. Do lado de lá, uma claridade com forma de gente pede uma vela e uma reza, e aponta para o pé de um mourão.',
+    choices: [
+      { label: 'Rezar por ela', note: 'Custa uma parte do seu sossego. Ela vai embora em paz.', effects: [{ t: 'pocao', n: -1 }, { t: 'lembrancas', n: 14 }] },
+      { label: 'Cavar onde ela aponta', note: 'Tem um pote de moedas. E agora ela não tem mais motivo para ficar longe de você.', effects: [{ t: 'vintem', n: 50 }, { t: 'maldicao', damage: 0.12 }] },
+    ],
+    lore: 'Quem morre deixando dinheiro enterrado não descansa. A alma aparece para alguém de coragem, mostra o lugar e pede missa em troca.',
+  },
+  boiBarroso: {
+    id: 'boiBarroso', title: 'O boi que ninguém laça', figure: 'boibarroso', color: '#c99a5a', needs: 'sombra',
+    text: 'Um boi barroso, enorme, pasta sozinho no meio do campo. Tem sete laços partidos pendurados nos chifres.',
+    choices: [
+      { label: 'Tentar laçar', note: 'Ele arrasta você por meia légua. No fim, um dos laços velhos fica na sua mão.', effects: [{ t: 'vida', frac: -0.2 }, { t: 'amuleto', rarity: 'raro' }] },
+      { label: 'Abrir a porteira para ele', note: 'Ele passa devagar. Dá tempo de descansar.', effects: [{ t: 'vida', frac: 0.2 }] },
+    ],
+    lore: 'O Boi Barroso das cantigas gaúchas é o boi que nenhum laçador segura. "Meu boi barroso, que eu já contava perdido, deixando o rastro na areia, logo foi reconhecido."',
+  },
+  cobraGrande: {
+    id: 'cobraGrande', title: 'Dois faróis no rio', figure: 'sucuri', color: '#4fb6f0', needs: 'agua',
+    text: 'No meio do rio, de noite, duas luzes vêm contra a correnteza. Não é barco. A canoa balança antes de a onda chegar.',
+    choices: [
+      { label: 'Atravessar assim mesmo', note: 'A Cobra Grande passa por baixo. Quem atravessa com ela aprende o rio.', effects: [{ t: 'vida', frac: -0.25 }, { t: 'bencao', patron: 'agua', tier: 3 }] },
+      { label: 'Esperar amanhecer', note: 'Você descansa. Os bichos do trecho também se juntam.', effects: [{ t: 'vida', frac: 0.3 }, { t: 'maldicao', hp: 0.15 }] },
+    ],
+    lore: 'A Boiuna, ou Cobra Grande, mora no fundo dos rios da Amazônia. De noite os olhos dela parecem dois faróis, e ela vira embarcação para enganar quem está na margem.',
+  },
+  espantalho: {
+    id: 'espantalho', title: 'O dono da roça', figure: 'espantalho', color: '#ffd23f',
+    text: 'No meio de uma roça abandonada, um espantalho de chapéu de palha segura um saco de estopa. O milho em volta dele está todo de pé.',
+    choices: [
+      { label: 'Trocar de chapéu com ele', effects: [{ t: 'vintem', n: -20 }, { t: 'amuleto', rarity: 'comum' }] },
+      { label: 'Colher o milho', note: 'Dá para o caminho todo. Ele vira a cabeça quando você sai.', effects: [{ t: 'pocao', n: 1 }, { t: 'maldicao', hp: 0.1 }] },
+      { label: 'Endireitar o espantalho', effects: [{ t: 'lembrancas', n: 6 }] },
+    ],
+    lore: 'Espantalho bem feito guarda a roça de passarinho. Mal feito, dizem os antigos, guarda de gente também, e cobra de quem colhe sem plantar.',
   },
 };
 

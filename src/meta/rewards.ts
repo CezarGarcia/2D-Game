@@ -2,6 +2,7 @@
  * O que uma fase paga e quando ela está disponível. Regras de docs/gdd/01-progressao-e-dificuldade.md:
  * XP e ouro caem em fase fácil, o item com nome não sofre redução e tem azar com limite.
  */
+import { OMEN } from '../data/omens';
 import { SUPREMOS, blessingCounts, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { ELEMENT_ORDER } from '../data/content';
 import { makeItem, makeSetItem, makeUnique, rollRarity, sellValue, setsOfChapter, type Gem, type Item } from '../data/items';
@@ -36,6 +37,8 @@ export interface StageOutcome {
   chests?: number;
   /** Como o herói saiu (o Sonho leva isto para a sala seguinte): fração da vida, poções, carga do Supremo, quedas que sobraram e o azar do altar. */
   left?: { hpFrac: number; potions: number; supremo: number; revives: number; altarDry: number };
+  /** Peso dos Presságios ligados nesta partida da campanha (0 ou ausente = nenhum). */
+  omens?: number;
   /** Desafio da última sala (a Provação do Sonho): como terminou. */
   trial?: 'ativo' | 'vencido' | 'perdido' | null;
 }
@@ -191,7 +194,9 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
   const bl = blessingCounts(o.blessings ?? []), t = p.talents;
   const xp = Math.round(stageXp(stage.level) * xpMult * progress * stats.xpMult * (1 + 0.25 * (bl.sabedoria ?? 0))
     * (firstClear ? FIRST_CLEAR_XP_BONUS : 1) * (stage.final === 'chefao' && o.won ? BOSS_STAGE_XP_BONUS : 1));
-  let gold = Math.round(stageGold(stage.level) * goldMult * progress * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
+  /* Presságios na campanha: só valem em fase que já tinha as 3 estrelas; cada ponto melhora o ouro e a raridade */
+  const peso = rec.stars.every(Boolean) ? Math.max(0, Math.min(OMEN.campaignMax, Math.floor(o.omens ?? 0))) : 0;
+  let gold = Math.round(stageGold(stage.level) * goldMult * progress * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)) * (1 + OMEN.goldPerPoint * peso));
   const found = foundGold(o, goldMult * stats.goldMult * (1 + 0.4 * (bl.ouro ?? 0)));
   gold += found.gold;
 
@@ -211,6 +216,7 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
     const sets = setsOfChapter(stage.chapter);
     for (let i = 0; i < count; i++) {
       let rarity = rollRarity(rng, stage.chapter, stats.luck);
+      if (peso > 0 && rarity < 5 && rng() < OMEN.rarityPerPoint * peso) rarity++;
       if (i === 0 && stage.final === 'elite') rarity = Math.max(rarity, 1);
       if (i === 0 && (stage.final === 'chefao' || t.dedoDeOuro)) rarity = Math.max(rarity, 2);
       /* peça de conjunto do capítulo: mais chance nas fases finais */
@@ -241,6 +247,7 @@ export function applyOutcome(p: Profile, o: StageOutcome): StageRewards {
     out.stars = [rec.stars[0], rec.stars[1], rec.stars[2]];
     if (rec.bestTime == null || o.time < rec.bestTime) { rec.bestTime = Math.round(o.time * 10) / 10; out.bestTime = true; }
     rec.cleared = true; rec.clears++;
+    if (peso > 0) rec.omen = Math.max(rec.omen ?? 0, peso);
 
     if (stage.rescue && !p.companions[stage.rescue] && (stage.rescue !== 'onca' || o.deaths === 0)) {
       p.companions[stage.rescue] = { level: 1 };

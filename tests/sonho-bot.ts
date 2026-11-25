@@ -7,8 +7,8 @@ import { BLESSINGS, type BlessingId } from '../src/data/content';
 import { TICK } from '../src/data/balance';
 import { findStage } from '../src/data/tower';
 import {
-  buyBlessing, buyHeal, causoAffordable, chooseAmulet, chooseBlessingOffer, chooseCauso, currentStageId, currentTrecho, dreamContext, enterNode, feiraPrice, leaveNode, reachable,
-  settleNode, startNight, upgradable, useFountain, type NightChoice, type NightEnd,
+  buyBlessing, buyHeal, causoAffordable, chooseAmulet, chooseBlessingOffer, chooseCauso, collectRoda, currentStageId, currentTrecho, dreamContext, enterNode, feiraPrice, leaveNode, reachable,
+  rodaCost, settleNode, spinRoda, startNight, upgradable, useFountain, type NightChoice, type NightEnd,
 } from '../src/meta/dream';
 import type { Profile } from '../src/meta/profile';
 import type { StageOutcome } from '../src/meta/rewards';
@@ -19,7 +19,7 @@ import { createWorld, step, type World } from '../src/sim/world';
 /** Joga a sala do nó atual e devolve o resultado como a cena devolveria. */
 export function playNode(p: Profile, opts: BotOpts, maxSeconds = 420): StageOutcome {
   const run = p.dream.run!, id = currentStageId(run)!, stage = findStage(id)!, ctx = dreamContext(run);
-  const restat = (b: BlessingId[]) => deriveStats(ctx.profile, b, ctx.amulets);
+  const restat = (b: BlessingId[]) => deriveStats(ctx.profile, b, ctx.amulets, ctx.boost);
   const seed = Number(id.split('-')[5]) | 1;
   const w: World = createWorld({ stageId: id, level: stage.level, rooms: stage.rooms, stats: restat(ctx.carry.blessings), seed, ranked: true, carry: ctx.carry, foes: ctx.foes });
   const bot = makeBot(ctx.profile, { ...opts, seed: opts.seed + seed }, restat);
@@ -53,6 +53,14 @@ export function playNight(p: Profile, choice: NightChoice, seed: number, opts: B
       leaveNode(p);
       continue;
     }
+    if (pend?.kind === 'roda') {
+      /* gira o que for de graça e, sobrando vintém, o primeiro giro pago; depois recebe e segue */
+      if (pend.grid && !pend.collected) { collectRoda(p); continue; }
+      const cost = rodaCost(run, pend);
+      if (cost != null && (cost === 0 || (pend.paid === 0 && run.vintem >= cost + 40))) { spinRoda(p); continue; }
+      leaveNode(p);
+      continue;
+    }
     if (pend?.kind === 'fonte') { const up = upgradable(run); if (run.hpFrac < 0.75 || !up.length) useFountain(p, 'beber'); else useFountain(p, 'subir', up[0]); continue; }
     if (pend?.kind === 'causo') {
       const i = pend.outcomes.findIndex((o) => causoAffordable(run, o) && !(run.hpFrac < 0.45 && o.some((x) => x.effect.t === 'vida' && x.effect.frac < 0)));
@@ -62,7 +70,7 @@ export function playNight(p: Profile, choice: NightChoice, seed: number, opts: B
     const options = reachable(run);
     if (!options.length) throw new Error(`sem caminho no trecho ${run.trecho}, nó ${run.at}`);
     const t = currentTrecho(run), hp = run.hpFrac;
-    const score = (k: string): number => ({ altar: 5, combate: 3, elite: hp > 0.6 ? 4 : 1, provacao: hp > 0.75 ? 2.5 : 0.2, causo: 2.8, fonte: hp < 0.6 ? 6 : 2, feira: hp < 0.6 ? 2 : 6, chefe: 9 } as Record<string, number>)[k] ?? 1;
+    const score = (k: string): number => ({ altar: 5, combate: 3, elite: hp > 0.6 ? 4 : 1, provacao: hp > 0.75 ? 2.5 : 0.2, causo: 2.8, fonte: hp < 0.6 ? 6 : 2, feira: hp < 0.6 ? 2 : 6, roda: 4.5, chefe: 9 } as Record<string, number>)[k] ?? 1;
     const pickId = options.slice().sort((a, b) => score(t.nodes[b].kind) - score(t.nodes[a].kind))[0];
     const kind = t.nodes[pickId].kind, trecho = run.trecho;
     nodes.push(`${trecho}:${kind}`);

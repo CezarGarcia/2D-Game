@@ -359,7 +359,7 @@ Ao vencer uma noite com o herói no nível 60, abre um **quarto trecho sem fim**
 
 ### Presságios
 
-A dificuldade escolhida antes de entrar, como o Pacto do Hades, a Ascensão do Slay the Spire e os sigilos do Diablo IV. São **12 Presságios**, cada um com 1 a 3 graus, e cada grau pesa de 1 a 3 pontos. O **Peso** total multiplica as Lembranças (+8% por ponto, até +200%) e abre enfeites nos marcos de 8, 16, 24 e 32.
+A dificuldade escolhida antes de entrar, como o Pacto do Hades, a Ascensão do Slay the Spire e os sigilos do Diablo IV. (Os números da tabela são os do desenho; os que estão no jogo, depois de calibrados, ficam em `src/data/omens.ts` e na seção da fase 4 do `10-plano-da-etapa-4.md`.) São **12 Presságios**, cada um com 1 a 3 graus, e cada grau pesa de 1 a 3 pontos. O **Peso** total multiplica as Lembranças (+8% por ponto, até +200%) e abre enfeites nos marcos de 8, 16, 24 e 32.
 
 | Presságio | Por grau | Peso por grau |
 |---|---|---|

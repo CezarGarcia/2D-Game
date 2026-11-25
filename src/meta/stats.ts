@@ -3,6 +3,7 @@
  * nos números que o combate usa. Fórmulas de docs/gdd/02-personagem-e-talentos.md.
  */
 import type { AmuletId } from '../data/amulets';
+import { ASPECTS, type AspectId } from '../data/aspects';
 import { knowledgeMap } from './life';
 import { COMPANIONS, ELEMENT_ORDER, MAX_POTIONS, MAX_SPELL_LEVEL, POTION_HEAL, blessingCounts, patronCounts, patronTier, type BlessingId, type CompanionId, type ElementId, type SpellId } from '../data/content';
 import { GEM_RESIST, GEM_STATUS_CHANCE, GEM_WEAPON_DAMAGE, ITEM_TYPES, SLOTS, baseValue, makeItem, type AffixKey, type Item, type ItemType, type WeaponKind } from '../data/items';
@@ -11,6 +12,8 @@ import { ATTRS, ATTR_BASE, addTalent, newProfile, spellLevel, type AttrKey, type
 
 export interface HeroStats {
   level: number;
+  /** Aspecto da arma em uso (src/data/aspects.ts), ou nulo no jeito padrão. */
+  aspect: AspectId | null;
   attrs: Record<AttrKey, number>;
   maxHp: number; maxMana: number; manaRegen: number;
   weapon: WeaponKind;
@@ -173,8 +176,35 @@ export function totalAttrs(p: Profile, blessings: BlessingId[] = []): Record<Att
   return out;
 }
 
-/** Números de combate do herói. `blessings` são as bênçãos da fase e `amulets`, os amuletos da noite (só o Sonho tem). */
-export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: AmuletId[] = []): HeroStats {
+/** O que os Cordéis da noite somam ao herói (só o Sonho tem). */
+export interface StatBoost { hp?: number; damage?: number; cooldown?: number; crit?: number; potions?: number }
+
+/** Amuletos da fase 4 e Cordéis: entram por cima dos números prontos, para não espalhar mais termos nas fórmulas. */
+function nightExtras(s: HeroStats, amulets: AmuletId[], boost: StatBoost): void {
+  const am = (a: AmuletId) => amulets.includes(a);
+  if (am('terco')) s.spellPower *= 1.15;
+  if (am('alpercata')) s.dodgeCooldown *= 0.8;
+  if (am('cuia')) s.potionHeal *= 1.3;
+  if (am('fumoDeRolo')) s.eliteDamage += 0.2;
+  if (am('bentinho')) for (const el of ELEMENT_ORDER) s.res[el] = Math.min(0.75, s.res[el] + 0.1);
+  if (am('pedraDeRaio')) s.bless.hitElements.push({ el: 'tempestade', chance: 0.15 });
+  if (am('berrante')) s.companionMult *= 1.4;
+  if (am('lamparina')) s.altarChoices += 1;
+  if (am('rosario')) s.regen += 0.01;
+  if (am('gibaoVelho')) s.thorns += 0.4;
+  if (am('tamborim')) s.supremoRate *= 1.5;
+  if (am('caldeiraoDaCuca')) s.echo = Math.min(0.7, s.echo + 0.25);
+  if (am('dadoViciado')) s.damageTaken *= 1.25;
+  if (am('espelhoQuebrado')) { s.critChance = Math.min(0.85, s.critChance + 0.3); s.maxHp = Math.round(s.maxHp * 0.75); }
+  if (boost.hp) s.maxHp = Math.round(s.maxHp * (1 + boost.hp));
+  if (boost.damage) { s.damageMult *= 1 + boost.damage; s.spellPower *= 1 + boost.damage; }
+  if (boost.cooldown) s.cooldownMult *= 1 - boost.cooldown;
+  if (boost.crit) s.critChance = Math.min(0.85, s.critChance + boost.crit);
+  if (boost.potions) s.potions += boost.potions;
+}
+
+/** Números de combate do herói. `blessings` são as bênçãos da fase; `amulets` e `boost`, os amuletos e os Cordéis da noite (só o Sonho tem). */
+export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: AmuletId[] = [], boost: StatBoost = {}): HeroStats {
   const items = activeItems(p), a = affixSums(items), t = p.talents, attrs = totalAttrs(p, blessings), bc = blessingCounts(blessings);
   const rank = (id: string) => t[id] || 0;
   const bl = (b: BlessingId) => bc[b] ?? 0;
@@ -261,8 +291,10 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
   for (const el of ELEMENT_ORDER) res[el] = Math.min(0.75, res[el]);
   const levelBonus = uniq('ecoDosSete') ? 1 : 0;
 
-  return {
+  const aspectId = p.aspects?.equipped?.[weapon as WeaponKind], aspect = aspectId && p.aspects.owned.includes(aspectId) && ASPECTS[aspectId]?.weapon === weapon ? aspectId : null;
+  const out: HeroStats = {
     level: p.level, attrs, maxHp, maxMana,
+    aspect,
     manaRegen: (2 + 0.04 * attrs.espirito) * (1 + 0.12 * rank('menteCalma') + (pet('vagalume') ? 0.25 : 0) + 0.3 * bl('remanso') + (am('contaDeLagrima') ? 0.25 : 0)),
     weapon, hasShield,
     weaponDamage: weaponItem ? baseValue(weaponItem) : 6,
@@ -346,6 +378,9 @@ export function deriveStats(p: Profile, blessings: BlessingId[] = [], amulets: A
       denteDoLobisomem: uniq('denteDoLobisomem'), toucaDaPisadeira: uniq('toucaDaPisadeira'), colherDaCuca: uniq('colherDaCuca'), fioDoEsquecimento: uniq('fioDoEsquecimento'),
     },
   };
+  if (aspect === 'peixeirasSaci') out.passives.perfectWhirl = true;
+  nightExtras(out, amulets, boost);
+  return out;
 }
 
 /** Fração do dano recebido que a defesa corta, contra um inimigo do nível dado. Limite de 75%. */

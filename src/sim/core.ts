@@ -1,5 +1,5 @@
 /** Funções compartilhadas da simulação: sorteio, geometria, dano e criação de inimigos. */
-import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyBase, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, isBossKind, isMonster, type EnemyKind, type SpawnDef } from '../data/balance';
+import { CHAMPION, ELITE, ENEMY, MOD, PLAYER, enemyBase, enemyDamageMult, enemyHpMult, enemySpeedMult, enemyWindupMult, isBossKind, isMonster, type EliteMod, type EnemyKind, type SpawnDef } from '../data/balance';
 import { BOSSES as BOSS_DEFS, MONSTERS } from '../data/bestiary';
 import { BROTAR, SUPREMO_NUM, WET_DURATION, type ElementId } from '../data/content';
 import { absorbGuard, buffOf, buffPower, lootOnKill } from './loot';
@@ -117,18 +117,27 @@ export function brotar(w: World, e: Enemy): void {
   healPlayer(w, w.stats.maxHp * BROTAR.heal);
 }
 
+const EXTRA_MODS: EliteMod[] = ['veloz', 'vampirico', 'regenerador', 'explosivo', 'blindado'];
+
 export function spawnEnemy(w: World, def: SpawnDef, opts: { fake?: boolean; quiet?: boolean } = {}): Enemy {
-  const base = enemyBase(def.kind), level = w.level, mods = def.mods ?? [];
+  const base = enemyBase(def.kind), level = w.level;
+  let mods = def.mods ?? [];
   const boss = isBossKindAny(def.kind);
   const elite = !!def.elite && !boss, champion = !!def.champion && !elite && !boss;
   const foes = w.cfg.foes;
-  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1) * (foes?.hp ?? 1));
+  /* Presságio Bando: a elite ganha modificadores que ainda não tem */
+  if (elite && foes?.eliteMods && !opts.fake) {
+    const left = EXTRA_MODS.filter((m) => !mods.includes(m));
+    mods = mods.slice();
+    for (let i = 0; i < foes.eliteMods && left.length; i++) mods.push(left.splice(Math.floor(rand(w) * left.length), 1)[0]);
+  }
+  const hp = opts.fake ? 1 : Math.round(base.hp * enemyHpMult(level) * (elite ? ELITE.hp : champion ? CHAMPION.hp : 1) * (foes?.hp ?? 1) * (boss ? foes?.bossHp ?? 1 : 1));
   const e: Enemy = {
     id: w.nextId++, kind: def.kind, elite: !!def.elite, champion, mods,
     x: def.x, y: def.y, kx: 0, ky: 0, hp, maxHp: hp, radius: base.radius * (elite ? ELITE.scale : champion ? CHAMPION.scale : 1),
     dmg: enemyDamageMult(level) * (elite ? ELITE.damage : champion ? CHAMPION.damage : 1) * (foes?.damage ?? 1),
     speedMult: (boss ? 1 : enemySpeedMult(level)) * (mods.includes('veloz') ? MOD.veloz.speed : 1),
-    windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1),
+    windupMult: (boss ? 1 : enemyWindupMult(level)) * (mods.includes('veloz') ? MOD.veloz.windup : 1) * (foes?.windup ?? 1),
     state: 'spawn', stateT: 0, facing: -1, dirX: -1, dirY: 0, tele: null,
     cd: 0.4 + rand(w) * 0.8, flag: false, count: 0, flash: 0, sinceHit: 9,
     poisonT: 0, poisonTick: 0, slowT: 0, rootT: 0, stunT: 0, wetT: 0, markT: 0, bubbleT: 0, guarded: false, walk: rand(w) * 6, moving: false,
@@ -159,6 +168,33 @@ export function healPlayer(w: World, amount: number, quiet = false): void {
 }
 
 export type DamageSource = 'melee' | 'arrow' | 'spell' | 'poison' | 'reflect' | 'pet' | 'roll' | 'reaction' | 'blast' | 'burn' | 'spark' | 'ally';
+
+/** Aspectos do facão: o que acontece ao aparar um golpe. */
+function parryAspect(w: World): void {
+  const p = w.player, s = w.stats, power = s.weaponDamage * s.damageMult;
+  if (s.aspect === 'facaoCurupira') {
+    /* espinhos em volta: ferem e prendem */
+    const R = 150;
+    for (const e of w.enemies.slice()) {
+      if (e.hp <= 0 || e.hidden || Math.hypot(e.x - p.x, e.y - p.y) > R + e.radius) continue;
+      damageEnemy(w, e, power * 1.2, 'reflect', Math.atan2(e.y - p.y, e.x - p.x), false, 'natureza');
+      if (e.hp > 0 && !isBoss(e)) { e.rootT = Math.max(e.rootT, 1); e.tele = null; }
+    }
+    emit(w, { type: 'heavy', x: p.x, y: p.y, value: R });
+    return;
+  }
+  /* investida na direção da mira: fere quem está no caminho */
+  const L = 130, x0 = p.x, y0 = p.y, to = { x: p.x + Math.cos(p.aim) * L, y: p.y + Math.sin(p.aim) * L };
+  clampArena(w, to, 18);
+  const dx = to.x - x0, dy = to.y - y0, L2 = dx * dx + dy * dy || 1;
+  for (const e of w.enemies.slice()) {
+    if (e.hp <= 0 || e.hidden) continue;
+    const k = Math.max(0, Math.min(1, ((e.x - x0) * dx + (e.y - y0) * dy) / L2));
+    if (Math.hypot(e.x - (x0 + dx * k), e.y - (y0 + dy * k)) < 34 + e.radius) damageEnemy(w, e, power * 1.6, 'melee', p.aim);
+  }
+  p.x = to.x; p.y = to.y; p.iframes = Math.max(p.iframes, 0.3);
+  emit(w, { type: 'thrust', x: p.x, y: p.y, x2: x0, y2: y0, ang: p.aim });
+}
 
 /** Aplica dano a um inimigo, com blindagem, fraquezas, crítico e efeitos de morte. Devolve o dano causado. */
 /** Recebe metade do dano até ficar exposto, preso ou rachado. */
@@ -404,6 +440,7 @@ export function hurtPlayer(w: World, base: number, fromX: number, fromY: number,
       if (s.talents.contragolpe) p.contraT = 4;
       p.hurtInv = 0.25;
       emit(w, { type: 'parry', x: p.x, y: p.y });
+      if (s.aspect === 'facaoCurupira' || s.aspect === 'facaoVaqueiro') parryAspect(w);
       return false;
     }
     dmg *= 1 - PLAYER.shield.blockReduce;

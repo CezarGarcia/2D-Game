@@ -4,10 +4,13 @@ import { COMPANIONS, ELEMENTS } from '../data/content';
 import { ITEM_TYPES, RARITIES, UNIQUES } from '../data/items';
 import { stageGold, stageXp } from '../data/progression';
 import { CHAPTERS, ENEMY_NAMES, MOD_NAMES, STAGES, stagesOf, type ChapterDef, type StageDef } from '../data/stages';
+import { OMEN, cleanOmens, omenWeight } from '../data/omens';
+import { isDreamUnlocked } from '../meta/dream';
 import type { Profile } from '../meta/profile';
 import { STAR_CHESTS, isChapterOpen, stageInfo, totalStars, type StageInfo, type StageTag } from '../meta/rewards';
 import { MAIN_H, MAIN_W, markSeen, unseen, type Ctx } from './ctx';
 import { backdrop, clock, h, num, pct, star, trimBackdrops, ui } from './dom';
+import { omenRows } from './sonhoprep';
 import { tip, type TipRow, type TipSpec } from './tip';
 
 const TAG_COLOR: Record<StageTag, string> = { verde: '#5fcb6a', amarela: '#f2c14e', cinza: '#9aa39a', vermelha: '#ff6b55' };
@@ -119,7 +122,10 @@ export function renderMapa(c: Ctx): HTMLElement {
   const next = infos.find((i) => i.unlocked && !i.record.cleared)?.stage.id ?? null;
   const sel = infos.find((i) => i.stage.id === c.st.mapSel && i.unlocked) ?? null;
 
-  const play = (id: string) => c.host.startStage(id);
+  /* Presságios da campanha: só nas fases que já têm as 3 estrelas, depois que o Sonho abre */
+  const omens = cleanOmens(c.st.omens, true), dreamOpen = isDreamUnlocked(p);
+  const omenOk = (id: string) => dreamOpen && !!infos.find((i) => i.stage.id === id)?.record.stars.every(Boolean);
+  const play = (id: string) => c.host.startStage(id, omenOk(id) && omenWeight(omens) > 0 ? { omens } : undefined);
   const hunt = (id: string) => c.host.startStage(id, { auto: { runs: c.st.huntRuns, speed: c.st.huntSpeed } });
   const pick = (info: StageInfo) => {
     if (!info.unlocked) { c.toast('Vença a fase anterior', 'bad'); return; }
@@ -167,6 +173,7 @@ export function renderMapa(c: Ctx): HTMLElement {
     /* Caçada automática: só em fase com as três estrelas, e nunca no chefão do capítulo */
     const st3 = sel.record.stars.every(Boolean), bossStage = sel.stage.number === 12, canHunt = sel.record.cleared && st3 && !bossStage;
     const cycle = <T,>(list: T[], cur: T): T => list[(list.indexOf(cur) + 1) % list.length];
+    const peso = st3 && dreamOpen ? omenWeight(omens) : 0;
     const huntRow = sel.record.cleared ? h('div', `hunt${canHunt ? '' : ' off'}`,
       tip(h('button', { type: 'button', class: 'btn small hunt-go', disabled: !canHunt, 'data-fk': 'cacada', onclick: () => hunt(sel.stage.id) }, ui('auto', 24), 'Automático'), () => ({
         title: 'Caçada automática', icon: ui('auto', 36), color: canHunt ? '#f2c14e' : undefined,
@@ -179,8 +186,11 @@ export function renderMapa(c: Ctx): HTMLElement {
       canHunt && tip(h('button', { type: 'button', class: 'chip hunt-chip', 'data-fk': 'cacada-vezes', 'aria-label': `Repetições: ${c.st.huntRuns}`, onclick: () => { c.st.huntRuns = cycle(HUNT_RUNS, c.st.huntRuns); c.redraw('cacada-vezes'); } }, `${c.st.huntRuns} ${c.st.huntRuns === 1 ? 'vez' : 'vezes'}`),
         { title: 'Repetições', rows: [{ text: 'Quantas vezes seguidas a fase é jogada. Clique para mudar.' }] }),
       canHunt && tip(h('button', { type: 'button', class: 'chip hunt-chip', 'data-fk': 'cacada-vel', 'aria-label': `Velocidade: ${c.st.huntSpeed}x`, onclick: () => { c.st.huntSpeed = cycle(HUNT_SPEEDS, c.st.huntSpeed); c.redraw('cacada-vel'); } }, `${c.st.huntSpeed}x`),
-        { title: 'Velocidade', rows: [{ text: 'A velocidade da luta. Clique para mudar; na fase, a tecla V também muda.' }] })) : null;
-    const tall = huntRow ? 100 : 52, left = Math.max(126, Math.min(MAIN_W - 126, pt.x));
+        { title: 'Velocidade', rows: [{ text: 'A velocidade da luta. Clique para mudar; na fase, a tecla V também muda.' }] }),
+      st3 && dreamOpen && tip(h('button', { type: 'button', class: `chip hunt-chip omen-chip${peso ? ' on' : ''}`, 'data-fk': 'pressagios', 'aria-label': `Presságios: Peso ${peso}`, onclick: () => { c.st.omenOpen = true; c.redraw('omen-fechar'); } }, ui('olho', 20), peso ? `Peso ${peso}` : 'Presságios'),
+        () => ({ title: 'Presságios', icon: ui('olho', 36), color: '#c8a8ff', sub: peso ? `+${pct(OMEN.rarityPerPoint * peso)} de chance de raridade maior, +${pct(OMEN.goldPerPoint * peso)} de ouro` : 'Deixe a fase mais difícil e melhore o saque', subColor: peso ? '#86e07a' : undefined,
+          rows: [{ text: 'Valem só ao jogar na mão, nas fases que já têm as 3 estrelas.' }, sel.record.omen ? { icon: 'coroa', text: 'Maior Peso já vencido aqui', value: String(sel.record.omen) } : null] }))) : null;
+    const tall = huntRow ? 100 : 52, left = Math.max(st3 && dreamOpen ? 200 : 126, Math.min(MAIN_W - (st3 && dreamOpen ? 200 : 126), pt.x));
     const under = pt.y + r + 26 + tall <= MAIN_H - 6;
     void below;
     playPop = h('div', { class: `play-pop${under ? '' : ' above'}`, style: `left:${left}px;top:${under ? pt.y + r + 26 : pt.y - r - 10 - tall}px` },
@@ -245,5 +255,13 @@ export function renderMapa(c: Ctx): HTMLElement {
     playPop,
     chapters,
     chest,
-    story && storyCard(c, story));
+    story && storyCard(c, story),
+    c.st.omenOpen && h('div', { class: 'omen-pop', onclick: (e: Event) => { if (e.target === e.currentTarget) { c.st.omenOpen = false; c.redraw('pressagios'); } } },
+      h('div', { class: 'panel omen-pop-in', role: 'dialog', 'aria-modal': 'true', 'aria-label': 'Presságios da fase' },
+        h('div', 'omen-pop-title', ui('olho', 34), 'Presságios', h('span', null, `Peso ${omenWeight(omens)} de ${OMEN.campaignMax}`)),
+        h('div', 'omen-pop-bonus', omenWeight(omens) > 0 ? `+${pct(OMEN.rarityPerPoint * omenWeight(omens))} de chance de raridade maior em cada item  ·  +${pct(OMEN.goldPerPoint * omenWeight(omens))} de ouro` : 'Cada ponto de Peso melhora a raridade dos itens e o ouro da fase.'),
+        h('div', 'omens-grid one', omenRows(omens, (next, fk) => { c.st.omens = next; c.redraw(fk); }, { combatOnly: true, cap: OMEN.campaignMax, toast: (t) => c.toast(t, 'bad') })),
+        h('div', 'omen-pop-foot',
+          omenWeight(omens) > 0 && h('button', { type: 'button', class: 'btn small', 'data-fk': 'omen-limpar', onclick: () => { c.st.omens = {}; c.redraw('omen-limpar'); } }, 'Limpar'),
+          h('button', { type: 'button', class: 'btn primary', 'data-fk': 'omen-fechar', onclick: () => { c.st.omenOpen = false; c.redraw('pressagios'); } }, 'Pronto')))));
 }

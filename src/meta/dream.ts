@@ -6,12 +6,15 @@
  * recebido e devolve o que a tela precisa mostrar; quem chama decide quando salvar.
  */
 import { AMULETS, AMULET_ORDER, AMULET_RARITY, type AmuletId, type AmuletRarity } from '../data/amulets';
+import { ASPECTS, type AspectId } from '../data/aspects';
+import { CORDEIS, CORDEL, cordelCost, cordelPrice, isFullCordel, type CordelId } from '../data/cordeis';
+import { HURRY_SECONDS, cleanOmens, omenFoes, omenGrade, omenMemories, omenWeight, type OmenPick } from '../data/omens';
 import { CAUSOS, CAUSO_ORDER, type CausoId, type DreamEffect } from '../data/causos';
 import {
-  BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, MAX_POTIONS, STAGE_ONLY_BLESSINGS, blessingCounts, patronTier, patronCounts,
+  AWAKENINGS, BLESSINGS, BLESSING_ORDER, BLESSING_WEIGHT, MAX_POTIONS, STAGE_ONLY_BLESSINGS, blessingCounts, patronTier, patronCounts,
   type BaseBlessingId, type BlessingId, type CompanionId, type ElementId, type SpellId,
 } from '../data/content';
-import { DREAM, dreamNight, nextNodes, nodeStageId, type DreamNode, type Night, type NodeKind, type Trecho } from '../data/dream';
+import { DREAM, dreamNight, isPanelNode, nextNodes, nodeStageId, type DreamNode, type Night, type NodeKind, type Trecho } from '../data/dream';
 import { WEAPON_KINDS, type WeaponKind } from '../data/items';
 import { stageGold, stageXp } from '../data/progression';
 import { makeRng, type Rng } from '../data/rng';
@@ -23,7 +26,8 @@ import { checkAchievements } from './achievements';
 import { recordTally } from './life';
 import { addXp, allItems, knownSpells, maxPotions, profileRng, type Profile } from './profile';
 import type { StageOutcome } from './rewards';
-import { deriveStats, referenceProfile, type HeroStats } from './stats';
+import { readGrid, rodaWeights, spinGrid, type RodaRead, type RodaSymbol, type RodaWeights } from './roda';
+import { deriveStats, referenceProfile, type HeroStats, type StatBoost } from './stats';
 
 /* ---------- o estado de uma noite ---------- */
 
@@ -36,9 +40,14 @@ export type Pending =
   /** Escolher uma bênção (o Rancho, no começo da noite). */
   | { kind: 'bencao'; options: BlessingId[] }
   /** Na Feira: o que ainda está à venda (nulo = já levado). */
-  | { kind: 'feira'; blessings: (BlessingId | null)[]; amulets: (AmuletId | null)[]; healed: boolean; rerolls: number }
+  | { kind: 'feira'; blessings: (BlessingId | null)[]; amulets: (AmuletId | null)[]; healed: boolean; rerolls: number; bought?: boolean }
   | { kind: 'fonte' }
-  | { kind: 'causo'; id: CausoId; outcomes: Resolved[][] };
+  | { kind: 'causo'; id: CausoId; outcomes: Resolved[][] }
+  /** Na Roda do Saci: os padrinhos da grade, a grade do último giro (nula antes do primeiro) e o que ainda dá para fazer. */
+  | { kind: 'roda'; patrons: ElementId[]; grid: RodaSymbol[] | null; collected: boolean; spins: number; paid: number; free: number; pulos: number; assobios: number; last: RodaPayout | null };
+
+/** O que um giro da Roda pagou, para a tela mostrar. */
+export interface RodaPayout { lines: RodaRead['lines']; blessings: BlessingId[]; vintem: number; cursed: boolean; jackpot: boolean; forced: boolean }
 
 export interface DreamRun {
   seed: number;
@@ -70,6 +79,14 @@ export interface DreamRun {
   rolls: number;
   /** Uma sinergia de 7 já contou nesta noite. */
   seven: boolean;
+  /** Presságios escolhidos, Cordéis equipados (com o nível de cada um) e o Aspecto da arma. */
+  omens: OmenPick; cordeis: Partial<Record<CordelId, number>>; aspect: AspectId | null;
+  /** Neste trecho: segundos de luta (Presságio Pressa), altares já visitados (cordel do Pavão) e se as Lembranças estão em dobro (Olhos da Roda). */
+  clock: number; altars: number; doubled: boolean;
+  /** Giros seguidos da Roda sem linha, na noite. */
+  dry: number;
+  /** Escolhas que esperam a atual ser resolvida. */
+  later: Pending[];
 }
 
 /** Como a noite acabou e o que o jogador traz dela. */
@@ -118,7 +135,7 @@ export function nightOptions(p: Profile): { weapons: WeaponKind[]; spells: Spell
   };
 }
 
-export interface NightChoice { weapon: WeaponKind; spells: (SpellId | null)[]; companion: CompanionId | null; supremo: ElementId | null }
+export interface NightChoice { weapon: WeaponKind; spells: (SpellId | null)[]; companion: CompanionId | null; supremo: ElementId | null; omens?: OmenPick }
 
 /** A escolha padrão: o que o herói está usando na campanha. */
 export function defaultChoice(p: Profile): NightChoice {
@@ -137,8 +154,8 @@ const profiles = new Map<string, Profile>();
  * O herói do Sonho: o personagem de referência do nível (itens do nível, talentos de um caminho simples),
  * com a arma, os feitiços, o companheiro e o Supremo escolhidos. O inventário da campanha não entra.
  */
-export function dreamProfile(level: number, c: NightChoice): Profile {
-  const key = JSON.stringify([level, c]), hit = profiles.get(key);
+export function dreamProfile(level: number, c: NightChoice, aspect: AspectId | null = null): Profile {
+  const key = JSON.stringify([level, c.weapon, c.spells, c.companion, c.supremo, aspect]), hit = profiles.get(key);
   if (hit) return hit;
   const agile = c.weapon === 'arco' || c.weapon === 'peixeiras';
   const p = referenceProfile(level, agile, c.weapon);
@@ -155,16 +172,41 @@ export function dreamProfile(level: number, c: NightChoice): Profile {
   p.supremos = c.supremo ? [c.supremo] : [];
   p.supremo = c.supremo;
   p.potions = maxPotions(p);
+  if (aspect && ASPECTS[aspect]?.weapon === c.weapon) p.aspects = { owned: [aspect], equipped: { [c.weapon]: aspect } };
   if (profiles.size > 12) profiles.clear();
   profiles.set(key, p);
   return p;
 }
 
-export function runProfile(run: DreamRun): Profile {
-  return dreamProfile(run.level, { weapon: run.weapon, spells: run.spells, companion: run.companion, supremo: run.supremo });
+/** Nível do folheto equipado nesta noite (0 = não está). */
+const cordelLevel = (run: DreamRun, id: CordelId) => run.cordeis?.[id] ?? 0;
+/** O número do efeito de um folheto equipado, ou 0. */
+export function cordel(run: DreamRun, id: CordelId): number {
+  const lv = cordelLevel(run, id);
+  return lv > 0 ? CORDEIS[id].values[Math.min(3, lv) - 1] : 0;
+}
+/** O que os Cordéis da noite somam aos números do herói. */
+export function runBoost(run: DreamRun): StatBoost {
+  return { hp: cordel(run, 'peleja') / 100, damage: cordel(run, 'valentao') / 100, cooldown: cordel(run, 'viola') / 100, crit: cordel(run, 'donzela') / 100, potions: cordel(run, 'sacoSemFundo') };
+}
+
+/** Presságio Esquecimento: o espaço de feitiço esquecido neste trecho (−1 = nenhum). Quem só tem um feitiço não esquece. */
+export function forgottenSlot(run: DreamRun): number {
+  if (!omenGrade(run.omens, 'esquecimento')) return -1;
+  const slots = [0, 1, 2].filter((i) => run.spells[i]);
+  if (slots.length < 2) return -1;
+  let v = 2166136261;
+  for (const ch of `${run.seed}|esquece|${run.trecho}`) v = Math.imul(v ^ ch.charCodeAt(0), 16777619);
+  return slots[(v >>> 0) % slots.length];
+}
+
+/** O herói da noite. Com `inRoom`, é o que entra na sala: sem o feitiço que o Esquecimento levou neste trecho. */
+export function runProfile(run: DreamRun, inRoom = false): Profile {
+  const lost = inRoom ? forgottenSlot(run) : -1;
+  return dreamProfile(run.level, { weapon: run.weapon, spells: run.spells.map((s, i) => (i === lost ? null : s)), companion: run.companion, supremo: run.supremo }, run.aspect ?? null);
 }
 export function runStats(run: DreamRun): HeroStats {
-  return deriveStats(runProfile(run), run.blessings, run.amulets);
+  return deriveStats(runProfile(run), run.blessings, run.amulets, runBoost(run));
 }
 
 export function currentTrecho(run: DreamRun): Trecho { return run.map.trechos[run.trecho]; }
@@ -273,6 +315,15 @@ export function upgradable(run: DreamRun): BaseBlessingId[] {
   return BLESSING_ORDER.filter((b) => (have[b] ?? 0) > 0 && (have[b] ?? 0) < BLESSINGS[b].max && b !== 'cura');
 }
 
+/** Abre uma escolha; se já há uma na tela, esta espera a vez. */
+function ask(run: DreamRun, pend: Pending): void {
+  if (run.pending) (run.later ??= []).push(pend); else run.pending = pend;
+}
+/** Fecha a escolha atual e abre a próxima que estiver esperando. */
+function settle(run: DreamRun): void {
+  run.pending = run.later?.shift() ?? null;
+}
+
 /* ---------- começar ---------- */
 
 /** Dá para começar uma noite com esta escolha? */
@@ -287,7 +338,11 @@ export function startNight(p: Profile, c: NightChoice, seed?: number): DreamRun 
   if (!isDreamUnlocked(p) || p.dream.run || !validChoice(p, c)) return null;
   const s = (seed ?? Math.floor(profileRng(p)() * 0x7fffffff)) | 1;
   const patrons = p.supremos.slice(), chapters = dreamChapters(p);
-  const map = dreamNight(s, { chapters, patrons, level: p.level, short: p.dream.nights === 0 });
+  const first = p.dream.nights === 0;
+  /* a primeira noite de todas é só para conhecer o caminho: sem Presságios */
+  const omens = first ? {} : cleanOmens(c.omens);
+  const map = dreamNight(s, { chapters, patrons, level: p.level, short: first, roda: patrons.includes('tempestade'), noAltarStep: omenGrade(omens, 'semPadrinho') > 0 });
+  const worn = equippedCordeis(p), aspectId = p.aspects.equipped[c.weapon];
   const run: DreamRun = {
     seed: s, level: p.level, weapon: c.weapon, spells: [0, 1, 2].map((i) => c.spells[i] ?? null), companion: c.companion, supremo: c.supremo, patrons,
     map, trecho: 0, at: null, done: false, path: map.trechos.map(() => []),
@@ -295,27 +350,34 @@ export function startNight(p: Profile, c: NightChoice, seed?: number): DreamRun 
     curse: { hp: 0, damage: 0 }, earned: 0,
     tally: { rooms: 0, elites: 0, bosses: 0, trials: 0, kills: 0, time: 0, causos: 0, altars: 0 },
     pending: null, rolls: 0, seven: false,
+    omens, cordeis: Object.fromEntries(worn.map((id) => [id, p.cordeis.levels[id] ?? 1])), aspect: aspectId && p.aspects.owned.includes(aspectId) && ASPECTS[aspectId].weapon === c.weapon ? aspectId : null,
+    clock: 0, altars: 0, doubled: false, dry: 0, later: [],
   };
   run.potions = potionCap(run);
+  run.vintem += cordel(run, 'cantador');
+  run.revives += cordel(run, 'vaqueiro');
   /* o Rancho: vinténs, um amuleto comum e uma bênção comum à escolha */
   const rancho = village(p, 'rancho');
   if (rancho >= 1) run.vintem += 30;
   if (rancho >= 2) for (const a of drawAmulets(run, rng(run, 'rancho'), 1, 'comum')) giveAmulet(p, run, a);
-  if (rancho >= 3) { const options = drawBlessings(run, rng(run, 'rancho-bencao'), 3, { tier: 1 }); if (options.length) run.pending = { kind: 'bencao', options }; }
+  if (rancho >= 3) { const options = drawBlessings(run, rng(run, 'rancho-bencao'), 3, { tier: 1 }); if (options.length) ask(run, { kind: 'bencao', options }); }
+  const gift = cordel(run, 'encantado');
+  if (gift) { const options = drawBlessings(run, rng(run, 'cordel-bencao'), 3, { tier: gift }); if (options.length) ask(run, { kind: 'bencao', options }); }
   p.dream.run = run;
   return run;
 }
 
 /* ---------- entrar num nó ---------- */
 
-export type Entered = { stage: string } | { panel: 'feira' | 'fonte' | 'causo' } | null;
+export type Entered = { stage: string } | { panel: 'feira' | 'fonte' | 'causo' | 'roda' } | null;
 
 /** O que a cena precisa para montar a sala do nó atual. */
 export interface DreamContext {
   profile: Profile;
   amulets: AmuletId[];
+  boost: StatBoost;
   carry: Carry;
-  foes: { hp: number; damage: number };
+  foes: { hp: number; damage: number; windup: number; eliteMods: number; bossHp: number };
   /** Para o HUD: trecho, total de trechos e vinténs. */
   trecho: number; of: number; vintem: number;
 }
@@ -323,18 +385,32 @@ export interface DreamContext {
 export function dreamContext(run: DreamRun): DreamContext {
   const node = currentNode(run), trial = node?.kind === 'provacao' && has(run, 'chapeuDeCouro');
   return {
-    profile: runProfile(run), amulets: run.amulets.slice(),
+    profile: runProfile(run, true), amulets: run.amulets.slice(), boost: runBoost(run),
     carry: { blessings: run.blessings.slice(), hpFrac: Math.max(0.01, run.hpFrac * (trial ? 0.7 : 1)), potions: run.potions, altarDry: run.altarDry, revives: run.revives, supremo: run.charge },
-    foes: { hp: 1 + run.curse.hp, damage: 1 + run.curse.damage },
+    foes: runFoes(run),
     trecho: run.trecho + 1, of: run.map.trechos.length, vintem: run.vintem,
   };
+}
+
+/** Passou do tempo do Presságio Pressa neste trecho? */
+export function isLate(run: DreamRun): boolean {
+  const g = omenGrade(run.omens, 'pressa');
+  return g > 0 && (run.clock ?? 0) > HURRY_SECONDS[g];
+}
+
+/** Quanto os monstros da próxima sala estão mais fortes: a maldição do trecho, os Presságios e a Pressa. */
+export function runFoes(run: DreamRun): DreamContext['foes'] {
+  const o = omenFoes(run.omens);
+  return { ...o, hp: o.hp * (1 + run.curse.hp), damage: o.damage * (1 + run.curse.damage) * (isLate(run) ? 1.5 : 1) };
 }
 
 /** Fase do nó em que o herói está (nulo se o nó é uma tela, não uma sala). */
 export function currentStageId(run: DreamRun): string | null {
   const node = currentNode(run);
-  if (!node || node.kind === 'feira' || node.kind === 'fonte' || node.kind === 'causo') return null;
-  return nodeStageId(run.map, currentTrecho(run), node, node.kind === 'altar' && has(run, 'ferraduraVirada') ? 'F' : '');
+  if (!node || isPanelNode(node.kind)) return null;
+  /* altar: F limita às comuns (Ferradura Virada); R pede rara ou melhor (cordel do Pavão, nos primeiros altares do trecho) */
+  const flag = node.kind !== 'altar' ? '' : has(run, 'ferraduraVirada') ? 'F' : (run.altars ?? 0) < cordel(run, 'pavao') ? 'R' : '';
+  return nodeStageId(run.map, currentTrecho(run), node, flag);
 }
 
 function resolve(run: DreamRun, r: Rng, effects: DreamEffect[]): Resolved[] {
@@ -364,6 +440,7 @@ export function enterNode(p: Profile, id: number): Entered {
   run.path[run.trecho].push(id);
   if (node.kind === 'feira') { run.pending = makeFeira(run); return { panel: 'feira' }; }
   if (node.kind === 'fonte') { run.pending = { kind: 'fonte' }; return { panel: 'fonte' }; }
+  if (node.kind === 'roda') { run.pending = makeRoda(run); return { panel: 'roda' }; }
   if (node.kind === 'causo') {
     const r = rng(run, 'causo');
     const fresh = CAUSO_ORDER.filter((c) => (!CAUSOS[c].needs || run.patrons.includes(CAUSOS[c].needs!)));
@@ -380,6 +457,8 @@ export function enterNode(p: Profile, id: number): Entered {
 function nextTrecho(run: DreamRun): void {
   run.trecho++; run.at = null; run.done = false;
   run.curse = { hp: 0, damage: 0 };
+  run.clock = 0; run.altars = 0; run.doubled = false;
+  run.vintem += cordel(run, 'cantador');
 }
 
 /** Aplica o resultado da sala do nó atual (combate, elite, provação, chefe ou altar). */
@@ -389,6 +468,7 @@ export function settleNode(p: Profile, o: StageOutcome, now: Date = new Date()):
   const kind = node.kind, out: NodeResult = { kind, won: o.won, vintem: 0, memories: 0, trial: null, end: null };
   recordTally(p, o);
   run.tally.kills += o.kills; run.tally.time += Math.max(0, o.time);
+  run.clock = (run.clock ?? 0) + Math.max(0, o.time);
   /* bênçãos que a sala deu (altar, oferenda de baú): entram na noite e nos registros */
   const before = blessingCounts(run.blessings), after = (o.blessings ?? run.blessings).slice();
   run.blessings = after;
@@ -403,6 +483,7 @@ export function settleNode(p: Profile, o: StageOutcome, now: Date = new Date()):
     if (chosen === 'cura') run.potions = potionCap(run);
     if (o.left) { run.hpFrac = o.left.hpFrac; run.potions = Math.max(run.potions, Math.min(potionCap(run), o.left.potions)); }
     run.tally.altars++;
+    run.altars = (run.altars ?? 0) + 1;
     run.done = true;
     return out;
   }
@@ -413,7 +494,8 @@ export function settleNode(p: Profile, o: StageOutcome, now: Date = new Date()):
     run.potions = Math.min(potionCap(run), o.left.potions + (has(run, 'moringa') ? 1 : 0));
   }
   run.tally.rooms++;
-  out.vintem = Math.round((DREAM.vintem[kind] ?? 0) * (has(run, 'peDeMeia') ? 1.5 : 1)) + (o.chests ?? 0) * DREAM.vintem.perChest;
+  if (has(run, 'estrelaDoBoi')) heal(run, 0.08);
+  out.vintem = Math.round((DREAM.vintem[kind] ?? 0) * (has(run, 'peDeMeia') ? 1.5 : 1)) + (o.chests ?? 0) * DREAM.vintem.perChest + (o.hitsTaken === 0 ? cordel(run, 'saoSarue') : 0);
   run.vintem += out.vintem;
   let memories = DREAM.memories[kind] ?? 0;
   if (kind === 'provacao') {
@@ -421,21 +503,27 @@ export function settleNode(p: Profile, o: StageOutcome, now: Date = new Date()):
     const passed = node.trial === 'tres' || o.trial === 'vencido';
     out.trial = passed;
     if (passed) { run.tally.trials++; p.dream.trials++; if (has(run, 'chapeuDeCouro')) memories *= 3; }
-    else { memories = 0; run.hpFrac = Math.max(0.01, run.hpFrac * DREAM.trialFail); }
+    else {
+      memories = 0; run.hpFrac = Math.max(0.01, run.hpFrac * DREAM.trialFail);
+      /* Presságio Juízo: perder a Provação acaba com a noite */
+      if (omenGrade(run.omens, 'juizo')) { out.end = wake(p, 'caiu', now); return out; }
+    }
   }
+  if (run.doubled) memories *= 2;
   out.memories = memories;
   run.earned += memories;
   const r = rng(run, 'premio');
-  if (kind === 'elite') { run.tally.elites++; const options = drawAmulets(run, r, 2); if (options.length) run.pending = { kind: 'amuleto', options }; }
-  if (kind === 'provacao' && out.trial) { const options = [...drawAmulets(run, r, 1, 'raro'), ...drawAmulets(run, r, 1)].filter((a, i, all) => all.indexOf(a) === i); if (options.length) run.pending = { kind: 'amuleto', options }; }
+  const more = cordel(run, 'lampiao') + (has(run, 'balaio') ? 1 : 0);
+  if (kind === 'elite') { run.tally.elites++; const options = drawAmulets(run, r, 2 + more); if (options.length) ask(run, { kind: 'amuleto', options }); }
+  if (kind === 'provacao' && out.trial) { const rare = drawAmulets(run, r, 1, 'raro'), options = [...rare, ...drawAmulets(run, r, 1 + more, undefined, rare)]; if (options.length) ask(run, { kind: 'amuleto', options }); }
   run.done = true;
   if (kind === 'chefe') {
     run.tally.bosses++;
     p.dream.bestTrecho = Math.max(p.dream.bestTrecho, run.trecho + 1);
     if (run.trecho >= run.map.trechos.length - 1) { out.end = wake(p, 'venceu', now); return out; }
-    run.hpFrac = has(run, 'velaBenta') ? 1 : Math.min(1, run.hpFrac + DREAM.bossHeal);
-    const options = drawAmulets(run, r, 3);
-    if (options.length) run.pending = { kind: 'amuleto', options };
+    run.hpFrac = has(run, 'velaBenta') ? 1 : Math.min(1, run.hpFrac + DREAM.bossHeal + cordel(run, 'boiMisterioso') / 100);
+    const options = drawAmulets(run, r, 3 + more);
+    if (options.length) ask(run, { kind: 'amuleto', options });
     nextTrecho(run);
   }
   return out;
@@ -449,7 +537,7 @@ export function chooseAmulet(p: Profile, index: number): AmuletId | null {
   if (!run || pend?.kind !== 'amuleto') return null;
   const a = pend.options[index] ?? null;
   if (a) giveAmulet(p, run, a);
-  run.pending = null;
+  settle(run);
   return a;
 }
 
@@ -459,14 +547,16 @@ export function chooseBlessingOffer(p: Profile, index: number): BlessingId | nul
   if (!run || pend?.kind !== 'bencao') return null;
   const b = pend.options[index] ?? null;
   if (b) giveBlessing(p, run, b);
-  run.pending = null;
+  settle(run);
   return b;
 }
 
 /* ---------- Feira ---------- */
 
 export function feiraPrice(run: DreamRun, what: 'bencao' | 'amuleto' | 'cura' | 'trocar' | 'tirar', id?: BlessingId | AmuletId): number {
-  const off = has(run, 'bolsaDeMascate') ? 0.75 : 1, P = DREAM.price;
+  const f = run.pending?.kind === 'feira' ? run.pending : null, goods = what === 'bencao' || what === 'amuleto';
+  const off = (has(run, 'bolsaDeMascate') ? 0.75 : 1) * (has(run, 'dadoViciado') ? 0.5 : 1) * (1 - cordel(run, 'romanceFeira') / 100) * (1 + 0.3 * omenGrade(run.omens, 'feiraCara'))
+    * (goods && f && !f.bought ? 1 - cordel(run, 'malasartes') / 100 : 1), P = DREAM.price;
   const base = what === 'bencao' ? P.blessing[BLESSINGS[id as BlessingId]?.tier ?? 1] ?? P.blessing[1]
     : what === 'amuleto' ? AMULET_RARITY[AMULETS[id as AmuletId]?.rarity ?? 'comum'].price
       : what === 'cura' ? P.heal : what === 'tirar' ? P.remove
@@ -484,7 +574,7 @@ export function buyBlessing(p: Profile, index: number): boolean {
   if (!x || !id) return false;
   const cost = feiraPrice(x.run, 'bencao', id);
   if (x.run.vintem < cost || !giveBlessing(p, x.run, id)) return false;
-  x.run.vintem -= cost; x.f.blessings[index] = null;
+  x.run.vintem -= cost; x.f.blessings[index] = null; x.f.bought = true;
   return true;
 }
 
@@ -493,7 +583,7 @@ export function buyAmulet(p: Profile, index: number): boolean {
   if (!x || !id) return false;
   const cost = feiraPrice(x.run, 'amuleto', id);
   if (x.run.vintem < cost) return false;
-  x.run.vintem -= cost; x.f.amulets[index] = null;
+  x.run.vintem -= cost; x.f.amulets[index] = null; x.f.bought = true;
   giveAmulet(p, x.run, id);
   return true;
 }
@@ -517,7 +607,7 @@ export function rerollFeira(p: Profile): boolean {
   if (x.run.vintem < cost) return false;
   x.run.vintem -= cost;
   const fresh = makeFeira(x.run, x.f.rerolls + 1) as Extract<Pending, { kind: 'feira' }>;
-  fresh.healed = x.f.healed;
+  fresh.healed = x.f.healed; fresh.bought = x.f.bought;
   x.run.pending = fresh;
   return true;
 }
@@ -536,9 +626,12 @@ export function removeBlessing(p: Profile, id: BlessingId): boolean {
 
 /** Sai da Feira, da Fonte sem usar, ou fecha o que estiver aberto. */
 export function leaveNode(p: Profile): boolean {
-  const run = p.dream.run;
-  if (!run || !run.pending || run.pending.kind === 'causo' || run.pending.kind === 'amuleto' || run.pending.kind === 'bencao') return false;
-  run.pending = null; run.done = true;
+  const run = p.dream.run, pend = run?.pending;
+  if (!run || !pend || pend.kind === 'causo' || pend.kind === 'amuleto' || pend.kind === 'bencao') return false;
+  /* sair da Roda com um giro na mesa recebe o que ele pagou (e a sorte grande abre a escolha dela antes) */
+  if (pend.kind === 'roda' && pend.grid && !pend.collected) { collectRoda(p); if (run.pending !== pend) return true; }
+  run.done = true;
+  settle(run);
   return true;
 }
 
@@ -546,7 +639,9 @@ export function leaveNode(p: Profile): boolean {
 
 /** Quanto a Fonte cura nesta noite (a Figa Torta seca a Fonte; a Rede de Dormir enche tudo). */
 export function fountainHeal(run: DreamRun): number {
-  return has(run, 'figaTorta') ? 0 : has(run, 'redeDeDormir') ? 1 : DREAM.fountainHeal;
+  if (has(run, 'figaTorta')) return 0;
+  const cut = Math.max(0, 1 - 0.5 * omenGrade(run.omens, 'poucasVelas'));
+  return Math.min(1, (has(run, 'redeDeDormir') ? 1 : DREAM.fountainHeal + cordel(run, 'rezadeira') / 100) * cut);
 }
 
 /** Usa a Fonte: beber (cura e devolve as poções) ou fortalecer uma bênção que ainda pode subir. */
@@ -592,6 +687,7 @@ export function chooseCauso(p: Profile, index: number): boolean {
       case 'lembrancas': run.earned += e.n; break;
     }
   }
+  run.vintem += cordel(run, 'matuto');
   if (!p.dream.causosSeen.includes(pend.id)) p.dream.causosSeen.push(pend.id);
   run.tally.causos++;
   run.pending = null; run.done = true;
@@ -602,7 +698,8 @@ export function chooseCauso(p: Profile, index: number): boolean {
 
 /** Multiplicador das Lembranças ao acordar: o Mural da Aldeia e o Olho-de-Boi. */
 export function memoryBonus(p: Profile, run: DreamRun): number {
-  return (1 + 0.1 * village(p, 'mural')) * (has(run, 'olhoDeBoi') ? 1.3 : 1);
+  const worn = Object.keys(run.cordeis ?? {}) as CordelId[];
+  return (1 + 0.1 * village(p, 'mural')) * (has(run, 'olhoDeBoi') ? 1.3 : 1) * (1 + cordel(run, 'princesa') / 100 + (isFullCordel(worn) ? CORDEL.fullBonus : 0)) * (1 + omenMemories(run.omens));
 }
 
 /** Encerra a noite e paga o que ela rendeu: Lembranças, e experiência e ouro da campanha por trecho completo. */
@@ -616,6 +713,7 @@ export function wake(p: Profile, how: NightEnd['how'], now: Date = new Date()): 
   let talent = false;
   if (won) {
     D.wins++;
+    D.bestWeight = Math.max(D.bestWeight ?? 0, omenWeight(run.omens));
     if (!D.weaponsWon.includes(run.weapon)) { D.weaponsWon.push(run.weapon); p.talentPoints += 1; talent = true; }
   }
   p.gold += gold; p.life.gold += gold;
@@ -650,3 +748,174 @@ export function build(p: Profile, id: BuildingId): boolean {
 }
 
 export { MAX_POTIONS };
+
+/* ---------- Cordéis e Aspectos (entre as noites) ---------- */
+
+/** Fôlego: o custo total de Cordéis que dá para equipar. */
+export function breath(p: Profile): number {
+  return CORDEL.breath + CORDEL.breathPerLevel * village(p, 'casaDeCordel');
+}
+
+/** Os folhetos equipados que o jogador de fato tem, na ordem, enquanto couberem no Fôlego. */
+export function equippedCordeis(p: Profile): CordelId[] {
+  const out: CordelId[] = [], max = breath(p);
+  for (const id of p.cordeis.equipped) if (CORDEIS[id] && (p.cordeis.levels[id] ?? 0) > 0 && !out.includes(id) && cordelCost([...out, id]) <= max) out.push(id);
+  return out;
+}
+
+/** Custo, em Lembranças, de comprar o folheto ou de subir um nível (nulo no nível máximo). */
+export function cordelNext(p: Profile, id: CordelId): number | null {
+  const lv = p.cordeis.levels[id] ?? 0;
+  return lv >= 3 ? null : cordelPrice(id, lv + 1);
+}
+
+export function buyCordel(p: Profile, id: CordelId): boolean {
+  const cost = cordelNext(p, id);
+  if (cost == null || p.dream.memories < cost) return false;
+  p.dream.memories -= cost;
+  p.cordeis.levels[id] = (p.cordeis.levels[id] ?? 0) + 1;
+  return true;
+}
+
+/** Equipa ou tira um folheto. Não equipa o que não cabe no Fôlego. */
+export function toggleCordel(p: Profile, id: CordelId): boolean {
+  if (!(p.cordeis.levels[id] ?? 0)) return false;
+  const worn = equippedCordeis(p);
+  if (worn.includes(id)) { p.cordeis.equipped = worn.filter((c) => c !== id); return true; }
+  if (cordelCost([...worn, id]) > breath(p)) return false;
+  p.cordeis.equipped = [...worn, id];
+  return true;
+}
+
+export function buyAspect(p: Profile, id: AspectId): boolean {
+  const a = ASPECTS[id];
+  if (!a || p.aspects.owned.includes(id) || p.dream.memories < a.cost) return false;
+  p.dream.memories -= a.cost;
+  p.aspects.owned.push(id);
+  p.aspects.equipped[a.weapon] = id;
+  return true;
+}
+
+/** Põe um Aspecto comprado na arma dele, ou volta ao jeito padrão (nulo). */
+export function equipAspect(p: Profile, weapon: WeaponKind, id: AspectId | null): boolean {
+  if (id && (!p.aspects.owned.includes(id) || ASPECTS[id].weapon !== weapon)) return false;
+  if (id) p.aspects.equipped[weapon] = id; else delete p.aspects.equipped[weapon];
+  return true;
+}
+
+/* ---------- Roda do Saci ---------- */
+
+type Roda = Extract<Pending, { kind: 'roda' }>;
+
+function makeRoda(run: DreamRun): Roda {
+  const r = rng(run, 'roda'), have = patronCounts(run.blessings, null);
+  /* os padrinhos da grade: sorteados entre os libertados, puxando para os que o herói já segue */
+  const left = run.patrons.slice(), patrons: ElementId[] = [];
+  const n = Math.max(1, DREAM.roda.patrons - (omenGrade(run.omens, 'rodaViciada') ? 1 : 0));
+  while (patrons.length < n && left.length) {
+    let roll = r() * left.reduce((sum, el) => sum + 1 + have[el], 0), at = 0;
+    for (let i = 0; i < left.length; i++) { roll -= 1 + have[left[i]]; if (roll <= 0) { at = i; break; } }
+    patrons.push(left.splice(at, 1)[0]);
+  }
+  return {
+    kind: 'roda', patrons, grid: null, collected: true, spins: 0, paid: 0, last: null,
+    free: (has(run, 'moedaFurada') ? 2 : DREAM.roda.free) + cordel(run, 'fiadoSaci'),
+    pulos: DREAM.roda.pulos + (has(run, 'cabacaDoSaci') ? 1 : 0) + cordel(run, 'mocaVento'),
+    assobios: (has(run, 'apitoDeTaquara') ? 1 : 0) + cordel(run, 'assobiador'),
+  };
+}
+
+function roda(p: Profile): { run: DreamRun; w: Roda } | null {
+  const run = p.dream.run;
+  return run && run.pending?.kind === 'roda' ? { run, w: run.pending } : null;
+}
+
+/** Pesos dos símbolos desta Roda (o painel de chances lê daqui). */
+export function rodaWeightsOf(run: DreamRun, w: Roda): RodaWeights {
+  return rodaWeights(w.patrons, patronCounts(run.blessings, null), omenGrade(run.omens, 'rodaViciada') ? 4 : 0);
+}
+
+/** Preço do próximo giro: 0 enquanto houver giro grátis, nulo quando não há mais giros. */
+export function rodaCost(run: DreamRun, w: Roda): number | null {
+  if (w.free > 0) return 0;
+  const base = DREAM.roda.costs[w.paid];
+  return base == null ? null : Math.max(1, Math.round(base * (has(run, 'dadoViciado') ? 0.5 : 1)));
+}
+
+/** Gira a Roda. O giro anterior precisa ter sido recebido. */
+export function spinRoda(p: Profile): boolean {
+  const x = roda(p);
+  if (!x || (x.w.grid && !x.w.collected)) return false;
+  const { run, w } = x, cost = rodaCost(run, w);
+  if (cost == null || run.vintem < cost) return false;
+  run.vintem -= cost;
+  if (w.free > 0) w.free--; else w.paid++;
+  const r = rng(run, 'giro'), weights = rodaWeightsOf(run, w);
+  let grid = spinGrid(r, weights), forced = false;
+  /* Galho de Arruda: o primeiro Olho do giro vira Gorro */
+  if (has(run, 'galhoDeArruda')) { const at = grid.indexOf('olho'); if (at >= 0) grid[at] = 'gorro'; }
+  /* azar com limite: depois de três giros sem linha, este fecha uma fileira de um padrinho */
+  if ((run.dry ?? 0) >= DREAM.roda.pityAfter && !readGrid(grid, w.patrons).lines.length) {
+    const row = Math.floor(r() * 3), el = w.patrons[Math.floor(r() * w.patrons.length)];
+    grid = grid.slice(); for (let c = 0; c < 3; c++) grid[row * 3 + c] = el;
+    forced = true;
+  }
+  w.grid = grid; w.collected = false; w.spins++;
+  w.last = { lines: [], blessings: [], vintem: 0, cursed: false, jackpot: false, forced };
+  p.dream.spins = (p.dream.spins ?? 0) + 1;
+  return true;
+}
+
+/** Pulo: gira de novo uma coluna (0 a 2) do giro que está na mesa. */
+export function rodaPulo(p: Profile, col: number): boolean {
+  const x = roda(p);
+  if (!x || !x.w.grid || x.w.collected || x.w.pulos <= 0 || col < 0 || col > 2) return false;
+  x.w.grid = spinGrid(rng(x.run, 'pulo'), rodaWeightsOf(x.run, x.w), x.w.grid, [col, col + 3, col + 6]);
+  x.w.pulos--;
+  return true;
+}
+
+/** Assobio: troca o símbolo de uma casa (0 a 8) por um Gorro. */
+export function rodaAssobio(p: Profile, cell: number): boolean {
+  const x = roda(p);
+  if (!x || !x.w.grid || x.w.collected || x.w.assobios <= 0 || cell < 0 || cell > 8 || x.w.grid[cell] === 'gorro') return false;
+  x.w.grid = x.w.grid.slice(); x.w.grid[cell] = 'gorro';
+  x.w.assobios--;
+  return true;
+}
+
+/** Recebe o que o giro na mesa pagou. */
+export function collectRoda(p: Profile): RodaPayout | null {
+  const x = roda(p);
+  if (!x || !x.w.grid || x.w.collected) return null;
+  const { run, w } = x, read = readGrid(w.grid!, w.patrons), r = rng(run, 'premio-roda');
+  const out: RodaPayout = { lines: read.lines, blessings: [], vintem: 0, cursed: false, jackpot: !!read.jackpot, forced: !!w.last?.forced };
+  /* cada padrinho com linha dá uma bênção dele: comum ou melhor com uma linha, rara com duas, épica com três ou mais */
+  for (const el of w.patrons) {
+    const n = read.patrons[el] ?? 0;
+    if (!n) continue;
+    const want = n >= 3 ? [3, 2] : n === 2 ? [2, 3] : [];
+    let b: BlessingId | undefined;
+    for (const tier of want) { b = drawBlessings(run, r, 1, { patron: el, tier }, out.blessings)[0]; if (b) break; }
+    b ??= drawBlessings(run, r, 1, { patron: el }, out.blessings)[0] ?? drawBlessings(run, r, 1, {}, out.blessings)[0];
+    if (b && giveBlessing(p, run, b)) out.blessings.push(b);
+  }
+  if (read.vintem) { out.vintem = read.vintem * DREAM.roda.vintemPay; run.vintem += out.vintem; }
+  if (read.olho) { out.cursed = true; run.curse.hp += DREAM.roda.curse.hp; run.curse.damage += DREAM.roda.curse.damage; run.doubled = true; }
+  /* sorte grande: desperta na hora uma bênção à escolha (ou, sem nenhuma para despertar, mais vinténs) */
+  if (read.jackpot) {
+    p.dream.jackpots = (p.dream.jackpots ?? 0) + 1;
+    const have = blessingCounts(run.blessings), forms: BlessingId[] = [];
+    for (const [base, pair] of Object.entries(AWAKENINGS) as [BaseBlessingId, [BlessingId, BlessingId]][]) {
+      if (!have[base] || pair.some((f) => have[f])) continue;
+      forms.push(pair[Math.floor(r() * 2)]);
+    }
+    const mine = forms.filter((f) => BLESSINGS[BLESSINGS[f].awakens!].patron === read.jackpot), pool = (mine.length ? mine : forms).slice(0, 3);
+    /* a escolha passa na frente da Roda, que volta à tela depois dela */
+    if (pool.length) { (run.later ??= []).unshift(w); run.pending = { kind: 'bencao', options: pool }; }
+    else { out.vintem += 150; run.vintem += 150; }
+  }
+  run.dry = read.lines.length ? 0 : (run.dry ?? 0) + 1;
+  w.collected = true; w.last = out;
+  return out;
+}

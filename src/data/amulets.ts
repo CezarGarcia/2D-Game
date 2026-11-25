@@ -7,7 +7,11 @@
 export type AmuletId =
   | 'patua' | 'denteDeOnca' | 'penaDeArara' | 'contaDeLagrima' | 'cabacaDePolvora' | 'moringa' | 'bolsaDeMascate' | 'peDeMeia'
   | 'carranca' | 'sanfona' | 'espora' | 'chocalho' | 'couroDeJacare' | 'redeDeDormir' | 'chapeuDeCouro' | 'velaBenta' | 'olhoDeBoi'
-  | 'muiraquita' | 'figaTorta' | 'ferraduraVirada';
+  | 'muiraquita' | 'figaTorta' | 'ferraduraVirada'
+  /* fase 4 */
+  | 'cabacaDoSaci' | 'galhoDeArruda' | 'terco' | 'alpercata' | 'cuia' | 'fumoDeRolo' | 'bentinho' | 'pedraDeRaio'
+  | 'moedaFurada' | 'apitoDeTaquara' | 'berrante' | 'lamparina' | 'rosario' | 'gibaoVelho' | 'tamborim' | 'balaio'
+  | 'caldeiraoDaCuca' | 'estrelaDoBoi' | 'dadoViciado' | 'espelhoQuebrado';
 
 /** Comum, raro, lendário, ou figa torta (dá muito e cobra um preço). */
 export type AmuletRarity = 'comum' | 'raro' | 'lendario' | 'figa';
@@ -50,6 +54,31 @@ export const AMULETS: Record<AmuletId, AmuletDef> = {
   muiraquita: A('muiraquita', 'Muiraquitã', 'lendario', 'gema', '#3fae5a', 'Uma vez nesta noite, você se levanta depois de cair, com metade da vida', 'Sapinho de pedra verde das icamiabas, as guerreiras do rio. Quem ganha um não perde a sorte.'),
   /* figas tortas */
   figaTorta: A('figaTorta', 'Figa Torta', 'figa', 'furia', '#9a6aff', '+40% de dano de arma e de feitiço, mas as Fontes não curam', 'Figa é para dar sorte. Esta entortou, e a sorte veio de lado.'),
+  /* ---- fase 4 ---- */
+  /* comuns */
+  cabacaDoSaci: A('cabacaDoSaci', 'Cabaça do Saci', 'comum', 'redemoinho', '#ffd23f', '+1 Pulo em cada Roda do Saci', 'Quem prende o Saci numa cabaça com rolha de cruz fica com um favor para cobrar.'),
+  galhoDeArruda: A('galhoDeArruda', 'Galho de Arruda', 'comum', 'natureza', '#7bd45a', 'Na Roda, o primeiro Olho do Esquecimento de cada giro vira Gorro', 'Atrás da orelha, a arruda murcha no lugar de quem a carrega.'),
+  terco: A('terco', 'Terço de Benzedeira', 'comum', 'magia', '#cdb8ff', '+15% de dano de feitiço', 'Cada conta já ouviu a mesma reza mil vezes, e a reza pegou.'),
+  alpercata: A('alpercata', 'Alpercata de Rabicho', 'comum', 'esquiva', '#c9a26b', 'A esquiva recarrega 20% mais rápido', 'Sandália de couro cru, de quem anda légua sem sentir o chão.'),
+  cuia: A('cuia', 'Cuia de Tacacá', 'comum', 'cura', '#e8c48e', 'As poções curam 30% mais', 'Na cuia, o caldo quente levanta até quem já tinha desistido.'),
+  fumoDeRolo: A('fumoDeRolo', 'Fumo de Rolo', 'comum', 'elite', '#7a4424', '+20% de dano contra elites e chefes', 'É o que a Caipora pede para deixar o caçador passar. Vale ter um pedaço a mais.'),
+  bentinho: A('bentinho', 'Bentinho', 'comum', 'resistencia', '#f1ead8', '+10% de resistência a todos os elementos', 'Dois quadradinhos de pano bento, um no peito e outro nas costas.'),
+  pedraDeRaio: A('pedraDeRaio', 'Pedra de Raio', 'comum', 'tempestade', '#ffd23f', 'Golpes de arma têm 15% de chance de deixar o inimigo Carregado', 'Onde o raio cai fica uma pedra enterrada. Sete anos depois ela sobe.'),
+  /* raros */
+  moedaFurada: A('moedaFurada', 'Moeda Furada', 'raro', 'vintem', '#d98a4a', 'Toda Roda do Saci tem 2 giros grátis', 'Moeda furada não compra nada. Por isso ninguém gasta, e ela fica dando sorte.'),
+  apitoDeTaquara: A('apitoDeTaquara', 'Apito de Taquara', 'raro', 'som', '#9be7c0', '+1 Assobio em cada Roda do Saci', 'Assobio fino de bambu. O Saci responde, mesmo sem querer.'),
+  berrante: A('berrante', 'Berrante', 'raro', 'companheiro', '#f1ead8', 'O companheiro causa 40% mais dano', 'Chifre de boi que chama a boiada de longe. Bicho nenhum ignora.'),
+  lamparina: A('lamparina', 'Lamparina', 'raro', 'altar', '#ffd84a', 'Os altares mostram uma bênção a mais', 'Com luz, dá para ler o que o santo escreveu no pé do altar.'),
+  rosario: A('rosario', 'Rosário de Capim-Santo', 'raro', 'regeneracao', '#7bd45a', 'Recupera 1% da vida por segundo', 'Capim de cheiro, trançado. O chá dele acalma e fecha ferida.'),
+  gibaoVelho: A('gibaoVelho', 'Gibão Velho', 'raro', 'espinhos', '#96562b', 'Quem bate em você recebe de volta 40% do dano', 'Couro que já entrou em muito espinho de jurema. Agora o espinho é dele.'),
+  tamborim: A('tamborim', 'Tamborim', 'raro', 'supremo', '#ff7ad9', 'O Supremo carrega 50% mais rápido', 'Batida curta e seca, que apressa o passo de todo mundo.'),
+  balaio: A('balaio', 'Balaio', 'raro', 'bau', '#c9a26b', 'Elites, provações e chefes mostram um amuleto a mais para escolher', 'Cesto grande de cipó. Sempre cabe mais uma coisa.'),
+  /* lendários */
+  caldeiraoDaCuca: A('caldeiraoDaCuca', 'Concha da Cuca', 'lendario', 'borbulhante', '#ff7ad9', 'Seus feitiços têm 25% de chance de se repetir', 'A concha do caldeirão ainda está morna, e ainda mexe sozinha.'),
+  estrelaDoBoi: A('estrelaDoBoi', 'Estrela do Boi', 'lendario', 'estrela', '#ffd23f', 'Cada sala vencida cura 8% da vida', 'A estrela da testa do Boi-Bumbá. No auto, o boi morre e levanta de novo.'),
+  /* figas tortas */
+  dadoViciado: A('dadoViciado', 'Dado Viciado', 'figa', 'sorte', '#e0344c', 'Feira e Roda custam a metade, mas você recebe 25% mais dano', 'Cai sempre no mesmo número. O problema é quando descobrem.'),
+  espelhoQuebrado: A('espelhoQuebrado', 'Espelho Quebrado', 'figa', 'espelho', '#9fe0fa', '+30% de chance de crítico, mas 25% menos vida máxima', 'Sete anos de azar, dizem. Em cada caco, um você mais afiado.'),
   ferraduraVirada: A('ferraduraVirada', 'Ferradura Virada', 'figa', 'ferreiro', '#a9a6a0', 'Bênçãos comuns sobem 2 níveis de uma vez, mas os altares só trazem bênçãos comuns', 'Com as pontas para cima a ferradura guarda a sorte. Virada, ela escorre.'),
 };
 

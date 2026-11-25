@@ -1,3 +1,4 @@
+import type { OmenPick } from './data/omens';
 import Phaser from 'phaser';
 import { ALL_SHEETS, BAKE, SHEETS, bakeAll, bakeChapterSprites, ensureHero, sheetChapter, type Sheet } from './art/bake';
 import { VIEW } from './data/balance';
@@ -86,11 +87,11 @@ const game = new Phaser.Game({
 /** Caçada automática em andamento: quantas partidas faltam e o que já rendeu. */
 let hunt: { stageId: string; left: number; total: number; sum: HuntSummary } | null = null;
 
-function launch(stageId: string, auto?: { speed: number; index: number; total: number }, dream?: DreamContext): void {
+function launch(stageId: string, auto?: { speed: number; index: number; total: number }, dream?: DreamContext, omens?: OmenPick): void {
   if (!ready) { pendingStage = stageId; return; }
   game.scene.stop('camp');
   game.scene.stop('stage');
-  game.scene.start('stage', { stageId, auto, dream });
+  game.scene.start('stage', { stageId, auto, dream, omens });
 }
 
 const ui = mountUi(document.getElementById('ui')!, {
@@ -103,7 +104,7 @@ const ui = mountUi(document.getElementById('ui')!, {
       session.autoSpeed = a.speed;
       hunt = { stageId, left: a.runs, total: a.runs, sum: { runs: 0, wins: 0, xp: 0, gold: 0, items: 0, dismantled: 0, mata: 0, po: 0, tomo: 0, levels: 0, stopped: 'fim' } };
       launch(stageId, { speed: a.speed, index: 1, total: a.runs });
-    } else { hunt = null; launch(stageId); }
+    } else { hunt = null; launch(stageId, undefined, undefined, opts?.omens); }
   },
   startTraining: () => { ui.hide(); hunt = null; launch(trainingId(session.profile!.level)); },
   startDreamNode: () => {

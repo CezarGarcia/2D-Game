@@ -34,7 +34,7 @@ function newPlayer(stats: HeroStats): Player {
     stacks: 0, stackT: 0, jabutiUsed: false,
     potions: stats.potions, potionCd: 0,
     shield: stats.firstHitShield, novaT: 0, supremo: 0, inPuddle: false, surf: 0,
-    surfKind: 'dodge', critNext: false, stoneT: 0, wolfT: 0, orbT: 0, orbHit: {}, orbPower: 0, lastElement: 'natureza',
+    surfKind: 'dodge', critNext: false, stoneT: 0, wolfT: 0, orbT: 0, orbHit: {}, orbPower: 0, lastElement: 'natureza', aspectN: 0,
     burnT: 0, burnTick: 0, poisonT: 0, poisonTick: 0, curseT: 0, crackT: 0, confuseT: 0, wetT: 0, sleepT: 0,
     erased: [0, 0, 0], stolen: -1, dreamT: 0, spellMap: [0, 1, 2], heldT: 0, hitCount: 0, fightT: 0, frenzyT: 0,
     trailD: 0, hasteT: 0, windStacks: 0, windT: 0, secondWind: false,
@@ -152,6 +152,8 @@ export interface AltarOpts {
   patron?: ElementId | null;
   /** Raridade mais alta que o altar traz (a Ferradura Virada limita às comuns). */
   maxTier?: 1 | 2 | 3;
+  /** Raridade mais baixa (o cordel do Pavão Misterioso pede rara ou melhor). Se não houver nenhuma assim, vale qualquer uma. */
+  minTier?: 1 | 2 | 3;
 }
 
 /**
@@ -171,6 +173,7 @@ export function rollBlessings(w: World, opts: AltarOpts = {}): BlessingId[] {
   }
   const cap = opts.maxTier ?? 3;
   let pool: BlessingId[] = blessingPool(w, patron).filter((b) => BLESSINGS[b].tier <= cap);
+  if (opts.minTier && opts.minTier > 1) { const fine = pool.filter((b) => BLESSINGS[b].tier >= opts.minTier!); if (fine.length >= Math.min(2, s.altarChoices)) pool = fine; }
   /* padrinho sem mais nada a dar: o altar não fica vazio, traz de qualquer um */
   if (!pool.length && !picks.length) pool = blessingPool(w).filter((b) => BLESSINGS[b].tier <= cap);
   const special = picks.length;
